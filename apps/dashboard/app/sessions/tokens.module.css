@@ -1,0 +1,21 @@
+/* Same design system as apps/dashboard/app/onboarding/tokens.module.css — kept as its
+   own copy per this codebase's existing per-feature convention (onboarding/login each
+   carry their own tokens/icons rather than sharing a package). */
+.tokens {
+  --vc-bg: #0a0d16;
+  --vc-sidebar-bg: #0c0f1a;
+  --vc-panel-bg: #12162a;
+  --vc-panel-bg-raised: #151a30;
+  --vc-chip-bg: #131728;
+  --vc-video-bg: #0d0f16;
+  --vc-border: #1e2338;
+  --vc-border-soft: #171b2c;
+  --vc-text-primary: #f3f4f6;
+  --vc-text-secondary: #9ca3af;
+  --vc-text-muted: #5b6478;
+  --vc-accent-violet: #8b5cf6;
+  --vc-accent-blue: #3b82f6;
+  --vc-accent-gradient: linear-gradient(90deg, #8b5cf6, #3b82f6);
+  --vc-green: #22c55e;
+  --vc-red: #ef4444;
+}

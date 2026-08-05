@@ -1,0 +1,61 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 6, 12, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.dialog {
+  width: 340px;
+  max-width: calc(100vw - 32px);
+  border-radius: 16px;
+  background: var(--vc-panel-bg-raised);
+  border: 1px solid var(--vc-border-soft);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--vc-text-primary);
+}
+
+.body {
+  font-size: 13px;
+  color: var(--vc-text-secondary);
+  line-height: 1.5;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.cancelButton {
+  padding: 9px 16px;
+  border-radius: 10px;
+  background: none;
+  border: 1px solid var(--vc-border-soft);
+  color: var(--vc-text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.confirmButton {
+  padding: 9px 16px;
+  border-radius: 10px;
+  background: var(--vc-red);
+  border: none;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}

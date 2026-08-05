@@ -1,0 +1,87 @@
+.transcript {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.bubbleRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.bubbleRowUser {
+  justify-content: flex-end;
+}
+
+.avatarBadge {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--vc-accent-violet);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.bubble {
+  max-width: 200px;
+  padding: 9px 12px;
+  border-radius: 14px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.bubbleAvatar {
+  background: rgba(139, 92, 246, 0.22);
+  color: var(--vc-text-primary);
+  border-bottom-left-radius: 4px;
+}
+
+.bubbleUser {
+  background: var(--vc-chip-bg);
+  color: var(--vc-text-primary);
+  border-bottom-right-radius: 4px;
+}
+
+.typingDots {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 2px;
+}
+
+.typingDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--vc-text-secondary);
+  animation: typing 1.2s ease-in-out infinite;
+}
+
+.typingDot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.typingDot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typing {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}

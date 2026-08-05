@@ -1,0 +1,132 @@
+.stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border-radius: 18px;
+  overflow: hidden;
+  background: linear-gradient(160deg, #c9793f 0%, #3a3350 55%, #1c2333 100%);
+}
+
+.avatarPlaceholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatarPlaceholderIcon {
+  color: rgba(255, 255, 255, 0.16);
+}
+
+.avatarOffNotice {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  background: rgba(5, 6, 12, 0.35);
+}
+
+.liveBadge {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(15, 17, 28, 0.72);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.liveDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--vc-red);
+}
+
+.headerBadge {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  background: rgba(15, 17, 28, 0.72);
+  color: #fff;
+  font-size: 13px;
+}
+
+.headerAvatarName {
+  font-weight: 700;
+}
+
+.headerTopic {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.waveform {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+  margin-left: 4px;
+}
+
+.waveformBar {
+  width: 2.5px;
+  border-radius: 2px;
+  background: var(--vc-accent-violet);
+  animation: waveform 1s ease-in-out infinite;
+}
+
+.waveformBar:nth-child(1) {
+  height: 40%;
+  animation-delay: 0s;
+}
+.waveformBar:nth-child(2) {
+  height: 100%;
+  animation-delay: 0.15s;
+}
+.waveformBar:nth-child(3) {
+  height: 60%;
+  animation-delay: 0.3s;
+}
+.waveformBar:nth-child(4) {
+  height: 80%;
+  animation-delay: 0.45s;
+}
+
+@keyframes waveform {
+  0%,
+  100% {
+    transform: scaleY(0.4);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.topicPill {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(15, 17, 28, 0.72);
+  color: #fff;
+  font-size: 12px;
+}
