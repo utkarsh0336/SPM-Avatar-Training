@@ -1,0 +1,40 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DataRegion {
+  US
+  EU
+}
+
+/// Tenant root. Not itself org-scoped — everything else hangs off org_id.
+model Organization {
+  id         String       @id @default(uuid()) @db.Uuid
+  name       String
+  dataRegion DataRegion   @default(US) @map("data_region")
+  createdAt  DateTime     @default(now()) @map("created_at")
+
+  applications Application[]
+
+  @@map("organizations")
+}
+
+/// Tenant-scoped. org_id + RLS policy required — see prisma/migrations and
+/// .claude/rules/tenancy.md.
+model Application {
+  id              String       @id @default(uuid()) @db.Uuid
+  orgId           String       @map("org_id") @db.Uuid
+  name            String
+  publishableKey  String       @unique @map("publishable_key")
+  createdAt       DateTime     @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@index([orgId])
+  @@map("applications")
+}

@@ -1,0 +1,32 @@
+{
+  "name": "avatrain",
+  "private": true,
+  "version": "0.0.0",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "dev": "docker compose up -d && turbo run dev --parallel",
+    "build": "turbo run build",
+    "verify": "pnpm lint && turbo run typecheck test && node scripts/verify-rls.mjs && pnpm --filter @avatrain/embed run size",
+    "lint": "eslint .",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "bench:latency": "turbo run bench:latency",
+    "db:migrate": "prisma migrate dev --schema prisma/schema.prisma",
+    "db:studio": "prisma studio --schema prisma/schema.prisma",
+    "postinstall": "prisma generate --schema prisma/schema.prisma"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@prisma/client": "^5.22.0",
+    "@types/node": "^20.17.10",
+    "eslint": "^9.17.0",
+    "prisma": "^5.22.0",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.2",
+    "vitest": "^2.1.8"
+  }
+}

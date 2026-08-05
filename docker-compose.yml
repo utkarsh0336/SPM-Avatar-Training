@@ -1,0 +1,29 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: avatrain
+      POSTGRES_PASSWORD: avatrain
+      POSTGRES_DB: avatrain
+    ports:
+      - "5433:5432"
+    volumes:
+      - avatrain_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U avatrain"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - avatrain_redis:/data
+
+volumes:
+  avatrain_postgres:
+  avatrain_redis:
