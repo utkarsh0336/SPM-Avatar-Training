@@ -1,0 +1,17 @@
+.tokens {
+  --ob-bg: #0a0d16;
+  --ob-sidebar-bg: #0c0f1a;
+  --ob-panel-bg: #12162a;
+  --ob-panel-bg-raised: #151a30;
+  --ob-chip-bg: #131728;
+  --ob-border: #1e2338;
+  --ob-border-soft: #171b2c;
+  --ob-text-primary: #f3f4f6;
+  --ob-text-secondary: #9ca3af;
+  --ob-text-muted: #5b6478;
+  --ob-accent-violet: #8b5cf6;
+  --ob-accent-blue: #3b82f6;
+  --ob-accent-gradient: linear-gradient(90deg, #8b5cf6, #3b82f6);
+  --ob-accent-glow: 0 0 24px rgba(139, 92, 246, 0.35);
+  --ob-green: #22c55e;
+}

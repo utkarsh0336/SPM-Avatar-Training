@@ -1,0 +1,61 @@
+.card,
+.cardSelected {
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  border: 1.5px solid var(--ob-border);
+  background: var(--ob-panel-bg);
+  cursor: pointer;
+  padding: 0;
+  overflow: hidden;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.card:hover {
+  border-color: #2a3050;
+}
+
+.cardSelected {
+  border-color: var(--ob-accent-violet);
+  box-shadow: var(--ob-accent-glow);
+}
+
+.photo {
+  position: relative;
+  aspect-ratio: 5 / 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.photoIcon {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.checkBadge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--ob-accent-violet);
+  color: #fff;
+}
+
+.labelBar,
+.labelBarSelected {
+  padding: 12px;
+  text-align: center;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--ob-panel-bg);
+}
+
+.labelBarSelected {
+  background: rgba(139, 92, 246, 0.22);
+}

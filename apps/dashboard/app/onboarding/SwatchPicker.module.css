@@ -1,0 +1,25 @@
+.row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.swatch,
+.swatchSelected {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  box-shadow: 0 0 0 2px var(--ob-bg);
+  transition: box-shadow 0.15s ease;
+}
+
+.swatch:hover {
+  box-shadow: 0 0 0 2px var(--ob-bg), 0 0 0 3px var(--ob-border);
+}
+
+.swatchSelected {
+  box-shadow: 0 0 0 3px var(--ob-bg), 0 0 0 5px var(--ob-accent-violet);
+}

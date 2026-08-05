@@ -1,0 +1,30 @@
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pill,
+.pillSelected {
+  padding: 10px 22px;
+  border-radius: 10px;
+  border: none;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pill {
+  background: var(--ob-panel-bg);
+  color: var(--ob-text-secondary);
+}
+
+.pill:hover {
+  color: var(--ob-text-primary);
+}
+
+.pillSelected {
+  background: var(--ob-accent-violet);
+  color: #fff;
+}
