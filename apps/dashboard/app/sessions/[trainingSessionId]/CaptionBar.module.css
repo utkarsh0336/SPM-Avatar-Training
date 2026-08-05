@@ -1,0 +1,19 @@
+.captionWrap {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+}
+
+.caption {
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: rgba(10, 12, 20, 0.72);
+  color: #fff;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.captionTopic {
+  font-weight: 700;
+}

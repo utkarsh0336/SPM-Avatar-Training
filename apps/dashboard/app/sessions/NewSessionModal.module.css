@@ -1,0 +1,82 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 6, 12, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.modal {
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  border-radius: 16px;
+  background: var(--vc-panel-bg-raised);
+  border: 1px solid var(--vc-border-soft);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--vc-text-primary);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 12px;
+  color: var(--vc-text-secondary);
+}
+
+.input,
+.select {
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--vc-panel-bg);
+  border: 1px solid var(--vc-border-soft);
+  color: var(--vc-text-primary);
+  font-size: 13.5px;
+  outline: none;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.cancelButton {
+  padding: 9px 16px;
+  border-radius: 10px;
+  background: none;
+  border: 1px solid var(--vc-border-soft);
+  color: var(--vc-text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.startButton {
+  padding: 9px 16px;
+  border-radius: 10px;
+  background: var(--vc-accent-gradient);
+  border: none;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.startButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
