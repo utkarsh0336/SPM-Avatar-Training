@@ -1,0 +1,11 @@
+.body {
+  display: flex;
+  gap: 32px;
+  padding: 28px 32px;
+  flex: 1;
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+}

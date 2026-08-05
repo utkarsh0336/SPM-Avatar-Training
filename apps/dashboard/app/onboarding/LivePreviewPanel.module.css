@@ -1,0 +1,139 @@
+.panel {
+  width: 248px;
+  flex: 0 0 248px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--ob-text-secondary);
+}
+
+.liveDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ob-green);
+}
+
+.card {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--ob-panel-bg);
+  border: 1px solid var(--ob-border-soft);
+}
+
+.image {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.imagePlaceholderIcon {
+  color: rgba(255, 255, 255, 0.18);
+}
+
+.styleBadge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--ob-accent-violet);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.checkBadge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--ob-accent-violet);
+  color: #fff;
+}
+
+.overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 32px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: linear-gradient(to top, rgba(5, 6, 12, 0.9), transparent);
+}
+
+.avatarName {
+  font-size: 15.5px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.avatarExpertise {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.stat {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--ob-chip-bg);
+  min-width: 0;
+}
+
+.statLabel {
+  font-size: 12px;
+  color: var(--ob-text-muted);
+  flex-shrink: 0;
+}
+
+.statValue {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ob-text-primary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}

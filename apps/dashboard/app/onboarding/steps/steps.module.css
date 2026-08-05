@@ -1,0 +1,25 @@
+.heading {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--ob-text-primary);
+  margin: 0;
+}
+
+.subheading {
+  font-size: 14px;
+  color: var(--ob-text-secondary);
+  margin: 6px 0 0;
+}
+
+.section {
+  margin-top: 28px;
+}
+
+.sectionLabel {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--ob-text-secondary);
+  margin-bottom: 14px;
+}
