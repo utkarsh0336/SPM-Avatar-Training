@@ -1,6 +1,7 @@
 export interface AuthUser {
   id: string;
   email: string;
+  onboardingCompletedAt: string | null;
 }
 
 export interface AuthOrg {
@@ -74,4 +75,14 @@ export function acceptInvite(token: string, password: string): Promise<AuthResul
 
 export function logout(): Promise<{ ok: true }> {
   return apiFetch<{ ok: true }>("/auth/logout", { method: "POST" });
+}
+
+/**
+ * Shared post-login redirect gate, used by every login path (password
+ * login, signup, and the Google OAuth callback route) so onboarding status
+ * is checked consistently rather than each entry point hardcoding its own
+ * target. See .claude/specs/google-login.md's UI Changes.
+ */
+export function postLoginRedirectTarget(user: AuthUser): string {
+  return user.onboardingCompletedAt ? "/" : "/onboarding/1";
 }

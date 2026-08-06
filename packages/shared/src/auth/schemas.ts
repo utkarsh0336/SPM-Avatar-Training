@@ -38,11 +38,18 @@ export const acceptInviteSchema = z.object({
 });
 export type AcceptInviteInput = z.infer<typeof acceptInviteSchema>;
 
+export const googleCallbackSchema = z.object({
+  code: z.string().min(1),
+  codeVerifier: z.string().min(1),
+});
+export type GoogleCallbackInput = z.infer<typeof googleCallbackSchema>;
+
 export const roleSchema = z.enum(["OWNER", "MEMBER"]);
 
 export const userResponseSchema = z.object({
   id: z.string().uuid(),
   email: z.string(),
+  onboardingCompletedAt: z.string().nullable(),
 });
 
 export const orgResponseSchema = z.object({

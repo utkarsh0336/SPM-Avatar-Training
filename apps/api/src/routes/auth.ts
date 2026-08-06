@@ -1,6 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import {
   acceptInviteSchema,
+  exchangeGoogleCode,
+  googleCallbackSchema,
   inviteSchema,
   loginSchema,
   signupSchema,
@@ -39,6 +41,38 @@ export function registerAuthRoutes(app: FastifyInstance): void {
       throw unauthorized("rate_limited");
     }
     const result = await authService.login(input);
+    reply.header("set-cookie", serializeSessionCookie(result.token, SESSION_MAX_AGE_SECONDS));
+    reply.status(200).send({ user: result.user, org: result.org, role: result.role });
+  });
+
+  app.post("/v1/auth/google/callback", async (request, reply) => {
+    // Same request.ip caveat as /v1/auth/signup above — this call always
+    // comes from apps/dashboard's server (see
+    // apps/dashboard/app/api/auth/google/callback/route.ts), so without
+    // trustProxy configured this is one global bucket, not a per-caller one.
+    const key = `google_callback:${request.ip}`;
+    if (!checkRateLimit(key, { max: 10, windowMs: 60_000 })) {
+      throw unauthorized("rate_limited");
+    }
+    const input = googleCallbackSchema.parse(request.body);
+
+    let profile;
+    try {
+      profile = await exchangeGoogleCode(input.code, input.codeVerifier);
+    } catch (err) {
+      // Never let the generic error handler's console.error(error) see this
+      // one — a failed exchange throws a GaxiosError carrying the outgoing
+      // request (authorization code, PKCE verifier, and potentially
+      // client_secret) in its .config, and gaxios's redaction of secrets
+      // from that object is documented as experimental, not guaranteed.
+      console.error(
+        "Google auth failed:",
+        err instanceof Error ? err.message : err
+  );
+      throw unauthorized("google_auth_failed");
+    }
+
+    const result = await authService.loginWithGoogle(profile);
     reply.header("set-cookie", serializeSessionCookie(result.token, SESSION_MAX_AGE_SECONDS));
     reply.status(200).send({ user: result.user, org: result.org, role: result.role });
   });

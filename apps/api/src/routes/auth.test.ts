@@ -1,7 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, describe, expect, it } from "vitest";
-import { prisma, withAuthContext } from "@avatrain/shared";
+import { afterAll, describe, expect, it, vi } from "vitest";
+import { prisma, setAuthContext, withAuthContext } from "@avatrain/shared";
 import { buildApp } from "../app.js";
+
+// exchangeGoogleCode does a real network round-trip to Google in production;
+// mocked here so the route's account-resolution logic (the part this file
+// actually needs to verify) can be tested without hitting Google's network.
+const { exchangeGoogleCode } = vi.hoisted(() => ({ exchangeGoogleCode: vi.fn() }));
+vi.mock("@avatrain/shared", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@avatrain/shared")>();
+  return { ...actual, exchangeGoogleCode };
+});
 
 function extractToken(setCookie: string | string[] | undefined): string {
   const header = Array.isArray(setCookie) ? setCookie[0] : setCookie;
@@ -12,6 +21,10 @@ function extractToken(setCookie: string | string[] | undefined): string {
 
 function uniqueEmail(label: string): string {
   return `${label}-${randomUUID()}@example.com`;
+}
+
+function uniqueGoogleSub(label: string): string {
+  return `google-sub-${label}-${randomUUID()}`;
 }
 
 const createdOrgIds: string[] = [];
@@ -25,6 +38,7 @@ async function cleanup(): Promise<void> {
     });
   }
   if (createdUserIds.length > 0) {
+    await prisma.oAuthAccount.deleteMany({ where: { userId: { in: createdUserIds } } });
     await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
   }
   for (const orgId of createdOrgIds) {
@@ -46,6 +60,70 @@ async function signup(orgName: string, email: string, password: string) {
     const body = response.json();
     createdOrgIds.push(body.org.id);
     createdUserIds.push(body.user.id);
+  }
+  return response;
+}
+
+interface GoogleProfileInput {
+  sub: string;
+  email: string;
+  emailVerified: boolean;
+  name?: string;
+}
+
+// Seeds preconditions directly via Prisma rather than the real HTTP
+// signup/invite routes — those share a single per-process signup/login rate
+// limit bucket keyed by request.ip, and app.inject() always reports the
+// same synthetic IP. Routing every precondition through the real endpoints
+// would make this file's total signup count flaky against that shared
+// bucket; seeding directly also isolates these tests to the Google-login
+// logic under test, independent of signup()/invite()'s own (separately
+// tested) behavior.
+async function seedPasswordUser(orgName: string, email: string): Promise<{ userId: string; orgId: string }> {
+  const orgId = randomUUID();
+  const userId = randomUUID();
+  await prisma.$transaction(async (tx) => {
+    await tx.organization.create({ data: { id: orgId, name: orgName } });
+    await tx.user.create({ data: { id: userId, email, passwordHash: "seeded-hash-not-used-by-google-login" } });
+    await setAuthContext(tx, { userId, orgId });
+    await tx.membership.create({ data: { orgId, userId, role: "OWNER" } });
+  });
+  createdOrgIds.push(orgId);
+  createdUserIds.push(userId);
+  return { userId, orgId };
+}
+
+async function seedPendingInvitee(orgName: string, email: string): Promise<{ orgId: string }> {
+  const orgId = randomUUID();
+  const ownerUserId = randomUUID();
+  const inviteeUserId = randomUUID();
+  await prisma.$transaction(async (tx) => {
+    await tx.organization.create({ data: { id: orgId, name: orgName } });
+    await tx.user.create({
+      data: { id: ownerUserId, email: uniqueEmail(`${orgName}-owner`), passwordHash: "seeded" },
+    });
+    await setAuthContext(tx, { userId: ownerUserId, orgId });
+    await tx.membership.create({ data: { orgId, userId: ownerUserId, role: "OWNER" } });
+    await tx.user.create({ data: { id: inviteeUserId, email, status: "PENDING" } });
+    await setAuthContext(tx, { userId: inviteeUserId, orgId });
+    await tx.membership.create({ data: { orgId, userId: inviteeUserId, role: "MEMBER" } });
+  });
+  createdOrgIds.push(orgId);
+  createdUserIds.push(ownerUserId, inviteeUserId);
+  return { orgId };
+}
+
+async function googleLogin(profile: GoogleProfileInput) {
+  exchangeGoogleCode.mockResolvedValueOnce(profile);
+  const response = await app.inject({
+    method: "POST",
+    url: "/v1/auth/google/callback",
+    payload: { code: "test-code", codeVerifier: "test-verifier" },
+  });
+  if (response.statusCode === 200) {
+    const body = response.json();
+    if (!createdOrgIds.includes(body.org.id)) createdOrgIds.push(body.org.id);
+    if (!createdUserIds.includes(body.user.id)) createdUserIds.push(body.user.id);
   }
   return response;
 }
@@ -263,6 +341,116 @@ describe("auth routes", () => {
       expect(members).toHaveLength(1);
       expect(members[0].email).toBe(orgAOwnerEmail);
       expect(members.some((m: { email: string }) => m.email === orgBOwnerEmail)).toBe(false);
+    });
+  });
+
+  describe("POST /v1/auth/google/callback", () => {
+    it("self-serve creates a new Organization + User(OWNER) for a brand-new verified email", async () => {
+      const email = uniqueEmail("google-new");
+      const response = await googleLogin({
+        sub: uniqueGoogleSub("new"),
+        email,
+        emailVerified: true,
+        name: "Ada Lovelace",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        user: { email, onboardingCompletedAt: null },
+        role: "OWNER",
+      });
+      expect(response.headers["set-cookie"]).toBeDefined();
+    });
+
+    it("logs into the same account on a repeat sign-in, without creating a duplicate org/user", async () => {
+      const sub = uniqueGoogleSub("repeat");
+      const email = uniqueEmail("google-repeat");
+
+      const first = await googleLogin({ sub, email, emailVerified: true });
+      const second = await googleLogin({ sub, email, emailVerified: true });
+
+      expect(first.statusCode).toBe(200);
+      expect(second.statusCode).toBe(200);
+      expect(second.json().user.id).toBe(first.json().user.id);
+      expect(second.json().org.id).toBe(first.json().org.id);
+    });
+
+    it("links to an existing password-only User by verified email, reusing their org", async () => {
+      const email = uniqueEmail("google-link");
+      const { userId, orgId } = await seedPasswordUser("Password Org", email);
+
+      const response = await googleLogin({
+        sub: uniqueGoogleSub("link"),
+        email,
+        emailVerified: true,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.user.id).toBe(userId);
+      expect(body.org.id).toBe(orgId);
+      expect(body.role).toBe("OWNER");
+    });
+
+    it("activates a PENDING invited member on a verified Google sign-in, without a password", async () => {
+      const inviteeEmail = uniqueEmail("google-invitee");
+      await seedPendingInvitee("Invite Org", inviteeEmail);
+
+      const response = await googleLogin({
+        sub: uniqueGoogleSub("invitee"),
+        email: inviteeEmail,
+        emailVerified: true,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.user.email).toBe(inviteeEmail);
+      expect(body.role).toBe("MEMBER");
+
+      const user = await prisma.user.findUniqueOrThrow({ where: { email: inviteeEmail } });
+      expect(user.status).toBe("ACTIVE");
+    });
+
+    it("rejects a brand-new email whose Google profile is not email_verified", async () => {
+      const response = await googleLogin({
+        sub: uniqueGoogleSub("unverified"),
+        email: uniqueEmail("google-unverified"),
+        emailVerified: false,
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(response.json()).toHaveProperty("error", "google_email_not_verified");
+    });
+
+    it("never auto-links an unverified Google profile to an existing password account", async () => {
+      const email = uniqueEmail("google-unverified-link");
+      await seedPasswordUser("Targeted Org", email);
+
+      const response = await googleLogin({
+        sub: uniqueGoogleSub("unverified-link"),
+        email,
+        emailVerified: false,
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(response.json()).toHaveProperty("error", "google_email_not_verified");
+    });
+
+    it("maps a failed code exchange to a generic error, never the raw exchange error", async () => {
+      exchangeGoogleCode.mockRejectedValueOnce(new Error("token exchange failed upstream"));
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/auth/google/callback",
+        payload: { code: "bad-code", codeVerifier: "verifier" },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = response.json();
+      expect(body).toMatchObject({ error: "google_auth_failed" });
+      // Never the underlying exchange error's message — see
+      // apps/api/src/routes/auth.ts's try/catch around exchangeGoogleCode.
+      expect(JSON.stringify(body)).not.toContain("token exchange failed upstream");
     });
   });
 });

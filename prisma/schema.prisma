@@ -22,6 +22,10 @@ enum UserStatus {
   PENDING
 }
 
+enum OAuthProvider {
+  GOOGLE
+}
+
 /// Tenant root. Not itself org-scoped — everything else hangs off org_id.
 model Organization {
   id         String       @id @default(uuid()) @db.Uuid
@@ -55,19 +59,40 @@ model Application {
 /// itself (credentials aren't tenant business data). Exempt from RLS; see
 /// scripts/verify-rls.mjs EXEMPT_TABLES.
 model User {
-  id                   String     @id @default(uuid()) @db.Uuid
-  email                String     @unique
-  passwordHash         String?    @map("password_hash")
-  status               UserStatus @default(ACTIVE)
-  inviteTokenHash      String?    @unique @map("invite_token_hash")
-  inviteTokenExpiresAt DateTime?  @map("invite_token_expires_at")
-  createdAt            DateTime   @default(now()) @map("created_at")
-  updatedAt            DateTime   @updatedAt @map("updated_at")
+  id                     String     @id @default(uuid()) @db.Uuid
+  email                  String     @unique
+  passwordHash           String?    @map("password_hash")
+  status                 UserStatus @default(ACTIVE)
+  inviteTokenHash        String?    @unique @map("invite_token_hash")
+  inviteTokenExpiresAt   DateTime?  @map("invite_token_expires_at")
+  // Owned by Authentication, consumed by the (separately specced) onboarding
+  // wizard gate — see .claude/specs/onboarding.md "Depends On".
+  onboardingCompletedAt  DateTime?  @map("onboarding_completed_at")
+  createdAt              DateTime   @default(now()) @map("created_at")
+  updatedAt              DateTime   @updatedAt @map("updated_at")
 
-  memberships Membership[]
-  sessions    Session[]
+  memberships   Membership[]
+  sessions      Session[]
+  oauthAccounts OAuthAccount[]
 
   @@map("users")
+}
+
+/// Global identity root, same reasoning as User — not tenant-scoped. Exempt
+/// from RLS; see scripts/verify-rls.mjs EXEMPT_TABLES.
+model OAuthAccount {
+  id                String        @id @default(uuid()) @db.Uuid
+  userId            String        @map("user_id") @db.Uuid
+  provider          OAuthProvider
+  providerAccountId String        @map("provider_account_id")
+  email             String
+  createdAt         DateTime      @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("oauth_accounts")
 }
 
 /// Tenant-scoped. org_id + RLS policy required — see prisma/migrations and

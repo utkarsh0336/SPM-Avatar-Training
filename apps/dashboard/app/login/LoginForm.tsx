@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { login } from "../../lib/api-client";
+import { login, postLoginRedirectTarget } from "../../lib/api-client";
 import styles from "./page.module.css";
 import {
   ArrowRightIcon,
@@ -29,8 +29,8 @@ export function LoginForm() {
     setError(null);
 
     try {
-      await login(email, password);
-      window.location.assign("/");
+      const result = await login(email, password);
+      window.location.assign(postLoginRedirectTarget(result.user));
     } catch {
       // Never distinguish wrong password from unknown email in the UI —
       // apps/api's /v1/auth/login already returns an identical 401 for both.
@@ -51,10 +51,10 @@ export function LoginForm() {
       <p className={styles.subtitle}>Sign in to your enterprise learning account</p>
 
       <div className={styles.oauthRow}>
-        <button type="button" className={styles.oauthButton}>
+        <a href="/api/auth/google" className={styles.oauthButton}>
           <GoogleIcon />
           Continue with Google
-        </button>
+        </a>
         <button type="button" className={styles.oauthButton}>
           <MicrosoftIcon />
           Continue with Microsoft

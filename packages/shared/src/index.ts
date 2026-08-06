@@ -6,4 +6,5 @@ export type { Role, UserStatus } from "@prisma/client";
 export * from "./auth/password.js";
 export * from "./auth/tokens.js";
 export * from "./auth/schemas.js";
+export * from "./auth/google.js";
 export * from "./redact.js";

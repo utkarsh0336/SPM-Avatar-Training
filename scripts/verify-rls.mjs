@@ -8,7 +8,9 @@ import { join } from "node:path";
 const MIGRATIONS_DIR = "prisma/migrations";
 // "users" is a global identity root, not tenant-scoped — same reasoning as
 // "organizations" above. See prisma/schema.prisma's User model doc-comment.
-const EXEMPT_TABLES = new Set(["organizations", "users"]);
+// "oauth_accounts" is 1:1 with "users" (a Google identity isn't tenant
+// business data either) — same reasoning, see its doc-comment.
+const EXEMPT_TABLES = new Set(["organizations", "users", "oauth_accounts"]);
 
 function findSqlFiles(dir) {
   let out = [];
