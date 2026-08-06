@@ -6,7 +6,9 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 const MIGRATIONS_DIR = "prisma/migrations";
-const EXEMPT_TABLES = new Set(["organizations"]);
+// "users" is a global identity root, not tenant-scoped — same reasoning as
+// "organizations" above. See prisma/schema.prisma's User model doc-comment.
+const EXEMPT_TABLES = new Set(["organizations", "users"]);
 
 function findSqlFiles(dir) {
   let out = [];

@@ -1,5 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalEnv": ["DATABASE_URL", "APP_DATABASE_URL"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
@@ -10,9 +11,11 @@
       "persistent": true
     },
     "typecheck": {
+      "dependsOn": ["^build"],
       "outputs": []
     },
     "test": {
+      "dependsOn": ["^build"],
       "outputs": []
     },
     "bench:latency": {
