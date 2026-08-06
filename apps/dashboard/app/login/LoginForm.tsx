@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { login } from "../../lib/api-client";
 import styles from "./page.module.css";
 import {
   ArrowRightIcon,
@@ -28,20 +29,12 @@ export function LoginForm() {
     setError(null);
 
     try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, keepSignedIn }),
-      });
-
-      if (!response.ok) {
-        setError("Invalid email or password.");
-        return;
-      }
-
+      await login(email, password);
       window.location.assign("/");
     } catch {
-      setError("Couldn't reach the server. Please try again.");
+      // Never distinguish wrong password from unknown email in the UI —
+      // apps/api's /v1/auth/login already returns an identical 401 for both.
+      setError("Invalid email or password.");
     } finally {
       setSubmitting(false);
     }
