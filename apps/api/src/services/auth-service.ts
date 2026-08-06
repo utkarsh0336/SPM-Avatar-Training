@@ -10,6 +10,7 @@ import {
   withAuthContext,
   withOrg,
   type AcceptInviteInput,
+  type GoogleProfile,
   type InviteInput,
   type LoginInput,
   type Role,
@@ -20,21 +21,68 @@ import { badRequest, conflict, gone, unauthorized } from "../lib/http-errors.js"
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
+interface UserResult {
+  id: string;
+  email: string;
+  onboardingCompletedAt: string | null;
+}
+
 export interface SessionResult {
   token: string;
-  user: { id: string; email: string };
+  user: UserResult;
   org: { id: string; name: string };
   role: Role;
 }
 
 export interface MeResult {
-  user: { id: string; email: string };
+  user: UserResult;
   org: { id: string; name: string };
   role: Role;
 }
 
 function newSessionExpiry(): Date {
   return new Date(Date.now() + SESSION_TTL_MS);
+}
+
+function toUserResult(user: {
+  id: string;
+  email: string;
+  onboardingCompletedAt: Date | null;
+}): UserResult {
+  return {
+    id: user.id,
+    email: user.email,
+    onboardingCompletedAt: user.onboardingCompletedAt?.toISOString() ?? null,
+  };
+}
+
+// Shared session-minting tail for loginWithGoogle's three branches, all of
+// which resolve to a bare userId before a Session/Org lookup is needed —
+// mirrors login()'s own tail without forcing login() (which already has its
+// `user` row in hand) through an extra redundant fetch.
+async function createSessionForUser(userId: string): Promise<SessionResult> {
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+  const membership = await withAuthContext({ userId }, (tx) =>
+    tx.membership.findFirst({ where: { userId } }),
+  );
+  if (!membership) throw unauthorized("invalid_credentials");
+
+  const token = generateOpaqueToken();
+  const tokenHash = sha256Hex(token);
+  const org = await prisma.$transaction(async (tx) => {
+    await setAuthContext(tx, { userId, orgId: membership.orgId });
+    await tx.session.create({
+      data: { orgId: membership.orgId, userId, tokenHash, expiresAt: newSessionExpiry() },
+    });
+    return tx.organization.findUniqueOrThrow({ where: { id: membership.orgId } });
+  });
+
+  return {
+    token,
+    user: toUserResult(user),
+    org: { id: org.id, name: org.name },
+    role: membership.role,
+  };
 }
 
 // A fixed hash to verify against when the email doesn't exist (or has no
@@ -73,7 +121,7 @@ export async function signup(input: SignupInput): Promise<SessionResult> {
 
   return {
     token,
-    user: { id: userId, email: input.email },
+    user: { id: userId, email: input.email, onboardingCompletedAt: null },
     org: { id: orgId, name: input.orgName },
     role: "OWNER",
   };
@@ -113,7 +161,7 @@ export async function login(input: LoginInput): Promise<SessionResult> {
 
   return {
     token,
-    user: { id: user.id, email: user.email },
+    user: toUserResult(user),
     org: { id: org.id, name: org.name },
     role: membership.role,
   };
@@ -137,7 +185,7 @@ export async function me(authContext: {
     prisma.organization.findUniqueOrThrow({ where: { id: authContext.orgId } }),
   ]);
   return {
-    user: { id: user.id, email: user.email },
+    user: toUserResult(user),
     org: { id: org.id, name: org.name },
     role: authContext.role,
   };
@@ -221,10 +269,76 @@ export async function acceptInvite(input: AcceptInviteInput): Promise<SessionRes
 
   return {
     token,
-    user: { id: user.id, email: user.email },
+    user: toUserResult(user),
     org: { id: org.id, name: org.name },
     role: membership.role,
   };
+}
+
+/**
+ * Resolves a verified Google profile to a session. See
+ * .claude/specs/google-login.md's Database Changes for the three branches:
+ * existing OAuthAccount → log in; verified email matches an existing User →
+ * link and log in; otherwise → self-serve create Organization+User(OWNER),
+ * mirroring signup()'s semantics.
+ */
+export async function loginWithGoogle(profile: GoogleProfile): Promise<SessionResult> {
+  const existingAccount = await prisma.oAuthAccount.findUnique({
+    where: { provider_providerAccountId: { provider: "GOOGLE", providerAccountId: profile.sub } },
+  });
+  if (existingAccount) {
+    return createSessionForUser(existingAccount.userId);
+  }
+
+  // Never auto-link an unverified email — that would let anyone with a
+  // Google account whose provider doesn't verify email addresses take over
+  // an existing password-protected account by claiming its email.
+  if (!profile.emailVerified) {
+    throw unauthorized("google_email_not_verified");
+  }
+
+  const existingUser = await prisma.user.findUnique({ where: { email: profile.email } });
+  if (existingUser) {
+    await prisma.$transaction(async (tx) => {
+      await setAuthContext(tx, { userId: existingUser.id });
+      await tx.oAuthAccount.create({
+        data: {
+          userId: existingUser.id,
+          provider: "GOOGLE",
+          providerAccountId: profile.sub,
+          email: profile.email,
+        },
+      });
+      // A verified Google sign-in satisfies the same "email ownership
+      // proven" bar as accepting an invite link — no separate password step
+      // needed for a PENDING (invited-but-never-set-a-password) user.
+      if (existingUser.status === "PENDING") {
+        await tx.user.update({ where: { id: existingUser.id }, data: { status: "ACTIVE" } });
+      }
+    });
+    return createSessionForUser(existingUser.id);
+  }
+
+  // Brand-new email — self-serve org creation, mirroring signup()'s shape.
+  const orgId = randomUUID();
+  const userId = randomUUID();
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.organization.create({
+        data: { id: orgId, name: `${profile.name ?? profile.email}'s Organization` },
+      });
+      await tx.user.create({ data: { id: userId, email: profile.email, status: "ACTIVE" } });
+      await setAuthContext(tx, { userId, orgId });
+      await tx.membership.create({ data: { orgId, userId, role: "OWNER" } });
+      await tx.oAuthAccount.create({
+        data: { userId, provider: "GOOGLE", providerAccountId: profile.sub, email: profile.email },
+      });
+    });
+  } catch (err) {
+    if (isUniqueConstraintError(err)) throw conflict("email_taken");
+    throw err;
+  }
+  return createSessionForUser(userId);
 }
 
 export interface MemberResult {

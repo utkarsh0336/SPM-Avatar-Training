@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { ApiError, signup } from "../../lib/api-client";
+import { ApiError, postLoginRedirectTarget, signup } from "../../lib/api-client";
 import styles from "./page.module.css";
 
 export function SignupForm() {
@@ -17,8 +17,8 @@ export function SignupForm() {
     setError(null);
 
     try {
-      await signup(orgName, email, password);
-      window.location.assign("/");
+      const result = await signup(orgName, email, password);
+      window.location.assign(postLoginRedirectTarget(result.user));
     } catch (err) {
       if (err instanceof ApiError && err.body.error === "email_taken") {
         setError("An account with that email already exists.");
