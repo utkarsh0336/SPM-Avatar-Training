@@ -21,6 +21,8 @@ export const conflict = (code: string, message?: string) => new HttpError(409, c
 export const badRequest = (code = "bad_request", message?: string) =>
   new HttpError(400, code, message);
 export const gone = (code: string, message?: string) => new HttpError(410, code, message);
+export const serviceUnavailable = (code = "service_unavailable", message?: string) =>
+  new HttpError(503, code, message);
 
 export function handleError(
   error: FastifyError | Error,

@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 export interface AuthUser {
   id: string;
   email: string;
@@ -85,4 +87,23 @@ export function logout(): Promise<{ ok: true }> {
  */
 export function postLoginRedirectTarget(user: AuthUser): string {
   return user.onboardingCompletedAt ? "/" : "/onboarding/1";
+}
+
+const conversationTicketResultSchema = z.object({
+  ticket: z.string(),
+  expiresAt: z.number(),
+});
+export type ConversationTicketResult = z.infer<typeof conversationTicketResultSchema>;
+
+/**
+ * Mints a short-lived, single-use ticket for the WS conversation route —
+ * this REST call goes through the dashboard's own /api proxy (carrying the
+ * session cookie), but the WS connection itself must go directly to
+ * apps/api (Next.js Route Handlers can't upgrade to WebSocket), which can't
+ * carry that cookie. The ticket is passed as a query param on the WS URL
+ * instead. See useConversationSession.ts.
+ */
+export async function mintConversationTicket(): Promise<ConversationTicketResult> {
+  const result = await apiFetch<unknown>("/conversations/ticket", { method: "POST" });
+  return conversationTicketResultSchema.parse(result);
 }

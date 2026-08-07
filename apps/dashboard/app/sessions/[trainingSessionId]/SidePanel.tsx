@@ -1,10 +1,9 @@
 import styles from "./SidePanel.module.css";
 import { CameraPreview } from "./CameraPreview";
 import { TranscriptPanel } from "./TranscriptPanel";
-import type { MockTrainingSession } from "../../../lib/fixtures/mock-training-sessions";
+import { useConversationSessionContext } from "./ConversationSessionContext";
 
 interface SidePanelProps {
-  session: MockTrainingSession;
   cameraOff: boolean;
   muted: boolean;
 }
@@ -13,11 +12,12 @@ interface SidePanelProps {
 // transcript together) — the reference screenshot's control literally reads
 // "Hide Panel", not "Hide Transcript". See
 // .claude/specs/video-chat-session.md Session Controls table.
-export function SidePanel({ session, cameraOff, muted }: SidePanelProps) {
+export function SidePanel({ cameraOff, muted }: SidePanelProps) {
+  const { messages, pendingTurn } = useConversationSessionContext();
   return (
     <div className={styles.panel}>
       <CameraPreview cameraOff={cameraOff} muted={muted} />
-      <TranscriptPanel messages={session.transcript} pendingTurn={session.pendingTurn} />
+      <TranscriptPanel messages={messages} pendingTurn={pendingTurn} />
     </div>
   );
 }

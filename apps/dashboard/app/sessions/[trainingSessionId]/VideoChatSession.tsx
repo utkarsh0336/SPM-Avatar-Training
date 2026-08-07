@@ -7,6 +7,7 @@ import { ControlBar } from "./ControlBar";
 import { SidePanel } from "./SidePanel";
 import { EndSessionDialog } from "./EndSessionDialog";
 import { TrainingSessionProvider, useTrainingSessionUi } from "./TrainingSessionContext";
+import { ConversationSessionProvider } from "./ConversationSessionContext";
 import type { MockTrainingSession } from "../../../lib/fixtures/mock-training-sessions";
 
 interface VideoChatSessionProps {
@@ -71,21 +72,21 @@ function VideoChatSessionContent({ session }: VideoChatSessionProps) {
   }
 
   return (
-    <div className={styles.root} ref={rootRef}>
-      <div className={styles.mainColumn}>
-        <VideoStage session={session} />
-        <ControlBar
-          fullscreen={fullscreen}
-          onToggleFullscreen={toggleFullscreen}
-          onEndSession={() => setEndDialogOpen(true)}
-        />
+    <ConversationSessionProvider trainingSessionId={session.id} topic={session.topic} muted={state.muted}>
+      <div className={styles.root} ref={rootRef}>
+        <div className={styles.mainColumn}>
+          <VideoStage session={session} />
+          <ControlBar
+            fullscreen={fullscreen}
+            onToggleFullscreen={toggleFullscreen}
+            onEndSession={() => setEndDialogOpen(true)}
+          />
+        </div>
+
+        {state.panelVisible && <SidePanel cameraOff={state.cameraOff} muted={state.muted} />}
+
+        {endDialogOpen && <EndSessionDialog onCancel={handleCancelEnd} onConfirm={handleConfirmEnd} />}
       </div>
-
-      {state.panelVisible && (
-        <SidePanel session={session} cameraOff={state.cameraOff} muted={state.muted} />
-      )}
-
-      {endDialogOpen && <EndSessionDialog onCancel={handleCancelEnd} onConfirm={handleConfirmEnd} />}
-    </div>
+    </ConversationSessionProvider>
   );
 }

@@ -7,6 +7,7 @@ import { useOnboarding } from "../OnboardingContext";
 import { WizardNav } from "../WizardNav";
 import { HeartIcon, MicIcon, SparkleIcon, VolumeIcon, type IconComponent } from "../icons";
 import { VOICE_LABELS, VOICE_SUBTITLES, type VoiceTone } from "../types";
+import { writeOnboardingAvatarHandoff } from "../../../lib/onboarding-handoff";
 import shared from "./steps.module.css";
 import styles from "./VoiceReviewStep.module.css";
 
@@ -42,7 +43,15 @@ export function VoiceReviewStep() {
 
       <WizardNav
         onBack={() => router.push("/onboarding/5")}
-        onContinue={() => router.push("/")}
+        onContinue={() => {
+          // "/" is the unrelated Phase-0 trainer/admin scaffold, not a
+          // session — it has no session-start UI, so landing there after
+          // onboarding reads as onboarding having done nothing. /sessions is
+          // the actual AI Avatar Hub (SessionsProvider + "start a new video
+          // chat"), the only place a session can be created.
+          writeOnboardingAvatarHandoff(state);
+          router.push("/sessions");
+        }}
         continueLabel="Create Avatar & Start Session"
         continueIcon={<SparkleIcon size={16} />}
         continueIconPosition="start"

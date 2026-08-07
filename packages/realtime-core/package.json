@@ -11,6 +11,9 @@
     "test": "vitest run",
     "bench:latency": "node -e \"console.log('no benchmarks yet — lands in Phase 1')\""
   },
+  "dependencies": {
+    "@avatrain/shared": "workspace:*"
+  },
   "devDependencies": {
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
