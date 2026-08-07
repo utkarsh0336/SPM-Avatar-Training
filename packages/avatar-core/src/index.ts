@@ -1,13 +1,27 @@
-export type AvatarExpression = "neutral" | "thinking" | "speaking" | "listening";
+export interface AvatarProviderStartConfig {
+  replicaId: string;
+  container: HTMLElement;
+}
 
 /**
- * Provider-agnostic avatar rendering surface. `mesh3d` is the default
- * implementation (Phase 2); photoreal providers plug in behind this same
- * interface in Phase 6. See docs/ARCHITECTURE.md.
+ * The provider interface from .claude/specs/ai-avatar.md §4 — the app codes
+ * against this only. Phase 1 (this pass) ships MockAvatarProvider only;
+ * Tavus/HeyGen (Phase 2) and a self-hosted lip-sync service (Phase 3) are
+ * adapters against this same interface, gated behind AVATAR_PROVIDER and
+ * not built out yet. Client-side only (no secrets) — unlike LLM/STT/TTS,
+ * this does not live in packages/shared.
  */
-export interface AvatarRenderer {
-  mount(container: HTMLElement): Promise<void>;
-  setExpression(expression: AvatarExpression): void;
-  setViseme(viseme: string, weight: number): void;
-  destroy(): void;
+export interface AvatarProvider {
+  start(config: AvatarProviderStartConfig): Promise<void>;
+  /** Local playback of one turn's synthesized audio plus its subtitle text — no network. */
+  speak(audioTrack: MediaStreamTrack, subtitleText: string): void;
+  /** Barge-in: stop local playback immediately. */
+  interrupt(): void;
+  stop(): void;
+  /** null for MockAvatarProvider — a local looping <video>, not a remote track. */
+  readonly videoTrack: MediaStreamTrack | null;
 }
+
+export * from "./mock-avatar-provider.js";
+export * from "./replica-resolver.js";
+export * from "./idle-clip-path.js";

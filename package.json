@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "docker compose up -d && turbo run dev --parallel",
     "build": "turbo run build",
-    "verify": "pnpm lint && turbo run typecheck test && node scripts/verify-rls.mjs && pnpm --filter @avatrain/embed run size",
+    "verify": "pnpm lint && turbo run typecheck test && node scripts/verify-rls.mjs && node scripts/verify-provider-boundary.mjs && node scripts/verify-no-secrets-in-bundle.mjs && pnpm --filter @avatrain/embed run size",
     "lint": "eslint .",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",

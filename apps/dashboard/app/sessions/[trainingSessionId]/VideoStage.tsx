@@ -1,21 +1,27 @@
+"use client";
+
 import styles from "./VideoStage.module.css";
 import { SpeakerIcon, UserIcon } from "../icons";
 import { CaptionBar } from "./CaptionBar";
+import { useConversationSessionContext } from "./ConversationSessionContext";
 import type { MockTrainingSession } from "../../../lib/fixtures/mock-training-sessions";
 
 interface VideoStageProps {
   session: MockTrainingSession;
 }
 
-// Real implementation (Milestone 4) mounts packages/avatar-core's AvatarRenderer
-// here — see .claude/specs/video-chat-session.md Realtime Changes / Implementation
-// Rules ("built only against AvatarRenderer's interface"). This placeholder plays
-// the same role as onboarding/LivePreviewPanel's gradient placeholder.
+// The Mock avatar provider (packages/avatar-core) mounts into
+// avatarContainerRef — Phase 1 per .claude/specs/ai-avatar.md §5: a looping
+// idle clip, no lip-sync. 80% of the product experience is the
+// conversation, not the mouth.
 export function VideoStage({ session }: VideoStageProps) {
+  const { status, captionText, amplitude, avatarContainerRef } = useConversationSessionContext();
+  const isLive = status === "listening" || status === "thinking" || status === "speaking";
+
   return (
     <div className={styles.stage}>
-      <div className={styles.avatarPlaceholder}>
-        <UserIcon size={72} className={styles.avatarPlaceholderIcon} />
+      <div className={styles.avatarPlaceholder} ref={avatarContainerRef}>
+        {!isLive && <UserIcon size={72} className={styles.avatarPlaceholderIcon} />}
       </div>
 
       <div className={styles.liveBadge}>
@@ -27,7 +33,7 @@ export function VideoStage({ session }: VideoStageProps) {
         <SpeakerIcon size={14} />
         <span className={styles.headerAvatarName}>My Avatar</span>
         <span className={styles.headerTopic}>· {session.topic}</span>
-        {session.pendingTurn && (
+        {status === "speaking" && (
           <span className={styles.waveform} aria-hidden="true">
             <span className={styles.waveformBar} />
             <span className={styles.waveformBar} />
@@ -39,7 +45,13 @@ export function VideoStage({ session }: VideoStageProps) {
 
       <div className={styles.topicPill}>{session.topic}</div>
 
-      <CaptionBar text={session.captionText} topic={session.topic} />
+      {status === "speaking" && (
+        <div className={styles.amplitudeTrack} aria-hidden="true">
+          <div className={styles.amplitudeFill} style={{ transform: `scaleX(${Math.min(amplitude * 2, 1)})` }} />
+        </div>
+      )}
+
+      <CaptionBar text={captionText} topic={session.topic} />
     </div>
   );
 }

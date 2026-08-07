@@ -31,4 +31,32 @@ export default tseslint.config(
       },
     },
   },
+  {
+    // Fast-feedback complement to scripts/verify-provider-boundary.mjs
+    // (the authoritative check, run in `pnpm verify`) — enforces
+    // .claude/specs/ai-avatar.md §4's "No provider SDK types may leak
+    // above the interface boundary" at edit time.
+    files: ["**/*.ts", "**/*.tsx"],
+    ignores: [
+      "packages/shared/src/providers/tts-echogarden.ts",
+      "packages/shared/src/providers/tts-msedge.ts",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "echogarden",
+              message: "Only packages/shared/src/providers/tts-echogarden.ts may import echogarden directly.",
+            },
+            {
+              name: "msedge-tts",
+              message: "Only packages/shared/src/providers/tts-msedge.ts may import msedge-tts directly.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 );

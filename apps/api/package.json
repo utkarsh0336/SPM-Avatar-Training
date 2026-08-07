@@ -11,11 +11,13 @@
   },
   "dependencies": {
     "@avatrain/shared": "workspace:*",
+    "@fastify/websocket": "^11.3.0",
     "fastify": "^5.2.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/node": "^20.17.10",
+    "@types/ws": "^8.18.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"

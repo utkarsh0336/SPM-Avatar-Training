@@ -1,0 +1,9 @@
+{
+  "defaultReplicaId": "realistic-female-business_formal",
+  "replicas": [
+    { "id": "realistic-female-business_formal", "style": "REALISTIC", "gender": "FEMALE", "outfit": "BUSINESS_FORMAL" },
+    { "id": "realistic-male-business_casual", "style": "REALISTIC", "gender": "MALE", "outfit": "BUSINESS_CASUAL" },
+    { "id": "animated-neutral-tech_creative", "style": "ANIMATED", "gender": "NEUTRAL", "outfit": "TECH_CREATIVE" },
+    { "id": "stylized_3d-female-academic_educator", "style": "STYLIZED_3D", "gender": "FEMALE", "outfit": "ACADEMIC_EDUCATOR" }
+  ]
+}

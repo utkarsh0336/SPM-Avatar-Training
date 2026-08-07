@@ -120,6 +120,29 @@
   }
 }
 
+/* Simple audio-amplitude indicator (brief §5) — a thin bar under the
+   header whose fill width tracks the avatar's live output RMS, reported by
+   MockAvatarProvider's onAmplitudeChange. */
+.amplitudeTrack {
+  position: absolute;
+  top: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 120px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.18);
+  overflow: hidden;
+}
+
+.amplitudeFill {
+  height: 100%;
+  width: 100%;
+  transform-origin: left center;
+  background: var(--vc-accent-violet);
+  transition: transform 80ms linear;
+}
+
 .topicPill {
   position: absolute;
   top: 16px;
