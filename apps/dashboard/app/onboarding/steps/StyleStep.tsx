@@ -5,7 +5,7 @@ import { useOnboarding } from "../OnboardingContext";
 import { SelectionCard } from "../SelectionCard";
 import { WizardNav } from "../WizardNav";
 import { CameraIcon, CubeIcon, PaletteIcon, type IconComponent } from "../icons";
-import type { AvatarStyle } from "../types";
+import { GENDER_PHOTOS, type AvatarStyle } from "../types";
 import shared from "./steps.module.css";
 import styles from "./StyleStep.module.css";
 
@@ -52,6 +52,7 @@ export function StyleStep() {
             subtitle={option.subtitle}
             icon={<option.Icon size={16} />}
             thumbnailIcon={<option.Icon size={28} />}
+            thumbnailPhotoUrl={option.value === "REALISTIC" ? GENDER_PHOTOS[state.gender] : undefined}
             selected={state.style === option.value}
             onSelect={() => update({ style: option.value })}
           />

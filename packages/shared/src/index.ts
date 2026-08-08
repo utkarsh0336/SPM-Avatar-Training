@@ -17,3 +17,4 @@ export * from "./providers/stt-factory.js";
 export * from "./providers/tts-factory.js";
 export * from "./providers/tts-voice-map.js";
 export * from "./tutor/index.js";
+export * from "./onboarding/index.js";

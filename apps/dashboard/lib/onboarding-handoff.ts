@@ -21,6 +21,8 @@ function defaultStorage(): OnboardingHandoffStorage | null {
  * This is the client-side-only handoff that survives it (no backend/DB
  * work is in scope here). skinTone/hairStyle/hairColor are deliberately
  * dropped — presentation-only per brief §6, not consumed by the session.
+ * simliFaceId is deliberately excluded too — see onboardingHandoffSchema's
+ * doc comment; it's resolved server-side instead, never trusted from here.
  */
 export function writeOnboardingAvatarHandoff(state: OnboardingState, storage?: OnboardingHandoffStorage): void {
   if (!state.style) return; // step 1 was never completed — nothing coherent to hand off

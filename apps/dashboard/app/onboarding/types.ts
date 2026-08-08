@@ -27,6 +27,11 @@ export type Expertise =
   | "MARKETING_BRANDING";
 export type VoiceTone = "DEEP" | "NEUTRAL" | "WARM";
 
+// Additive — see .claude/specs/avatar-builder-customization.md. NONE is the
+// only value the default wizard flow ever writes; READY_PLAYER_ME is only
+// set by the flag-gated "Generate 3D Avatar" step.
+export type AvatarPreviewProvider = "NONE" | "READY_PLAYER_ME";
+
 export interface OnboardingState {
   style: AvatarStyle | null;
   gender: Gender;
@@ -37,6 +42,12 @@ export interface OnboardingState {
   name: string;
   expertise: Expertise;
   voice: VoiceTone;
+  previewProvider: AvatarPreviewProvider;
+  externalAvatarId: string | null;
+  avatarModelUrl: string | null;
+  avatarSnapshotUrl: string | null;
+  /** Read-only, server-pinned — see prisma/schema.prisma's Avatar.simliFaceId doc comment. */
+  simliFaceId: string | null;
 }
 
 // Every field except `style` ships with a sensible default so the live
@@ -52,6 +63,11 @@ export const INITIAL_ONBOARDING_STATE: OnboardingState = {
   name: "",
   expertise: "HR_LEAVE_POLICY",
   voice: "NEUTRAL",
+  previewProvider: "NONE",
+  externalAvatarId: null,
+  avatarModelUrl: null,
+  avatarSnapshotUrl: null,
+  simliFaceId: null,
 };
 
 // Abbreviated label used in the compact live-preview stat chip.
@@ -106,13 +122,26 @@ export const GENDER_LABELS: Record<Gender, string> = {
   NEUTRAL: "Neutral",
 };
 
-// Placeholder gradients standing in for actual avatar renders, which the
-// realtime/avatar-rendering pipeline (out of scope here) will eventually
-// produce per gender+style+appearance combination.
+// Gradient fallback shown for the split second before an <img> using
+// GENDER_PHOTOS below has painted (and if that file 404s) — not the
+// "avatar preview" content itself anymore.
 export const GENDER_GRADIENTS: Record<Gender, string> = {
   FEMALE: "linear-gradient(160deg, #c9793f 0%, #3a3350 55%, #1c2333 100%)",
   MALE: "linear-gradient(160deg, #4a5b73 0%, #2b3245 55%, #1c2333 100%)",
   NEUTRAL: "linear-gradient(160deg, #6d4fa0 0%, #382f52 55%, #1c2333 100%)",
+};
+
+// Real photoreal stills captured directly from each gender's live Simli
+// session (apps/api/src/lib/simli.ts's SIMLI_FACE_ID_FEMALE/MALE/NEUTRAL) —
+// the exact same face the builder's live avatar and a real training session
+// render, not a stock photo. Used anywhere the builder shows a per-gender
+// avatar image without an active WebRTC connection (option pickers, static
+// panels). Re-capture these (see the avatar-builder-customization spec) if
+// the underlying Simli face ids are ever rotated.
+export const GENDER_PHOTOS: Record<Gender, string> = {
+  FEMALE: "/avatars/gender/female.png",
+  MALE: "/avatars/gender/male.png",
+  NEUTRAL: "/avatars/gender/neutral.png",
 };
 
 export const HAIR_STYLE_LABELS: Record<HairStyle, string> = {

@@ -25,3 +25,7 @@ export interface AvatarProvider {
 export * from "./mock-avatar-provider.js";
 export * from "./replica-resolver.js";
 export * from "./idle-clip-path.js";
+export * from "./avatar-preview-renderer.js";
+export * from "./placeholder-avatar-preview-renderer.js";
+export * from "./simli-avatar-provider.js";
+export * from "./avatar-provider-factory.js";

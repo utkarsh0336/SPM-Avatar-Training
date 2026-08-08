@@ -13,6 +13,7 @@
     "@avatrain/shared": "workspace:*",
     "@fastify/websocket": "^11.3.0",
     "fastify": "^5.2.0",
+    "simli-client": "^3.0.2",
     "zod": "^3.24.1"
   },
   "devDependencies": {

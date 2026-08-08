@@ -26,6 +26,67 @@ enum OAuthProvider {
   GOOGLE
 }
 
+enum AvatarStyle {
+  REALISTIC
+  ANIMATED
+  STYLIZED_3D
+}
+
+enum AvatarGender {
+  FEMALE
+  MALE
+  NEUTRAL
+}
+
+enum HairStyle {
+  SHORT
+  MEDIUM
+  LONG
+  CURLY
+  WAVY
+  BALD
+}
+
+enum Outfit {
+  BUSINESS_FORMAL
+  BUSINESS_CASUAL
+  SMART_PROFESSIONAL
+  TECH_CREATIVE
+  ACADEMIC_EDUCATOR
+}
+
+enum Expertise {
+  HR_LEAVE_POLICY
+  SALES_NEGOTIATION
+  COMPLIANCE_LEGAL
+  PRODUCT_TRAINING
+  CUSTOMER_SUPPORT
+  LEADERSHIP_MANAGEMENT
+  FINANCE_ACCOUNTING
+  IT_TECHNOLOGY
+  MARKETING_BRANDING
+}
+
+enum VoiceTone {
+  DEEP
+  NEUTRAL
+  WARM
+}
+
+enum AvatarStatus {
+  DRAFT
+  ACTIVE
+}
+
+/// Additive — reserved for an optional, free avatar-generation vendor. NONE
+/// is the only value the default onboarding flow ever writes; READY_PLAYER_ME
+/// is only written by the flag-gated "Generate 3D Avatar" step. See
+/// .claude/specs/avatar-builder-customization.md.
+enum AvatarPreviewProvider {
+  NONE
+  READY_PLAYER_ME
+}
+
 /// Tenant root. Not itself org-scoped — everything else hangs off org_id.
 model Organization {
   id         String       @id @default(uuid()) @db.Uuid
@@ -36,6 +97,7 @@ model Organization {
   applications Application[]
   memberships  Membership[]
   sessions     Session[]
+  avatars      Avatar[]
 
   @@map("organizations")
 }
@@ -130,4 +192,61 @@ model Session {
 
   @@index([userId])
   @@map("sessions")
+}
+
+/// Tenant-scoped. org_id + RLS policy required — see .claude/rules/tenancy.md.
+/// Owned by .claude/specs/onboarding.md (core fields) and additively extended
+/// by .claude/specs/avatar-builder-customization.md (preview fields).
+model Avatar {
+  id          String        @id @default(uuid()) @db.Uuid
+  orgId       String        @map("org_id") @db.Uuid
+  createdById String        @map("created_by_id") @db.Uuid
+
+  name        String?
+  style       AvatarStyle?
+  gender      AvatarGender?
+  // Plain String + application-layer allowlist (SKIN_TONE_TOKENS /
+  // HAIR_COLOR_TOKENS in packages/shared), not a Postgres enum — lets the
+  // palette change without a migration. See onboarding.md's Database Changes.
+  skinTone    String?       @map("skin_tone")
+  hairStyle   HairStyle?    @map("hair_style")
+  hairColor   String?       @map("hair_color")
+  outfit      Outfit?
+  expertise   Expertise?
+  voice       VoiceTone?
+
+  status          AvatarStatus @default(DRAFT)
+  lastVisitedStep Int          @default(1) @map("last_visited_step")
+
+  // Additive: optional realistic-preview generation. Never required by
+  // completion validation — see avatar-builder-customization.md §Database.
+  previewProvider    AvatarPreviewProvider @default(NONE) @map("preview_provider")
+  externalAvatarId   String?               @map("external_avatar_id")
+  avatarModelUrl     String?               @map("avatar_model_url")
+  avatarSnapshotUrl  String?               @map("avatar_snapshot_url")
+  previewGeneratedAt DateTime?             @map("preview_generated_at")
+
+  // Resolved server-side from gender (resolveSimliFaceId in
+  // apps/api/src/lib/simli.ts, keyed by SIMLI_FACE_ID_FEMALE/MALE/NEUTRAL
+  // with a fallback to the base SIMLI_FACE_ID) — set at draft creation
+  // (gender still null then, so it resolves to the base fallback) and
+  // recomputed by onboarding-service.ts's updateDraft whenever gender
+  // changes, so the builder's live preview and the real training session
+  // are provably the same face for whichever gender is currently selected.
+  // Simli's API exposes no way to list/browse alternate faces for an
+  // account (verified live: GET /faces returns only account-owned custom
+  // faces) — these are public/default-library face ids provided directly.
+  // True per-selection personalization beyond gender (skin tone, hair, etc.)
+  // would need either more account faces or a photo-upload +
+  // custom-face-creation flow, neither built yet.
+  simliFaceId String? @map("simli_face_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@index([orgId])
+  @@index([orgId, createdById, status])
+  @@map("avatars")
 }

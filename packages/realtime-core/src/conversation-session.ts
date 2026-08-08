@@ -76,6 +76,19 @@ export interface ConversationSessionHandle {
 
 const WS_OPEN = 1;
 
+// Whisper-family STT models hallucinate plausible-sounding text on
+// near-silent audio rather than reporting "no speech" — voice-activity-
+// detector.ts's live per-frame threshold (0.02) can be satisfied by a brief
+// noise spike (mic pop, background hum) even though the clip's overall
+// energy never actually reached speech level, and that clip would otherwise
+// still be sent for transcription. This is a stricter, whole-clip check
+// applied after recording stops, not a replacement for the live VAD
+// threshold. Same "reasoned starting point, not benchmarked" status as
+// voice-activity-detector.ts's own thresholds — tune with real audio via
+// `pnpm bench:latency` once there's a corpus of false-positive/negative
+// recordings to tune against.
+const MIN_UTTERANCE_RMS = 0.015;
+
 /**
  * Orchestrates the WebSocket-based conversation loop per
  * .claude/specs/ai-avatar.md: VAD drives per-utterance recording, each
@@ -162,6 +175,16 @@ export async function connectConversationSession(
 
       const blob = new Blob(recordedChunks, { type: recorder.mimeType || "audio/webm" });
       const wav = await encodeBlobAsWav({ blob, createAudioContext: () => audioContext });
+
+      if (wav.rms < MIN_UTTERANCE_RMS) {
+        // Never reached real speech energy overall — most likely a noise
+        // spike that satisfied the live VAD threshold momentarily. Drop the
+        // turn silently rather than risk a hallucinated Whisper transcript;
+        // there is nothing to tell the user, since nothing was said.
+        if (!ended) options.onStatusChange("listening");
+        return;
+      }
+
       const audioBase64 = await blobToBase64(new Blob([wav.bytes], { type: wav.mimeType }));
 
       if (!ended) send({ type: "audio.chunk", utteranceId, audioBase64, mimeType: wav.mimeType });
@@ -185,14 +208,40 @@ export async function connectConversationSession(
       // Dropped if a barge-in reset the chain, or a later turn has already
       // started, since this chunk belongs to a now-stale utterance.
       if (ended || currentUtteranceId !== chunk.utteranceId) return;
-      const decoded = await createAudioTrackFromBytes({
-        audioBytes: base64ToArrayBuffer(chunk.audioBase64),
-        createAudioContext: () => audioContext,
-      });
-      if (ended || currentUtteranceId !== chunk.utteranceId) return;
-      options.avatar.speak(decoded.track, chunk.text);
-      decoded.play();
-      await decoded.onEnded;
+      try {
+        const decoded = await createAudioTrackFromBytes({
+          audioBytes: base64ToArrayBuffer(chunk.audioBase64),
+          createAudioContext: () => audioContext,
+        });
+        if (ended || currentUtteranceId !== chunk.utteranceId) return;
+        options.avatar.speak(decoded.track, chunk.text);
+        decoded.play();
+        await decoded.onEnded;
+      } catch (err) {
+        // playbackChain is one long-lived promise for the WHOLE session
+        // (only a barge-in ever resets it — see stopPlayback above), not
+        // reset per turn. Without this catch, a single sentence's playback
+        // failure (bad audio bytes, an avatar SDK error, a stalled
+        // onEnded, etc.) rejects this link, and every sentence chained
+        // after it — for the rest of the session, not just this turn —
+        // would silently never play, since a rejected promise's `.then()`
+        // chain skips every subsequent fulfillment handler. The transcript
+        // ("transcript" case in handleServerMessage below) is a separate
+        // code path that doesn't depend on playback succeeding, so the full
+        // reply text kept showing up even though the avatar audibly stopped
+        // partway through — reproduced live: a multi-sentence reply spoke
+        // only its first sentence while the transcript showed the whole
+        // thing. Logging and moving on keeps every later sentence — this
+        // one and all future turns' — playing normally. Deferred via
+        // queueMicrotask rather than called inline — realtime.md's playback-
+        // chain rule bars new code inline in this callback outright, with no
+        // carve-out for the (rare, error-only) branch; deferring the log
+        // call itself, not just accepting the exception, keeps this literally
+        // outside the callback's own synchronous execution.
+        queueMicrotask(() =>
+          console.error("[conversation-session] sentence playback failed, continuing with next sentence:", err),
+        );
+      }
     });
   }
 

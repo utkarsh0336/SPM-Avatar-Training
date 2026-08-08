@@ -20,4 +20,14 @@ describe("conversation routes", () => {
     const response = await app.inject({ method: "GET", url: "/v1/conversations/ticket" });
     expect(response.statusCode).toBe(404);
   });
+
+  // The 503-vs-201 branching on Simli configuration is covered by
+  // lib/simli.test.ts's env-injected unit tests instead of here — this
+  // route reads real process.env, which varies by machine/CI, so only the
+  // auth gate (true regardless of Simli config) is asserted at this layer.
+  it("POST /v1/conversations/simli-session without a session cookie returns 401", async () => {
+    const app = buildApp();
+    const response = await app.inject({ method: "POST", url: "/v1/conversations/simli-session" });
+    expect(response.statusCode).toBe(401);
+  });
 });
