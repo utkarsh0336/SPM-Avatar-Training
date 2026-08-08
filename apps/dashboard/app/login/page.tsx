@@ -5,7 +5,7 @@ import { MarketingPanel } from "../_auth/MarketingPanel";
 export default function LoginPage() {
   return (
     <div className={styles.page}>
-      <MarketingPanel />
+      <MarketingPanel imageSrc="/auth/login-hero.jpeg" imageAlt="Learner using the AI avatar trainer" />
 
       <section className={styles.authPanel}>
         <LoginForm />

@@ -14,12 +14,17 @@ const STATS = [
   { value: "10K+", label: "Articles" },
 ];
 
+type MarketingPanelProps = {
+  imageSrc: string;
+  imageAlt: string;
+};
+
 /**
  * Shared brand/marketing left panel for the auth screens (login, signup).
  * Approximated from the Figma "Authentication" screen (file XiX01ldFGU7GDEGQ0JmuOJ,
  * node 41:8) — see MarketingPanel.module.css for the same caveat on exact tokens.
  */
-export function MarketingPanel() {
+export function MarketingPanel({ imageSrc, imageAlt }: MarketingPanelProps) {
   return (
     <section className={styles.marketing}>
       <div className={styles.brand}>
@@ -34,7 +39,7 @@ export function MarketingPanel() {
 
       <div className={styles.avatarCard}>
         <div className={styles.avatarPlaceholder}>
-          <img src="/avatars/gender/female.png" alt="AI avatar" className={styles.avatarPhoto} />
+          <img src={imageSrc} alt={imageAlt} className={styles.avatarPhoto} />
         </div>
         <span className={styles.liveBadge}>
           <span className={styles.liveDot} />
