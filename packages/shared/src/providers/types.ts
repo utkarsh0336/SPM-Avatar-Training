@@ -26,10 +26,15 @@ export interface LLMProvider {
   chat(messages: LLMMessage[], opts: LLMChatOptions): AsyncIterable<string>;
 }
 
+export interface STTTranscribeOptions {
+  /** ISO-639-1 hint (e.g. "hi") — improves accuracy for non-English audio. Omitted lets the provider auto-detect. */
+  language?: string;
+}
+
 export interface STTProvider {
   readonly name: string;
   /** One call per VAD-bounded utterance, not per audio chunk. */
-  transcribe(audioBytes: Uint8Array, mimeType: string): Promise<string>;
+  transcribe(audioBytes: Uint8Array, mimeType: string, opts?: STTTranscribeOptions): Promise<string>;
 }
 
 export interface TTSSynthesizeOptions {

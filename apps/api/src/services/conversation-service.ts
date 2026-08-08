@@ -8,10 +8,12 @@ import {
   SentenceChunker,
   clientMessageSchema,
   resolveVoiceGender,
+  resolveWhisperLanguageCode,
   serverMessageSchema,
   type ClientMessage,
   type ServerMessage,
   type Gender,
+  type Language,
   type LLMMessage,
   type LLMProvider,
   type STTProvider,
@@ -81,6 +83,7 @@ export function createConversationHandler(
   let systemPrompt = "";
   let voiceTone: VoiceTone = "NEUTRAL";
   let gender: Gender = "FEMALE";
+  let language: Language = "English";
   let currentUtteranceId: string | null = null;
   let currentAbortController: AbortController | null = null;
   let currentTurnLlmServedBy: string | undefined;
@@ -101,7 +104,7 @@ export function createConversationHandler(
     }
     try {
       const bytes = Buffer.from(audioBase64, "base64");
-      const text = await stt.transcribe(bytes, mimeType);
+      const text = await stt.transcribe(bytes, mimeType, { language: resolveWhisperLanguageCode(language) });
       return { text, sttProvider: stt.name };
     } catch {
       send({ type: "stt.failed", utteranceId, retryable: true });
@@ -121,7 +124,7 @@ export function createConversationHandler(
     // construction) rather than one shared instance for the whole turn, so
     // each sentence's own onResolved captures ITS OWN served-by/mimeType
     // without racing concurrently in-flight sentences against each other.
-    const sentenceTts = createTTS(voiceTone, gender, process.env, {
+    const sentenceTts = createTTS(voiceTone, gender, language, process.env, {
       onResolved: (name, mimeType) => {
         resolvedMimeType = mimeType;
         onServed(name);
@@ -277,7 +280,12 @@ export function createConversationHandler(
   async function handleClientMessage(message: ClientMessage): Promise<void> {
     switch (message.type) {
       case "session.start": {
-        systemPrompt = buildSystemPrompt({ avatarName: message.avatarName, expertise: message.expertise });
+        language = message.language;
+        systemPrompt = buildSystemPrompt({
+          avatarName: message.avatarName,
+          expertise: message.expertise,
+          language,
+        });
         voiceTone = message.voiceTone;
         gender = message.gender;
         llm = createLLM(process.env, {

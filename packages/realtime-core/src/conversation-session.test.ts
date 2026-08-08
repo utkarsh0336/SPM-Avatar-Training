@@ -115,6 +115,7 @@ const sessionConfig: SessionStartConfig = {
   gender: "FEMALE",
   outfit: "BUSINESS_FORMAL",
   topic: "HR & Leave Policy",
+  language: "English",
 };
 
 function setupHarness(decodedSample?: number) {

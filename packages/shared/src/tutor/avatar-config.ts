@@ -30,12 +30,20 @@ export const expertiseSchema = z.enum([
   "MARKETING_BRANDING",
 ]);
 export const voiceToneSchema = z.enum(["DEEP", "NEUTRAL", "WARM"]);
+/**
+ * The two languages actually wired end-to-end (LLM reply language, TTS voice,
+ * STT hint) — see providers/tts-voice-map.ts's resolveHindiVoice doc comment
+ * for why Hindi is Azure/msedge-tts-only (echogarden's installed Piper voice
+ * catalog has no Hindi entries, verified live).
+ */
+export const languageSchema = z.enum(["English", "Hindi"]);
 
 export type AvatarStyle = z.infer<typeof avatarStyleSchema>;
 export type Gender = z.infer<typeof genderSchema>;
 export type Outfit = z.infer<typeof outfitSchema>;
 export type Expertise = z.infer<typeof expertiseSchema>;
 export type VoiceTone = z.infer<typeof voiceToneSchema>;
+export type Language = z.infer<typeof languageSchema>;
 
 /**
  * The subset of OnboardingState the session actually needs. skinTone,

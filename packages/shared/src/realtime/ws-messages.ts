@@ -1,5 +1,12 @@
 import { z } from "zod";
-import { avatarStyleSchema, expertiseSchema, genderSchema, outfitSchema, voiceToneSchema } from "../tutor/avatar-config.js";
+import {
+  avatarStyleSchema,
+  expertiseSchema,
+  genderSchema,
+  languageSchema,
+  outfitSchema,
+  voiceToneSchema,
+} from "../tutor/avatar-config.js";
 
 /**
  * WebSocket protocol for GET /v1/conversations/:trainingSessionId/ws (see
@@ -29,6 +36,8 @@ export const sessionStartMessageSchema = z.object({
   outfit: outfitSchema,
   /** Cosmetic only — header/caption text. The system prompt is driven by expertise, not this. */
   topic: z.string(),
+  /** Drives the LLM's reply language, TTS voice, and STT language hint (see conversation-service.ts). Defaults to English so older clients that predate this field still validate. */
+  language: languageSchema.default("English"),
 });
 export type SessionStartMessage = z.infer<typeof sessionStartMessageSchema>;
 

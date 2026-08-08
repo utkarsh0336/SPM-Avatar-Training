@@ -21,6 +21,34 @@ describe("createGroqWhisperSTTProvider", () => {
     expect(form.get("file")).toBeInstanceOf(Blob);
   });
 
+  it("forwards a language hint as Whisper's ISO-639-1 `language` form field when given", async () => {
+    let capturedInit: RequestInit | undefined;
+    const fetchImpl = async (_url: string | URL | Request, init?: RequestInit) => {
+      capturedInit = init;
+      return new Response(JSON.stringify({ text: "नमस्ते" }), { status: 200 });
+    };
+    const provider = createGroqWhisperSTTProvider({ apiKey: "secret", fetchImpl });
+
+    await provider.transcribe(new Uint8Array([1, 2, 3]), "audio/wav", { language: "hi" });
+
+    const form = capturedInit?.body as FormData;
+    expect(form.get("language")).toBe("hi");
+  });
+
+  it("omits the `language` form field entirely when no hint is given", async () => {
+    let capturedInit: RequestInit | undefined;
+    const fetchImpl = async (_url: string | URL | Request, init?: RequestInit) => {
+      capturedInit = init;
+      return new Response(JSON.stringify({ text: "hello" }), { status: 200 });
+    };
+    const provider = createGroqWhisperSTTProvider({ apiKey: "secret", fetchImpl });
+
+    await provider.transcribe(new Uint8Array([1, 2, 3]), "audio/wav");
+
+    const form = capturedInit?.body as FormData;
+    expect(form.get("language")).toBeNull();
+  });
+
   it("returns an empty string when the API returns no text field", async () => {
     const fetchImpl = async () => new Response(JSON.stringify({}), { status: 200 });
     const provider = createGroqWhisperSTTProvider({ apiKey: "k", fetchImpl });

@@ -1,0 +1,50 @@
+.root {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+  min-height: 100vh;
+  background: var(--vc-bg);
+}
+
+.mainColumn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  gap: 0;
+}
+
+.endedCard {
+  flex: 1;
+  border-radius: 18px;
+  background: var(--vc-panel-bg);
+  border: 1px solid var(--vc-border-soft);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--vc-text-secondary);
+  text-align: center;
+  padding: 40px;
+}
+
+.endedTitle {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--vc-text-primary);
+}
+
+.endedButton {
+  margin-top: 10px;
+  padding: 9px 18px;
+  border-radius: 10px;
+  background: var(--vc-accent-gradient);
+  border: none;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveFallbackVoice, resolvePrimaryVoice, resolveVoiceGender } from "./tts-voice-map.js";
+import { resolveFallbackVoice, resolveHindiVoice, resolvePrimaryVoice, resolveVoiceGender } from "./tts-voice-map.js";
 
 describe("tts-voice-map", () => {
   it("resolves distinct primary (echogarden/Piper) voices per tone for a male avatar", () => {
@@ -71,5 +71,11 @@ describe("tts-voice-map", () => {
     expect(resolveVoiceGender("MALE")).toBe("male");
     expect(resolveVoiceGender("FEMALE")).toBe("female");
     expect(resolveVoiceGender("NEUTRAL")).toBe("female");
+  });
+
+  it("resolves the two real GA Azure hi-IN neural voices by gender", () => {
+    expect(resolveHindiVoice("MALE")).toBe("hi-IN-MadhurNeural");
+    expect(resolveHindiVoice("FEMALE")).toBe("hi-IN-SwaraNeural");
+    expect(resolveHindiVoice("NEUTRAL")).toBe("hi-IN-SwaraNeural");
   });
 });

@@ -125,6 +125,11 @@ export function useConversationSession({
             gender: persona.gender,
             outfit: persona.outfit,
             topic,
+            // ControlBar's Language control is pure UI state, not wired to
+            // this session (see ControlBar.tsx's doc comment) — English is
+            // the only language actually implemented end-to-end so far (see
+            // Voice AI's useVoiceConversationSession.ts).
+            language: "English",
           },
           onStatusChange: (next) => {
             if (!cancelled) setStatus(next);

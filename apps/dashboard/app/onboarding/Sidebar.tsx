@@ -40,7 +40,7 @@ export function Sidebar() {
             <span className={styles.navText}>New Chat</span>
             <ChevronRightIcon size={14} className={styles.navChevron} />
           </Link>
-          <Link href="/" className={styles.navItem}>
+          <Link href="/voice-ai" className={styles.navItem}>
             <MicIcon size={16} className={styles.navIcon} />
             <span className={styles.navText}>Voice AI</span>
           </Link>
