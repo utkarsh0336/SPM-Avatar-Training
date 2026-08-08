@@ -1,0 +1,73 @@
+.card,
+.cardSelected {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 148px;
+  border-radius: 16px;
+  background: var(--vc-panel-bg);
+  border: 1.5px solid var(--vc-border-soft);
+  cursor: pointer;
+  padding: 0;
+  overflow: hidden;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.card:hover {
+  border-color: var(--vc-border);
+}
+
+.cardSelected {
+  border-color: var(--vc-accent-violet);
+  background: var(--vc-panel-bg-raised);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.16);
+}
+
+.thumbnail {
+  position: relative;
+  width: 100%;
+  height: 108px;
+  background: linear-gradient(160deg, #4a5b73 0%, #2b3245 55%, #1c2333 100%);
+}
+
+.thumbnailImage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.checkBadge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--vc-accent-violet);
+  color: #fff;
+  box-shadow: 0 0 0 2px var(--vc-panel-bg-raised);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 12px 10px 14px;
+}
+
+.name {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--vc-text-primary);
+}
+
+.subtitle {
+  font-size: 12px;
+  color: var(--vc-text-muted);
+}

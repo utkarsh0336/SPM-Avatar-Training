@@ -1,5 +1,16 @@
 import type { STTProvider } from "./types.js";
 import { createGroqWhisperSTTProvider } from "./stt-groq-whisper.js";
+import type { Language } from "../tutor/avatar-config.js";
+
+const WHISPER_LANGUAGE_CODE: Record<Language, string> = {
+  English: "en",
+  Hindi: "hi",
+};
+
+/** Maps our Language enum to the ISO-639-1 code Whisper's `language` field expects. */
+export function resolveWhisperLanguageCode(language: Language): string {
+  return WHISPER_LANGUAGE_CODE[language];
+}
 
 /**
  * There is exactly one real server-side STTProvider (Groq Whisper) — the

@@ -421,6 +421,41 @@ export function LogOutIcon({ size = 16, className }: IconProps) {
   );
 }
 
+export function PlayIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className}>
+      <path d="M7 4l14 8-14 8V4z" />
+    </svg>
+  );
+}
+
+export function PauseIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className}>
+      <rect x="6" y="4" width="4" height="16" rx="1" />
+      <rect x="14" y="4" width="4" height="16" rx="1" />
+    </svg>
+  );
+}
+
+export function WandIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M4 20L18 6M15 3l1.5 1.5M19.5 7.5L21 9M3 15l1.5 1.5" />
+    </svg>
+  );
+}
+
 export function SpeakerIcon({ size = 14, className }: IconProps) {
   return (
     <svg

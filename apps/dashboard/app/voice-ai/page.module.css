@@ -1,0 +1,144 @@
+.root {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 100vh;
+  padding: 40px 24px;
+}
+
+.card {
+  width: 100%;
+  max-width: 760px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.heroIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #2dd4bf, #22c55e);
+  color: #fff;
+  box-shadow: 0 0 44px rgba(34, 197, 94, 0.32);
+  margin-bottom: 20px;
+}
+
+.title {
+  font-size: 25px;
+  font-weight: 700;
+  color: var(--vc-text-primary);
+  margin-bottom: 8px;
+}
+
+.subtitle {
+  font-size: 14px;
+  color: var(--vc-text-secondary);
+  margin-bottom: 36px;
+}
+
+.sectionLabel {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--vc-text-muted);
+  margin-bottom: 16px;
+}
+
+.expertGrid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 36px;
+}
+
+.languageRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 36px;
+}
+
+.langPill {
+  padding: 9px 24px;
+  border-radius: 999px;
+  border: 1px solid var(--vc-border-soft);
+  background: var(--vc-chip-bg);
+  color: var(--vc-text-secondary);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.langPill:hover {
+  color: var(--vc-text-primary);
+}
+
+.langPillSelected {
+  background: var(--vc-green);
+  border-color: var(--vc-green);
+  color: #fff;
+}
+
+.startButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 15px 32px;
+  border: none;
+  border-radius: 14px;
+  background: var(--vc-accent-gradient);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-bottom: 16px;
+}
+
+.startButton:hover {
+  filter: brightness(1.06);
+}
+
+.startButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.customSetupLink {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: var(--vc-text-muted);
+  font-size: 12.5px;
+  cursor: default;
+}
+
+.empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--vc-text-muted);
+  text-align: center;
+  padding: 40px;
+}
+
+.emptyTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--vc-text-secondary);
+}

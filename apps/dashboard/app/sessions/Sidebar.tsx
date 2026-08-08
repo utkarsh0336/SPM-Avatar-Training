@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 import { logout } from "../../lib/api-client";
 import styles from "./Sidebar.module.css";
 import {
@@ -23,7 +24,12 @@ import {
 // per-feature convention rather than a premature shared-package extraction — see
 // .claude/specs/video-chat-session.md UI Changes / Files to Create.
 export function Sidebar() {
+  const pathname = usePathname();
   const [personaDismissed, setPersonaDismissed] = useState(false);
+  // Both /sessions and /voice-ai are separate top-level route trees sharing
+  // this one sidebar (see this file's own doc comment above) — the active
+  // "AI AVATAR HUB" item reflects whichever hub the current route belongs to.
+  const activeHub: "new-chat" | "voice-ai" = pathname?.startsWith("/voice-ai") ? "voice-ai" : "new-chat";
 
   // Same logout call + redirect as (dashboard)/LogoutButton.tsx — this
   // sidebar persists across /sessions and /sessions/[trainingSessionId], so
@@ -62,14 +68,15 @@ export function Sidebar() {
       <nav className={styles.nav}>
         <div className={styles.navGroup}>
           <span className={styles.navLabel}>AI AVATAR HUB</span>
-          <a href="/sessions" className={styles.navItemActive}>
+          <a href="/sessions" className={activeHub === "new-chat" ? styles.navItemActive : styles.navItem}>
             <VideoIcon size={16} className={styles.navIcon} />
             <span className={styles.navText}>New CHAT</span>
-            <ChevronRightIcon size={14} className={styles.navChevron} />
+            {activeHub === "new-chat" && <ChevronRightIcon size={14} className={styles.navChevron} />}
           </a>
-          <a href="/sessions" className={styles.navItem}>
+          <a href="/voice-ai" className={activeHub === "voice-ai" ? styles.navItemActive : styles.navItem}>
             <MicIcon size={16} className={styles.navIcon} />
             <span className={styles.navText}>Voice AI</span>
+            {activeHub === "voice-ai" && <ChevronRightIcon size={14} className={styles.navChevron} />}
           </a>
           <a href="/sessions" className={styles.navItem}>
             <BookmarkIcon size={16} className={styles.navIcon} />

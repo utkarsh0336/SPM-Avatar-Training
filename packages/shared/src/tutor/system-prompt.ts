@@ -1,4 +1,4 @@
-import type { Expertise } from "./avatar-config.js";
+import type { Expertise, Language } from "./avatar-config.js";
 
 // Display copy only (used to phrase the prompt text) — not type-critical if
 // this drifts slightly from apps/dashboard's EXPERTISE_LABELS, unlike
@@ -18,7 +18,19 @@ const EXPERTISE_TOPIC_TITLES: Record<Expertise, string> = {
 export interface BuildSystemPromptInput {
   avatarName: string;
   expertise: Expertise;
+  /** Defaults to English — optional so existing callers that predate this field keep working. */
+  language?: Language;
 }
+
+// Instructs the LLM directly rather than switching a template file per
+// language — Gemini/Groq's models are natively multilingual, so this is the
+// whole mechanism. The corresponding audio side (TTS voice, STT hint) is
+// wired in conversation-service.ts, driven by the same session.start
+// `language` field this value ultimately comes from.
+const LANGUAGE_INSTRUCTION: Record<Language, string> = {
+  English: "Respond in English.",
+  Hindi: "Respond in Hindi (Devanagari script), regardless of what language the learner uses.",
+};
 
 /**
  * A structured-lesson-plan prompt template per brief §7: introduce the
@@ -28,7 +40,10 @@ export interface BuildSystemPromptInput {
  */
 export function buildSystemPrompt(input: BuildSystemPromptInput): string {
   const topic = EXPERTISE_TOPIC_TITLES[input.expertise];
+  const language = input.language ?? "English";
   return `You are ${input.avatarName}, an AI avatar trainer teaching the topic: ${topic}.
+
+${LANGUAGE_INSTRUCTION[language]}
 
 You are having a real-time SPOKEN conversation — the learner hears your words read aloud by a text-to-speech voice, so keep replies concise and conversational (2-4 sentences per turn), not paragraphs written for reading on a page.
 

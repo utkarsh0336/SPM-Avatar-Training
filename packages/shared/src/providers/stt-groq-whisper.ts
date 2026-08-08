@@ -1,4 +1,4 @@
-import type { STTProvider } from "./types.js";
+import type { STTProvider, STTTranscribeOptions } from "./types.js";
 import { buildProviderError } from "./provider-error.js";
 
 export interface GroqWhisperSTTOptions {
@@ -25,7 +25,7 @@ export function createGroqWhisperSTTProvider(options: GroqWhisperSTTOptions): ST
 
   return {
     name: "groq-whisper",
-    async transcribe(audioBytes: Uint8Array, mimeType: string): Promise<string> {
+    async transcribe(audioBytes: Uint8Array, mimeType: string, opts?: STTTranscribeOptions): Promise<string> {
       const form = new FormData();
       form.append(
         "file",
@@ -33,6 +33,10 @@ export function createGroqWhisperSTTProvider(options: GroqWhisperSTTOptions): ST
         `utterance.${extensionFor(mimeType)}`,
       );
       form.append("model", model);
+      // ISO-639-1 hint, per Groq's documented OpenAI-Whisper-API-compatible
+      // /audio/transcriptions endpoint — omitted (not empty-stringed) so the
+      // provider's own auto-detection still applies when no hint is given.
+      if (opts?.language) form.append("language", opts.language);
 
       const response = await fetchImpl("https://api.groq.com/openai/v1/audio/transcriptions", {
         method: "POST",

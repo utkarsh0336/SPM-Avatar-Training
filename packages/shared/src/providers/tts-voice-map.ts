@@ -97,3 +97,26 @@ export function resolveFallbackVoice(tone: VoiceTone, gender: Gender): string {
 export function resolveVoiceGender(gender: Gender): "male" | "female" {
   return gender === "MALE" ? "male" : "female";
 }
+
+/**
+ * Verified live against the installed echogarden@3.0.5's own vits (Piper)
+ * voice catalog via `requestVoiceList({ engine: "vits" })`: 123 voices total,
+ * zero tagged `hi`/`hi-IN` — the primary TTS provider genuinely cannot
+ * synthesize Hindi. msedge-tts (Azure), by contrast, was confirmed live via
+ * its own `getVoices()` to carry exactly two GA hi-IN neural voices:
+ * hi-IN-MadhurNeural (Male) and hi-IN-SwaraNeural (Female) — no DEEP/NEUTRAL/
+ * WARM tone variants exist for Hindi the way the English catalogs above have,
+ * so tone is ignored here. See tts-factory.ts's Hindi branch, which routes
+ * to msedge-tts only (never echogarden) for this reason.
+ */
+const HINDI_VOICE_BY_GENDER: Record<Gender, string> = {
+  MALE: "hi-IN-MadhurNeural",
+  FEMALE: "hi-IN-SwaraNeural",
+  // Azure's Hindi catalog has no gender-neutral voice — reuses the FEMALE
+  // entry, same convention as the English maps above.
+  NEUTRAL: "hi-IN-SwaraNeural",
+};
+
+export function resolveHindiVoice(gender: Gender): string {
+  return HINDI_VOICE_BY_GENDER[gender];
+}

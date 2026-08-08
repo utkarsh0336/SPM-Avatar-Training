@@ -43,20 +43,18 @@ function fakeLLM(behavior: "success" | "throw", replyChunks: string[] = []): Con
 
 function fakeSTT(behavior: "success" | "fail" | "unconfigured", text = "hello there"): ConversationHandlerDeps["createSTT"] {
   if (behavior === "unconfigured") return vi.fn(() => null);
-  return vi.fn(
-    () =>
-      ({
-        name: "fake-stt",
-        async transcribe() {
-          if (behavior === "fail") throw new Error("stt down");
-          return text;
-        },
-      }) as STTProvider,
-  );
+  // transcribe is itself a vi.fn (not a plain method) so tests can assert on
+  // its call arguments, e.g. the language hint threaded through from
+  // session.start — see the Hindi-wiring test below.
+  const transcribe = vi.fn(async () => {
+    if (behavior === "fail") throw new Error("stt down");
+    return text;
+  });
+  return vi.fn(() => ({ name: "fake-stt", transcribe }) as unknown as STTProvider);
 }
 
 function fakeTTS(behavior: "success" | "fail"): ConversationHandlerDeps["createTTS"] {
-  return vi.fn((_tone: VoiceTone, _gender, _env, opts) => {
+  return vi.fn((_tone: VoiceTone, _gender, _language, _env, opts) => {
     return {
       name: "fake-tts",
       mimeType: "audio/wav",
@@ -99,6 +97,58 @@ describe("createConversationHandler", () => {
     expect(socket.sent).toContainEqual({ type: "session.ready" });
     expect(createLLM).toHaveBeenCalled();
     expect(createSTT).toHaveBeenCalled();
+  });
+
+  it("session.start without a language field defaults to English (backward compatible)", () => {
+    const socket = new FakeSocket();
+    createConversationHandler(socket as never, claims, {
+      createLLM: fakeLLM("success"),
+      createSTT: fakeSTT("success"),
+      createTTS: fakeTTS("success"),
+    });
+    socket.emitMessage({
+      type: "session.start",
+      avatarName: "Nancy",
+      expertise: "HR_LEAVE_POLICY",
+      voiceTone: "WARM",
+      style: "REALISTIC",
+      gender: "FEMALE",
+      outfit: "BUSINESS_FORMAL",
+      topic: "t",
+    });
+    expect(socket.sent).toContainEqual({ type: "session.ready" });
+  });
+
+  it("threads a Hindi session.start into the TTS language and the Whisper STT language hint", async () => {
+    const socket = new FakeSocket();
+    const createTTS = fakeTTS("success");
+    const createSTT = fakeSTT("success");
+    createConversationHandler(socket as never, claims, {
+      createLLM: fakeLLM("success", ["ठीक है। "]),
+      createSTT,
+      createTTS,
+    });
+    socket.emitMessage({
+      type: "session.start",
+      avatarName: "Priya",
+      expertise: "HR_LEAVE_POLICY",
+      voiceTone: "WARM",
+      style: "REALISTIC",
+      gender: "FEMALE",
+      outfit: "BUSINESS_FORMAL",
+      topic: "HR & Leave Policy",
+      language: "Hindi",
+    });
+    socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+    await vi.waitFor(() => {
+      expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+    });
+
+    expect(createTTS).toHaveBeenCalledWith("WARM", "FEMALE", "Hindi", process.env, expect.anything());
+    const sttInstance = (createSTT as unknown as { mock: { results: { value: STTProvider }[] } }).mock.results[0]!
+      .value;
+    expect(sttInstance.transcribe).toHaveBeenCalledWith(expect.any(Uint8Array), "audio/wav", { language: "hi" });
   });
 
   it("processes a full audio turn: transcript, turn.started, tts.chunk, turn.ended, latency", async () => {

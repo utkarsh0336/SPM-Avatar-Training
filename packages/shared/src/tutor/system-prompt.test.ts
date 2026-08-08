@@ -16,6 +16,17 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toMatch(/quiz/i);
   });
 
+  it("defaults to an English response instruction when language is omitted", () => {
+    const prompt = buildSystemPrompt({ avatarName: "Nancy", expertise: "HR_LEAVE_POLICY" });
+    expect(prompt).toMatch(/Respond in English/);
+  });
+
+  it("instructs a Hindi response when language is Hindi", () => {
+    const prompt = buildSystemPrompt({ avatarName: "Priya", expertise: "HR_LEAVE_POLICY", language: "Hindi" });
+    expect(prompt).toMatch(/Respond in Hindi/);
+    expect(prompt).not.toMatch(/Respond in English/);
+  });
+
   it("instructs concise spoken-style replies", () => {
     const prompt = buildSystemPrompt({ avatarName: "Nancy", expertise: "SALES_NEGOTIATION" });
     expect(prompt).toMatch(/concise/i);

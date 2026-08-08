@@ -1,0 +1,79 @@
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px 0 4px;
+  position: relative;
+}
+
+.control {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 10px 18px;
+  border-radius: 12px;
+  background: var(--vc-chip-bg);
+  border: 1px solid var(--vc-border-soft);
+  color: var(--vc-text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.control:hover {
+  color: var(--vc-text-primary);
+}
+
+.controlEngaged {
+  background: rgba(139, 92, 246, 0.22);
+  color: var(--vc-text-primary);
+}
+
+.endControl {
+  background: var(--vc-red);
+  border-color: var(--vc-red);
+  color: #fff;
+}
+
+.endControl:hover {
+  color: #fff;
+  filter: brightness(1.08);
+}
+
+.languagePopover {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--vc-panel-bg-raised);
+  border: 1px solid var(--vc-border-soft);
+  min-width: 140px;
+}
+
+.languageOption {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: none;
+  border: none;
+  color: var(--vc-text-secondary);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.languageOption:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--vc-text-primary);
+}
+
+.languageOptionSelected {
+  color: var(--vc-accent-violet);
+  font-weight: 600;
+}

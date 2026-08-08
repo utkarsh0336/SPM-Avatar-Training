@@ -1,0 +1,140 @@
+.column {
+  width: 260px;
+  flex: 0 0 260px;
+  height: 100vh;
+  overflow-y: auto;
+  border-right: 1px solid var(--vc-border-soft);
+  padding: 20px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.newChatButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 14px;
+  border: none;
+  border-radius: 12px;
+  background: var(--vc-accent-gradient);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.newChatButton:hover {
+  filter: brightness(1.08);
+}
+
+.searchBox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--vc-panel-bg);
+  border: 1px solid var(--vc-border-soft);
+  color: var(--vc-text-muted);
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--vc-text-primary);
+  font-size: 13px;
+}
+
+.searchInput::placeholder {
+  color: var(--vc-text-muted);
+}
+
+.groups {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overflow-y: auto;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.groupLabel {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--vc-text-muted);
+  padding: 0 8px 6px;
+}
+
+.emptyGroup {
+  font-size: 12.5px;
+  color: var(--vc-text-muted);
+  padding: 4px 8px;
+}
+
+.item,
+.itemActive {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+}
+
+.item:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.itemActive {
+  background: rgba(139, 92, 246, 0.14);
+}
+
+.itemTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.itemIcon {
+  flex-shrink: 0;
+  color: var(--vc-text-muted);
+}
+
+.itemTitle {
+  font-size: 13.5px;
+  color: var(--vc-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemTitleBold {
+  font-weight: 600;
+}
+
+.itemSubtitle {
+  font-size: 11.5px;
+  color: var(--vc-text-muted);
+  padding-left: 20px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

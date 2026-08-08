@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clientMessageSchema, serverMessageSchema } from "./ws-messages.js";
+import { clientMessageSchema, serverMessageSchema, sessionStartMessageSchema } from "./ws-messages.js";
 
 describe("clientMessageSchema", () => {
   it("accepts a valid session.start message", () => {
@@ -14,6 +14,52 @@ describe("clientMessageSchema", () => {
       topic: "HR & Leave Policy",
     });
     expect(result.success).toBe(true);
+  });
+
+  it("defaults session.start's language to English when omitted", () => {
+    const result = sessionStartMessageSchema.safeParse({
+      type: "session.start",
+      avatarName: "Nancy",
+      expertise: "HR_LEAVE_POLICY",
+      voiceTone: "WARM",
+      style: "REALISTIC",
+      gender: "FEMALE",
+      outfit: "BUSINESS_FORMAL",
+      topic: "HR & Leave Policy",
+    });
+    expect(result.success).toBe(true);
+    expect(result.success && result.data.language).toBe("English");
+  });
+
+  it("accepts an explicit Hindi language on session.start", () => {
+    const result = sessionStartMessageSchema.safeParse({
+      type: "session.start",
+      avatarName: "Priya",
+      expertise: "HR_LEAVE_POLICY",
+      voiceTone: "WARM",
+      style: "REALISTIC",
+      gender: "FEMALE",
+      outfit: "BUSINESS_FORMAL",
+      topic: "HR & Leave Policy",
+      language: "Hindi",
+    });
+    expect(result.success).toBe(true);
+    expect(result.success && result.data.language).toBe("Hindi");
+  });
+
+  it("rejects session.start with an unsupported language", () => {
+    const result = clientMessageSchema.safeParse({
+      type: "session.start",
+      avatarName: "Nancy",
+      expertise: "HR_LEAVE_POLICY",
+      voiceTone: "WARM",
+      style: "REALISTIC",
+      gender: "FEMALE",
+      outfit: "BUSINESS_FORMAL",
+      topic: "HR & Leave Policy",
+      language: "French",
+    });
+    expect(result.success).toBe(false);
   });
 
   it("accepts a valid audio.chunk message", () => {
