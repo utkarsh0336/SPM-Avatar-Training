@@ -1,6 +1,17 @@
 export interface EncodedWav {
   bytes: Uint8Array<ArrayBuffer>;
   mimeType: "audio/wav";
+  /**
+   * RMS (0-1) of the whole decoded clip, not just a momentary sample — lets
+   * the caller reject a "turn" whose overall energy never actually reached
+   * speech level (a brief noise spike can satisfy voice-activity-detector.ts's
+   * live per-frame threshold and still produce an all-but-silent clip
+   * overall). Whisper-family STT models are documented to hallucinate
+   * plausible-sounding text on near-silent audio rather than reporting "no
+   * speech" — sending such a clip at all is the bug, not a transcription
+   * accuracy issue. See conversation-session.ts's MIN_UTTERANCE_RMS.
+   */
+  rms: number;
 }
 
 export interface EncodeBlobAsWavOptions {
@@ -20,11 +31,11 @@ export async function encodeBlobAsWav(options: EncodeBlobAsWavOptions): Promise<
   const audioContext = options.createAudioContext?.() ?? new AudioContext();
   const arrayBuffer = await options.blob.arrayBuffer();
   const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-  return { bytes: encodeAudioBufferAsWav(audioBuffer), mimeType: "audio/wav" };
+  const mono = downmixToMono(audioBuffer);
+  return { bytes: encodeMonoAsWav(mono, audioBuffer.sampleRate), mimeType: "audio/wav", rms: computeRms(mono) };
 }
 
-function encodeAudioBufferAsWav(audioBuffer: AudioBuffer): Uint8Array<ArrayBuffer> {
-  const sampleRate = audioBuffer.sampleRate;
+function downmixToMono(audioBuffer: AudioBuffer): Float32Array {
   const numFrames = audioBuffer.length;
   const channelCount = audioBuffer.numberOfChannels;
 
@@ -37,7 +48,20 @@ function encodeAudioBufferAsWav(audioBuffer: AudioBuffer): Uint8Array<ArrayBuffe
       mono[i]! += data[i]! / channelCount;
     }
   }
+  return mono;
+}
 
+function computeRms(mono: Float32Array): number {
+  if (mono.length === 0) return 0;
+  let sumSquares = 0;
+  for (let i = 0; i < mono.length; i++) {
+    sumSquares += mono[i]! * mono[i]!;
+  }
+  return Math.sqrt(sumSquares / mono.length);
+}
+
+function encodeMonoAsWav(mono: Float32Array, sampleRate: number): Uint8Array<ArrayBuffer> {
+  const numFrames = mono.length;
   const bytesPerSample = 2; // 16-bit PCM
   const dataSize = numFrames * bytesPerSample;
   const buffer = new ArrayBuffer(44 + dataSize);

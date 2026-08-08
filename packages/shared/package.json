@@ -17,6 +17,10 @@
     "./tutor": {
       "types": "./dist/tutor/index.d.ts",
       "default": "./dist/tutor/index.js"
+    },
+    "./onboarding": {
+      "types": "./dist/onboarding/index.d.ts",
+      "default": "./dist/onboarding/index.js"
     }
   },
   "scripts": {

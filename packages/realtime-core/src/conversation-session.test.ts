@@ -39,12 +39,19 @@ class FakeMediaRecorder {
   }
 }
 
-function createFakeAudioContext(amplitude: { value: number }): AudioContext {
+function createFakeAudioContext(
+  amplitude: { value: number },
+  // Sample value decodeAudioData's fake AudioBuffer is filled with — loud
+  // (0.5) by default so the RMS gate in stopRecordingAndSend() doesn't
+  // reject every existing test's recorded "turn" by default. Tests that
+  // specifically exercise the low-energy-drop path override this to ~0.
+  decodedSample = 0.5,
+): AudioContext {
   const fakeAudioBuffer = {
     sampleRate: 44100,
     length: 4,
     numberOfChannels: 1,
-    getChannelData: () => new Float32Array(4),
+    getChannelData: () => new Float32Array(4).fill(decodedSample),
   };
   return {
     decodeAudioData: vi.fn().mockResolvedValue(fakeAudioBuffer),
@@ -110,10 +117,10 @@ const sessionConfig: SessionStartConfig = {
   topic: "HR & Leave Policy",
 };
 
-function setupHarness() {
+function setupHarness(decodedSample?: number) {
   const ws = new FakeWebSocket();
   const amplitude = { value: 128 }; // 128 = silence (RMS 0)
-  const audioContext = createFakeAudioContext(amplitude);
+  const audioContext = createFakeAudioContext(amplitude, decodedSample);
   const raf = createFakeRaf();
   const avatar = createFakeAvatar();
   const onStatusChange = vi.fn();
@@ -219,6 +226,89 @@ describe("connectConversationSession", () => {
     expect(avatar.speakCalls).toEqual(["First.", "Second."]);
   });
 
+  it("keeps playing later sentences in the same turn after an earlier sentence's playback throws", async () => {
+    const { connectPromise, ws, avatar } = setupHarness();
+    await connectPromise;
+    ws.emitMessage({ type: "turn.started", utteranceId: "u1" });
+
+    avatar.speak = vi.fn((_track, text) => {
+      avatar.speakCalls.push(text);
+      if (text === "First.") throw new Error("avatar sdk exploded");
+    });
+
+    ws.emitMessage({
+      type: "tts.chunk",
+      utteranceId: "u1",
+      sentenceIndex: 0,
+      text: "First.",
+      audioBase64: "AAAA",
+      mimeType: "audio/wav",
+      isLastForUtterance: false,
+    });
+    ws.emitMessage({
+      type: "tts.chunk",
+      utteranceId: "u1",
+      sentenceIndex: 1,
+      text: "Second.",
+      audioBase64: "AAAA",
+      mimeType: "audio/wav",
+      isLastForUtterance: true,
+    });
+
+    await vi.runAllTimersAsync();
+
+    // Regression guard: playbackChain is one long-lived promise for the
+    // whole session (see conversation-session.ts's queuePlayback), so a
+    // rejection from one sentence must not silently skip every sentence
+    // queued after it, in this turn or any future one.
+    expect(avatar.speakCalls).toEqual(["First.", "Second."]);
+  });
+
+  it("keeps playing a later turn's sentences after an earlier turn's playback threw", async () => {
+    const { connectPromise, ws, avatar } = setupHarness();
+    await connectPromise;
+
+    avatar.speak = vi.fn((_track, text) => {
+      avatar.speakCalls.push(text);
+      if (text === "Broken turn.") throw new Error("avatar sdk exploded");
+    });
+
+    ws.emitMessage({ type: "turn.started", utteranceId: "u1" });
+    ws.emitMessage({
+      type: "tts.chunk",
+      utteranceId: "u1",
+      sentenceIndex: 0,
+      text: "Broken turn.",
+      audioBase64: "AAAA",
+      mimeType: "audio/wav",
+      isLastForUtterance: true,
+    });
+
+    // Let turn u1's playback actually run (and throw) before turn u2 starts —
+    // otherwise currentUtteranceId flips to u2 before queuePlayback's
+    // microtask for u1 ever executes, and the existing stale-turn guard
+    // (see the "drops queued tts.chunk audio for a turn that has since been
+    // cancelled" test) correctly skips it for an unrelated reason, which
+    // would defeat the point of this specific regression test.
+    await vi.runAllTimersAsync();
+    ws.emitMessage({ type: "turn.ended", utteranceId: "u1" });
+
+    ws.emitMessage({ type: "turn.started", utteranceId: "u2" });
+    ws.emitMessage({
+      type: "tts.chunk",
+      utteranceId: "u2",
+      sentenceIndex: 0,
+      text: "Next turn works fine.",
+      audioBase64: "AAAA",
+      mimeType: "audio/wav",
+      isLastForUtterance: true,
+    });
+
+    await vi.runAllTimersAsync();
+
+    expect(avatar.speakCalls).toEqual(["Broken turn.", "Next turn works fine."]);
+  });
+
   it("drops queued tts.chunk audio for a turn that has since been cancelled", async () => {
     const { connectPromise, ws, avatar } = setupHarness();
     await connectPromise;
@@ -299,6 +389,53 @@ describe("connectConversationSession", () => {
         typeof m === "object" && m !== null && "type" in m && m.type === "text.fallback",
     );
     expect(fallbackMessage?.text).toBe("recognized text");
+  });
+
+  it("sends audio.chunk for a turn whose decoded clip has real speech-level energy", async () => {
+    const { connectPromise, ws, raf, amplitude } = setupHarness(0.5); // loud decoded clip
+    await connectPromise;
+
+    vi.setSystemTime(0);
+    amplitude.value = 200; // above VAD's live threshold — starts recording
+    raf.tick();
+    vi.setSystemTime(400);
+    amplitude.value = 128; // silence begins
+    raf.tick();
+    vi.setSystemTime(1200); // past minSpeechDurationMs(300) + silenceDurationMs(700)
+    raf.tick();
+
+    await vi.runAllTimersAsync();
+
+    const audioChunk = ws.sent.find(
+      (m): m is { type: "audio.chunk" } => typeof m === "object" && m !== null && "type" in m && m.type === "audio.chunk",
+    );
+    expect(audioChunk).toBeDefined();
+  });
+
+  it("drops the turn instead of sending audio.chunk when the decoded clip never reached speech-level energy", async () => {
+    // Live VAD threshold is momentarily satisfied (starting the recording),
+    // but the actual decoded clip is silent overall — e.g. a noise spike,
+    // not real speech. Whisper-family STT hallucinates text on clips like
+    // this rather than reporting "no speech", so it must never be sent.
+    const { connectPromise, ws, raf, amplitude, onStatusChange } = setupHarness(0); // silent decoded clip
+    await connectPromise;
+
+    vi.setSystemTime(0);
+    amplitude.value = 200;
+    raf.tick();
+    vi.setSystemTime(400);
+    amplitude.value = 128;
+    raf.tick();
+    vi.setSystemTime(1200);
+    raf.tick();
+
+    await vi.runAllTimersAsync();
+
+    const audioChunk = ws.sent.find(
+      (m): m is { type: "audio.chunk" } => typeof m === "object" && m !== null && "type" in m && m.type === "audio.chunk",
+    );
+    expect(audioChunk).toBeUndefined();
+    expect(onStatusChange).toHaveBeenCalledWith("listening");
   });
 
   it("surfaces turn.failed as an error and returns to listening", async () => {

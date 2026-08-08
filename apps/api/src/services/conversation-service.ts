@@ -7,9 +7,11 @@ import {
   createTurnLatencyTracker,
   SentenceChunker,
   clientMessageSchema,
+  resolveVoiceGender,
   serverMessageSchema,
   type ClientMessage,
   type ServerMessage,
+  type Gender,
   type LLMMessage,
   type LLMProvider,
   type STTProvider,
@@ -78,6 +80,7 @@ export function createConversationHandler(
   let stt: STTProvider | null = null;
   let systemPrompt = "";
   let voiceTone: VoiceTone = "NEUTRAL";
+  let gender: Gender = "FEMALE";
   let currentUtteranceId: string | null = null;
   let currentAbortController: AbortController | null = null;
   let currentTurnLlmServedBy: string | undefined;
@@ -118,7 +121,7 @@ export function createConversationHandler(
     // construction) rather than one shared instance for the whole turn, so
     // each sentence's own onResolved captures ITS OWN served-by/mimeType
     // without racing concurrently in-flight sentences against each other.
-    const sentenceTts = createTTS(voiceTone, process.env, {
+    const sentenceTts = createTTS(voiceTone, gender, process.env, {
       onResolved: (name, mimeType) => {
         resolvedMimeType = mimeType;
         onServed(name);
@@ -126,7 +129,10 @@ export function createConversationHandler(
     });
     try {
       const chunks: Uint8Array[] = [];
-      for await (const chunk of sentenceTts.synthesize(sentenceText, "", { signal })) {
+      for await (const chunk of sentenceTts.synthesize(sentenceText, "", {
+        signal,
+        voiceGender: resolveVoiceGender(gender),
+      })) {
         chunks.push(chunk);
       }
       if (chunks.length === 0) return null;
@@ -273,6 +279,7 @@ export function createConversationHandler(
       case "session.start": {
         systemPrompt = buildSystemPrompt({ avatarName: message.avatarName, expertise: message.expertise });
         voiceTone = message.voiceTone;
+        gender = message.gender;
         llm = createLLM(process.env, {
           onResolved: (name) => {
             currentTurnLlmServedBy = name;

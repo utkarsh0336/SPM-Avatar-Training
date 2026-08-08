@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { createMockAvatarProvider, resolveReplicaId, type AvatarProvider } from "@avatrain/avatar-core";
+import { createAvatarProviderFromEnv, resolveReplicaId, type AvatarProvider } from "@avatrain/avatar-core";
 import { connectConversationSession, type ConversationSessionStatus } from "@avatrain/realtime-core";
 import type { OnboardingHandoff } from "@avatrain/shared/tutor";
-import { mintConversationTicket } from "../../../lib/api-client";
+import { mintConversationTicket, mintSimliSession } from "../../../lib/api-client";
 import { readOnboardingAvatarHandoff } from "../../../lib/onboarding-handoff";
 
 export interface ConversationMessage {
@@ -78,7 +78,12 @@ export function useConversationSession({
       const persona = readOnboardingAvatarHandoff() ?? DEFAULT_PERSONA;
       const replicaId = resolveReplicaId({ style: persona.style, gender: persona.gender, outfit: persona.outfit });
 
-      avatarProvider = createMockAvatarProvider({
+      avatarProvider = createAvatarProviderFromEnv({
+        // Literal process.env.NEXT_PUBLIC_* access, required so Next.js can
+        // statically inline it into the client bundle — see
+        // avatar-provider-factory.ts's env option doc comment.
+        env: { NEXT_PUBLIC_AVATAR_PROVIDER: process.env.NEXT_PUBLIC_AVATAR_PROVIDER },
+        getSimliSessionCredentials: mintSimliSession,
         onSubtitleChange: (text) => {
           if (!cancelled) setCaptionText(text);
         },

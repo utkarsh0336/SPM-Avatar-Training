@@ -1,13 +1,13 @@
 "use client";
 
 import styles from "./LivePreviewPanel.module.css";
-import { CameraIcon, CheckIcon, UserIcon } from "./icons";
+import { CameraIcon, CheckIcon } from "./icons";
 import { useOnboarding } from "./OnboardingContext";
 import {
   AVATAR_STYLE_LABELS,
   EXPERTISE_LABELS,
-  GENDER_GRADIENTS,
   GENDER_LABELS,
+  GENDER_PHOTOS,
   HAIR_COLOR_SWATCHES,
   HAIR_STYLE_LABELS,
   OUTFIT_LABELS,
@@ -26,8 +26,8 @@ export function LivePreviewPanel() {
       </div>
 
       <div className={styles.card}>
-        <div className={styles.image} style={{ background: GENDER_GRADIENTS[state.gender] }}>
-          <UserIcon size={56} className={styles.imagePlaceholderIcon} />
+        <div className={styles.image}>
+          <img src={GENDER_PHOTOS[state.gender]} alt="" className={styles.imagePhoto} />
         </div>
 
         {state.style && (

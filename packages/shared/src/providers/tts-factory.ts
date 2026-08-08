@@ -3,7 +3,7 @@ import { createEchogardenTTSProvider } from "./tts-echogarden.js";
 import { createMsEdgeTTSProvider } from "./tts-msedge.js";
 import { createFailoverTTSProvider, type TTSProviderCandidate } from "./tts-failover.js";
 import { resolveFallbackVoice, resolvePrimaryVoice } from "./tts-voice-map.js";
-import type { VoiceTone } from "../tutor/avatar-config.js";
+import type { Gender, VoiceTone } from "../tutor/avatar-config.js";
 
 export interface CreateTTSProviderFromEnvOptions {
   onResolved?: (name: string, mimeType: string) => void;
@@ -13,10 +13,15 @@ export interface CreateTTSProviderFromEnvOptions {
  * TTS_PROVIDER picks which candidate is tried first (mirrors LLM_PROVIDER in
  * llm-factory.ts) — the other is always kept configured as the automatic
  * fallback, so this also doubles as a manual way to exercise the fallback
- * path without deliberately breaking the primary.
+ * path without deliberately breaking the primary. `gender` only affects the
+ * msedge-tts candidate's specific named voice here — the echogarden
+ * candidate's voice (model name) doesn't vary by gender; its speaker is
+ * selected per-call via TTSSynthesizeOptions.voiceGender instead (the
+ * caller must pass resolveVoiceGender(gender) there too).
  */
 export function createTTSProviderFromEnv(
   tone: VoiceTone,
+  gender: Gender,
   env: NodeJS.ProcessEnv = process.env,
   opts?: CreateTTSProviderFromEnvOptions,
 ): TTSProvider {
@@ -29,7 +34,7 @@ export function createTTSProviderFromEnv(
   };
   const msedge: TTSProviderCandidate = {
     name: "msedge-tts",
-    voice: resolveFallbackVoice(tone),
+    voice: resolveFallbackVoice(tone, gender),
     provider: createMsEdgeTTSProvider(),
   };
 

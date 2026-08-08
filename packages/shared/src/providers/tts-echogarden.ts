@@ -39,6 +39,7 @@ export function createEchogardenTTSProvider(options?: EchogardenTTSOptions): TTS
         result = await synthesizeImpl(text, {
           engine: "vits",
           voice,
+          voiceGender: opts.voiceGender,
           outputAudioFormat: { codec: "wav" },
         });
       } catch (error) {

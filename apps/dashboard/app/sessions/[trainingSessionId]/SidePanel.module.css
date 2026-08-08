@@ -51,12 +51,14 @@
   background: var(--vc-panel-bg);
 }
 
-.cameraImage {
+.cameraVideo {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  /* Mirrored, matching the standard self-view convention in video calls. */
+  transform: scaleX(-1);
 }
 
 .micBadge {

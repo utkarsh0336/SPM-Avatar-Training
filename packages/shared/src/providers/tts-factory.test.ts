@@ -31,14 +31,14 @@ async function drain(iterable: AsyncIterable<unknown>): Promise<void> {
 describe("createTTSProviderFromEnv", () => {
   it("defaults to echogarden first when TTS_PROVIDER is unset", async () => {
     const onResolved = vi.fn();
-    const provider = createTTSProviderFromEnv("NEUTRAL", {}, { onResolved });
+    const provider = createTTSProviderFromEnv("NEUTRAL", "FEMALE", {}, { onResolved });
     await drain(provider.synthesize("hi", "unused", opts));
     expect(onResolved).toHaveBeenCalledWith("echogarden", "audio/wav");
   });
 
   it("tries msedge-tts first when TTS_PROVIDER=msedge-tts", async () => {
     const onResolved = vi.fn();
-    const provider = createTTSProviderFromEnv("WARM", { TTS_PROVIDER: "msedge-tts" }, { onResolved });
+    const provider = createTTSProviderFromEnv("WARM", "MALE", { TTS_PROVIDER: "msedge-tts" }, { onResolved });
     await drain(provider.synthesize("hi", "unused", opts));
     expect(onResolved).toHaveBeenCalledWith("msedge-tts", "audio/webm;codecs=opus");
   });

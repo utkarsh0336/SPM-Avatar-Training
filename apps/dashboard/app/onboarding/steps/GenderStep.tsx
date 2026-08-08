@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useOnboarding } from "../OnboardingContext";
 import { PhotoOptionCard } from "../PhotoOptionCard";
 import { WizardNav } from "../WizardNav";
-import { GENDER_GRADIENTS, GENDER_LABELS, type Gender } from "../types";
+import { GENDER_GRADIENTS, GENDER_LABELS, GENDER_PHOTOS, type Gender } from "../types";
 import shared from "./steps.module.css";
 import styles from "./GenderStep.module.css";
 
@@ -25,6 +25,7 @@ export function GenderStep() {
             key={option}
             label={GENDER_LABELS[option]}
             gradient={GENDER_GRADIENTS[option]}
+            photoUrl={GENDER_PHOTOS[option]}
             selected={state.gender === option}
             onSelect={() => update({ gender: option })}
           />

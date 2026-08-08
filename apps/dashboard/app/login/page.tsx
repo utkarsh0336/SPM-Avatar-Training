@@ -31,9 +31,7 @@ export default function LoginPage() {
 
         <div className={styles.avatarCard}>
           <div className={styles.avatarPlaceholder}>
-            {/* Placeholder — the real avatar photo asset needs exporting from Figma
-                once edit access is granted; this is not a stand-in for real content. */}
-            <SparkleIcon />
+            <img src="/avatars/gender/female.png" alt="AI avatar" className={styles.avatarPhoto} />
           </div>
           <span className={styles.liveBadge}>
             <span className={styles.liveDot} />

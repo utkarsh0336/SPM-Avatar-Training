@@ -42,6 +42,7 @@ describe("onboarding-handoff", () => {
     expect(raw).not.toHaveProperty("hairColor");
   });
 
+
   it("does not write anything when style was never chosen (step 1 incomplete)", () => {
     const storage = createFakeStorage();
     writeOnboardingAvatarHandoff({ ...completedState, style: null }, storage);

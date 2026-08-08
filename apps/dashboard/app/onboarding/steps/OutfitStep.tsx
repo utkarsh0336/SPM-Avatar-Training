@@ -12,7 +12,7 @@ import {
   LayersIcon,
   type IconComponent,
 } from "../icons";
-import { OUTFIT_GRADIENTS, OUTFIT_SUBTITLES, OUTFIT_TITLES, type Outfit } from "../types";
+import { GENDER_PHOTOS, OUTFIT_GRADIENTS, OUTFIT_SUBTITLES, OUTFIT_TITLES, type Outfit } from "../types";
 import shared from "./steps.module.css";
 import styles from "./OutfitStep.module.css";
 
@@ -40,6 +40,7 @@ export function OutfitStep() {
             title={OUTFIT_TITLES[option.value]}
             subtitle={OUTFIT_SUBTITLES[option.value]}
             gradient={OUTFIT_GRADIENTS[option.value]}
+            photoUrl={GENDER_PHOTOS[state.gender]}
             icon={<option.Icon size={18} />}
             selected={state.outfit === option.value}
             onSelect={() => update({ outfit: option.value })}

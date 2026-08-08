@@ -94,4 +94,48 @@ describe("encodeBlobAsWav", () => {
     expect(view.getInt16(44, true)).toBe(0x7fff);
     expect(view.getInt16(46, true)).toBe(-0x8000);
   });
+
+  describe("rms", () => {
+    it("is 0 for a fully silent clip", async () => {
+      const audioBuffer = createFakeAudioBuffer([[0, 0, 0, 0]]);
+      const context = createFakeAudioContext(audioBuffer);
+
+      const result = await encodeBlobAsWav({
+        blob: new Blob([]),
+        createAudioContext: () => context as unknown as AudioContext,
+      });
+
+      expect(result.rms).toBe(0);
+    });
+
+    it("reflects the overall energy of a loud clip", async () => {
+      const audioBuffer = createFakeAudioBuffer([[0.8, -0.8, 0.8, -0.8]]);
+      const context = createFakeAudioContext(audioBuffer);
+
+      const result = await encodeBlobAsWav({
+        blob: new Blob([]),
+        createAudioContext: () => context as unknown as AudioContext,
+      });
+
+      expect(result.rms).toBeCloseTo(0.8, 5);
+    });
+
+    it("is low for a clip with only a brief noise spike, not sustained speech-level energy", async () => {
+      // One full-scale sample among 4999 silent ones (RMS = sqrt(1/5000) ≈
+      // 0.0141) — mirrors a mic pop/click that could momentarily satisfy
+      // voice-activity-detector.ts's live per-frame threshold without the
+      // utterance actually being speech.
+      const samples = new Array(5000).fill(0);
+      samples[0] = 1;
+      const audioBuffer = createFakeAudioBuffer([samples]);
+      const context = createFakeAudioContext(audioBuffer);
+
+      const result = await encodeBlobAsWav({
+        blob: new Blob([]),
+        createAudioContext: () => context as unknown as AudioContext,
+      });
+
+      expect(result.rms).toBeLessThan(0.015);
+    });
+  });
 });

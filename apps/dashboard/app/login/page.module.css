@@ -1,9 +1,10 @@
 /*
  * Approximated from the Figma "Authentication" screen (file XiX01ldFGU7GDEGQ0JmuOJ,
  * node 41:8) via screenshot reference only — MCP design-context access to that file
- * is not available to this account, so exact color tokens, spacing, and the avatar
- * photo asset are best-effort approximations, not exported values. Revisit once
- * Figma edit access is granted.
+ * is not available to this account, so exact color tokens and spacing are best-effort
+ * approximations, not exported values. Revisit once Figma edit access is granted.
+ * The hero avatarPhoto is real, though — a still captured from the Female Simli face
+ * (see onboarding/types.ts's GENDER_PHOTOS), not a Figma export.
  */
 
 .page {
@@ -83,9 +84,10 @@
   color: rgba(255, 255, 255, 0.25);
 }
 
-.avatarPlaceholder svg {
-  width: 40%;
-  height: 40%;
+.avatarPhoto {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .liveBadge {

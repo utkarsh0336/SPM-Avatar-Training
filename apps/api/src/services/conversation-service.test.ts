@@ -56,7 +56,7 @@ function fakeSTT(behavior: "success" | "fail" | "unconfigured", text = "hello th
 }
 
 function fakeTTS(behavior: "success" | "fail"): ConversationHandlerDeps["createTTS"] {
-  return vi.fn((_tone: VoiceTone, _env, opts) => {
+  return vi.fn((_tone: VoiceTone, _gender, _env, opts) => {
     return {
       name: "fake-tts",
       mimeType: "audio/wav",

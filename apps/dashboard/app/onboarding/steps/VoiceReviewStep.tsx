@@ -1,13 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { ApiError, completeOnboarding } from "../../../lib/api-client";
 import { AvatarSummaryPanel } from "../AvatarSummaryPanel";
 import { IconOptionCard } from "../IconOptionCard";
 import { useOnboarding } from "../OnboardingContext";
 import { WizardNav } from "../WizardNav";
 import { HeartIcon, MicIcon, SparkleIcon, VolumeIcon, type IconComponent } from "../icons";
-import { VOICE_LABELS, VOICE_SUBTITLES, type VoiceTone } from "../types";
+import { EXPERTISE_LABELS, VOICE_LABELS, VOICE_SUBTITLES, type VoiceTone } from "../types";
 import { writeOnboardingAvatarHandoff } from "../../../lib/onboarding-handoff";
+import { useSessions } from "../../sessions/SessionsContext";
 import shared from "./steps.module.css";
 import styles from "./VoiceReviewStep.module.css";
 
@@ -18,8 +21,50 @@ const VOICE_OPTIONS: { value: VoiceTone; Icon: IconComponent }[] = [
 ];
 
 export function VoiceReviewStep() {
-  const { state, update } = useOnboarding();
+  const { state, update, flush } = useOnboarding();
+  const { addSession } = useSessions();
   const router = useRouter();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleContinue(): Promise<void> {
+    // A second click while pending is a no-op — see onboarding.md Step 6.
+    if (pending) return;
+    setPending(true);
+    setError(null);
+    try {
+      // Flush any not-yet-autosaved change (e.g. this step's own voice pick)
+      // before validating server-side, so a fast click-through can't lose it.
+      await flush();
+      await completeOnboarding();
+      // Kept alongside the new persisted completion call, not replaced by
+      // it — useConversationSession.ts still reads this localStorage handoff
+      // to seed a session's persona; migrating that consumer to the
+      // persisted Avatar record is a separate follow-up (see
+      // avatar-builder-customization.md Implementation Assumptions #5).
+      writeOnboardingAvatarHandoff(state);
+      // Create the session and go straight into it — landing on /sessions
+      // (the hub) after finishing the builder meant a second manual "New
+      // Video Chat" step just to reach a live avatar, when the whole point
+      // of "Create Avatar & Start Session" is that it does both.
+      const created = addSession({
+        title: state.name.trim() || "My Avatar",
+        topic: EXPERTISE_LABELS[state.expertise],
+      });
+      router.push(`/sessions/${created.id}`);
+    } catch (err) {
+      const fields = err instanceof ApiError ? err.body.fields : undefined;
+      const detail = fields?.length
+        ? ` Missing/invalid: ${fields.map((f) => f.path).join(", ")}.`
+        : "";
+      setError(
+        err instanceof ApiError
+          ? `${err.body.message ?? "Could not complete onboarding."}${detail}`
+          : "Could not reach the server. Please try again.",
+      );
+      setPending(false);
+    }
+  }
 
   return (
     <div>
@@ -41,18 +86,17 @@ export function VoiceReviewStep() {
 
       <AvatarSummaryPanel />
 
+      {error && (
+        <p className={styles.error} role="alert">
+          {error}
+        </p>
+      )}
+
       <WizardNav
         onBack={() => router.push("/onboarding/5")}
-        onContinue={() => {
-          // "/" is the unrelated Phase-0 trainer/admin scaffold, not a
-          // session — it has no session-start UI, so landing there after
-          // onboarding reads as onboarding having done nothing. /sessions is
-          // the actual AI Avatar Hub (SessionsProvider + "start a new video
-          // chat"), the only place a session can be created.
-          writeOnboardingAvatarHandoff(state);
-          router.push("/sessions");
-        }}
-        continueLabel="Create Avatar & Start Session"
+        onContinue={handleContinue}
+        continueDisabled={pending}
+        continueLabel={pending ? "Creating Avatar…" : "Create Avatar & Start Session"}
         continueIcon={<SparkleIcon size={16} />}
         continueIconPosition="start"
       />

@@ -1,4 +1,16 @@
 import { z } from "zod";
+// Sub-path import, not the root "@avatrain/shared" barrel — that barrel
+// also re-exports server-only modules (argon2 password hashing, echogarden
+// TTS → onnxruntime-node's native binaries), which webpack cannot bundle
+// for the browser. Mirrors the existing "@avatrain/shared/tutor" pattern
+// used elsewhere in this file. See packages/shared/package.json's exports.
+import {
+  onboardingCompleteResponseSchema,
+  onboardingDraftResponseSchema,
+  type OnboardingCompleteResponse,
+  type OnboardingDraftInput,
+  type OnboardingDraftResponse,
+} from "@avatrain/shared/onboarding";
 
 export interface AuthUser {
   id: string;
@@ -22,6 +34,7 @@ export interface AuthResult {
 export interface ApiErrorBody {
   error: string;
   message?: string;
+  fields?: { path: string; message: string }[];
 }
 
 export class ApiError extends Error {
@@ -106,4 +119,52 @@ export type ConversationTicketResult = z.infer<typeof conversationTicketResultSc
 export async function mintConversationTicket(): Promise<ConversationTicketResult> {
   const result = await apiFetch<unknown>("/conversations/ticket", { method: "POST" });
   return conversationTicketResultSchema.parse(result);
+}
+
+const iceServerSchema = z.object({
+  urls: z.union([z.string(), z.array(z.string())]),
+  username: z.string().optional(),
+  credential: z.string().optional(),
+});
+
+const simliSessionResultSchema = z.object({
+  sessionToken: z.string(),
+  iceServers: z.array(iceServerSchema),
+});
+export type SimliSessionResult = z.infer<typeof simliSessionResultSchema>;
+
+/**
+ * Mints a short-lived Simli session_token + ICE servers server-side (apps/api
+ * holds SIMLI_API_KEY) — only called when NEXT_PUBLIC_AVATAR_PROVIDER=simli
+ * is configured; 503s otherwise. Both must travel together: SimliClient's
+ * default P2P transport throws "Ice Servers Required for P2P Mode" without
+ * them (confirmed against a live session). See useConversationSession.ts and
+ * .claude/specs/avatar-builder-customization.md.
+ */
+export async function mintSimliSession(): Promise<SimliSessionResult> {
+  const result = await apiFetch<unknown>("/conversations/simli-session", { method: "POST" });
+  return simliSessionResultSchema.parse(result);
+}
+
+/** GET /v1/onboarding — get-or-create semantics, always returns a draft. */
+export async function getOnboardingDraft(): Promise<OnboardingDraftResponse> {
+  const result = await apiFetch<unknown>("/onboarding", { method: "GET" });
+  return onboardingDraftResponseSchema.parse(result);
+}
+
+/** PATCH /v1/onboarding — partial update, any subset of OnboardingDraftInput's fields. */
+export async function patchOnboardingDraft(
+  patch: OnboardingDraftInput,
+): Promise<OnboardingDraftResponse> {
+  const result = await apiFetch<unknown>("/onboarding", {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+  return onboardingDraftResponseSchema.parse(result);
+}
+
+/** POST /v1/onboarding/complete — validates and finalizes the draft into an ACTIVE Avatar. */
+export async function completeOnboarding(): Promise<OnboardingCompleteResponse> {
+  const result = await apiFetch<unknown>("/onboarding/complete", { method: "POST" });
+  return onboardingCompleteResponseSchema.parse(result);
 }

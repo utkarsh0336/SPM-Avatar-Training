@@ -12,6 +12,7 @@ interface SelectionCardProps {
   onSelect: () => void;
   thumbnailIcon?: ReactNode;
   thumbnailGradient?: string;
+  thumbnailPhotoUrl?: string;
 }
 
 export function SelectionCard({
@@ -22,6 +23,7 @@ export function SelectionCard({
   onSelect,
   thumbnailIcon,
   thumbnailGradient,
+  thumbnailPhotoUrl,
 }: SelectionCardProps) {
   return (
     <button
@@ -30,9 +32,12 @@ export function SelectionCard({
       onClick={onSelect}
       aria-pressed={selected}
     >
-      {thumbnailIcon && (
-        <div className={styles.thumbnail} style={thumbnailGradient ? { background: thumbnailGradient } : undefined}>
-          {thumbnailIcon}
+      {(thumbnailIcon || thumbnailPhotoUrl) && (
+        <div
+          className={styles.thumbnail}
+          style={thumbnailPhotoUrl || !thumbnailGradient ? undefined : { background: thumbnailGradient }}
+        >
+          {thumbnailPhotoUrl ? <img src={thumbnailPhotoUrl} alt="" className={styles.thumbnailImage} /> : thumbnailIcon}
           {selected && (
             <span className={styles.checkBadge}>
               <CheckIcon size={12} />
