@@ -13,7 +13,7 @@ import {
   MicrosoftIcon,
   ShieldIcon,
   UsersIcon,
-} from "./icons";
+} from "../_auth/icons";
 
 export function LoginForm() {
   const [email, setEmail] = useState("");
