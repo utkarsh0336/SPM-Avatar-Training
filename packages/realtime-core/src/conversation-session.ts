@@ -117,6 +117,12 @@ export async function connectConversationSession(
   let currentUtteranceId: string | null = null;
   let sttDegraded = false;
   let playbackChain: Promise<void> = Promise.resolve();
+  // True once the tts.chunk carrying isLastForUtterance for currentUtteranceId
+  // has been queued (not necessarily finished playing yet). Lets turn.ended —
+  // which the server sends as soon as IT is done streaming, well before the
+  // client finishes playing a multi-sentence reply — tell whether anything is
+  // still queued for this turn. See queuePlayback and the turn.ended handler.
+  let finalChunkQueued = false;
 
   let currentRecorder: MediaRecorder | null = null;
   let recordedChunks: Blob[] = [];
@@ -130,6 +136,13 @@ export async function connectConversationSession(
     stopPlayback: () => {
       options.avatar.interrupt();
       playbackChain = Promise.resolve();
+      // Any chain links already scheduled against the old playbackChain
+      // still run later (reassigning the variable doesn't cancel them) —
+      // nulling here is what makes their staleness check in queuePlayback
+      // actually skip them, and what lets a barge-in during the trailing
+      // sentences of a reply (not just mid-generation) work at all.
+      currentUtteranceId = null;
+      finalChunkQueued = false;
     },
     notifyServer: (utteranceId) => send({ type: "barge_in", utteranceId }),
     getCurrentUtteranceId: () => currentUtteranceId,
@@ -204,15 +217,31 @@ export async function connectConversationSession(
   });
 
   function queuePlayback(chunk: Extract<ServerMessage, { type: "tts.chunk" }>): void {
+    if (chunk.isLastForUtterance) finalChunkQueued = true;
+
+    // Decode starts now, in arrival order, NOT gated behind the previous
+    // sentence's playback finishing — sentence audio for a whole turn
+    // typically arrives in one fast WS burst well ahead of playback, so by
+    // the time the chain reaches this chunk its track is normally already
+    // decoded, and avatar.speak() for consecutive sentences can fire back to
+    // back with no decode-latency gap between them. Ordering and staleness
+    // are still enforced below, only by the chain and the utteranceId check,
+    // never by decode timing. Errors surface where decodedPromise is
+    // actually awaited below; this bare .catch only stops a same-tick
+    // rejection (bad audio bytes) from logging as an unhandled rejection
+    // before that await runs.
+    const decodedPromise = createAudioTrackFromBytes({
+      audioBytes: base64ToArrayBuffer(chunk.audioBase64),
+      createAudioContext: () => audioContext,
+    });
+    decodedPromise.catch(() => {});
+
     playbackChain = playbackChain.then(async () => {
       // Dropped if a barge-in reset the chain, or a later turn has already
       // started, since this chunk belongs to a now-stale utterance.
       if (ended || currentUtteranceId !== chunk.utteranceId) return;
       try {
-        const decoded = await createAudioTrackFromBytes({
-          audioBytes: base64ToArrayBuffer(chunk.audioBase64),
-          createAudioContext: () => audioContext,
-        });
+        const decoded = await decodedPromise;
         if (ended || currentUtteranceId !== chunk.utteranceId) return;
         options.avatar.speak(decoded.track, chunk.text);
         decoded.play();
@@ -241,6 +270,19 @@ export async function connectConversationSession(
         queueMicrotask(() =>
           console.error("[conversation-session] sentence playback failed, continuing with next sentence:", err),
         );
+      } finally {
+        // The last sentence of this turn has now had its turn in the chain
+        // (played, skipped as stale, or errored — any of those still means
+        // there is nothing left to wait for). turn.ended may already have
+        // arrived by now (it always does, in practice — see the comment on
+        // finalChunkQueued) and deliberately left this turn "open" rather
+        // than nulling currentUtteranceId itself, specifically so this was
+        // the moment that closes it out.
+        if (chunk.isLastForUtterance && currentUtteranceId === chunk.utteranceId) {
+          currentUtteranceId = null;
+          finalChunkQueued = false;
+          if (!ended) options.onStatusChange("listening");
+        }
       }
     });
   }
@@ -269,17 +311,33 @@ export async function connectConversationSession(
         break;
       case "turn.started":
         currentUtteranceId = parsed.utteranceId;
+        finalChunkQueued = false;
         options.onStatusChange("speaking");
         break;
       case "tts.chunk":
         queuePlayback(parsed);
         break;
       case "turn.ended":
-        currentUtteranceId = null;
-        if (!ended) options.onStatusChange("listening");
+        // The server sends this as soon as IT has finished streaming every
+        // sentence — well before the client finishes playing them, since
+        // playback takes real wall-clock time per sentence while sending is
+        // just network round-trips. If a chunk carrying isLastForUtterance
+        // has already been queued, queuePlayback's finally block owns
+        // closing out this turn once that sentence actually finishes
+        // playing; nulling currentUtteranceId here instead would make
+        // still-queued sentences look "stale" to queuePlayback's staleness
+        // check and silently drop them — the avatar would stop partway
+        // through a multi-sentence reply. Only close out here for the one
+        // case nothing else will: a turn with no sentences at all (e.g. an
+        // empty LLM reply), where no tts.chunk ever arrives to do it.
+        if (!finalChunkQueued) {
+          currentUtteranceId = null;
+          if (!ended) options.onStatusChange("listening");
+        }
         break;
       case "turn.cancelled":
         currentUtteranceId = null;
+        finalChunkQueued = false;
         break;
       case "stt.failed":
         // Once server-side STT reports unavailable, stay on the client-side

@@ -226,6 +226,89 @@ describe("connectConversationSession", () => {
     expect(avatar.speakCalls).toEqual(["First.", "Second."]);
   });
 
+  it("plays every queued sentence even when turn.ended arrives before earlier sentences finish playing", async () => {
+    // Regression guard: the server sends turn.ended as soon as IT is done
+    // streaming sentences — a fast, all-network-time step — well before the
+    // client finishes actually playing them, which takes real per-sentence
+    // wall-clock time. Naively nulling currentUtteranceId on turn.ended made
+    // queuePlayback's staleness check treat every still-queued sentence as
+    // belonging to a stale turn and silently drop it, so a multi-sentence
+    // reply only ever spoke its first sentence. This is the realistic
+    // ordering: all chunks plus turn.ended arrive back to back, long before
+    // sentence 0 has finished playing.
+    const { connectPromise, ws, avatar, onStatusChange } = setupHarness();
+    await connectPromise;
+    ws.emitMessage({ type: "turn.started", utteranceId: "u1" });
+    ws.emitMessage({
+      type: "tts.chunk",
+      utteranceId: "u1",
+      sentenceIndex: 0,
+      text: "First.",
+      audioBase64: "AAAA",
+      mimeType: "audio/wav",
+      isLastForUtterance: false,
+    });
+    ws.emitMessage({
+      type: "tts.chunk",
+      utteranceId: "u1",
+      sentenceIndex: 1,
+      text: "Second.",
+      audioBase64: "AAAA",
+      mimeType: "audio/wav",
+      isLastForUtterance: true,
+    });
+    ws.emitMessage({ type: "turn.ended", utteranceId: "u1" });
+
+    await vi.runAllTimersAsync();
+
+    expect(avatar.speakCalls).toEqual(["First.", "Second."]);
+    // Status should only flip back to "listening" once the last sentence has
+    // actually finished playing, not the moment turn.ended arrives.
+    expect(onStatusChange).toHaveBeenLastCalledWith("listening");
+  });
+
+  it("keeps a turn open for barge-in until its last sentence actually finishes playing, not at turn.ended", async () => {
+    // getCurrentUtteranceId() (what barge-in checks) must track "is audio
+    // still playing," not "has the server finished generating." Otherwise a
+    // user talking over the tail end of a multi-sentence reply would
+    // silently fail to interrupt it, since turn.ended nulls the ID long
+    // before local playback of later sentences finishes.
+    const { connectPromise, ws, avatar, raf, amplitude } = setupHarness();
+    await connectPromise;
+    ws.emitMessage({ type: "turn.started", utteranceId: "u1" });
+    ws.emitMessage({
+      type: "tts.chunk",
+      utteranceId: "u1",
+      sentenceIndex: 0,
+      text: "First.",
+      audioBase64: "AAAA",
+      mimeType: "audio/wav",
+      isLastForUtterance: false,
+    });
+    ws.emitMessage({
+      type: "tts.chunk",
+      utteranceId: "u1",
+      sentenceIndex: 1,
+      text: "Second.",
+      audioBase64: "AAAA",
+      mimeType: "audio/wav",
+      isLastForUtterance: true,
+    });
+    ws.emitMessage({ type: "turn.ended", utteranceId: "u1" });
+
+    // Barge in immediately — before the fake timers/microtasks that drive
+    // playback have been allowed to run, so this simulates the user
+    // interrupting right at the start of sentence 0.
+    vi.setSystemTime(0);
+    amplitude.value = 200;
+    raf.tick();
+    vi.setSystemTime(350);
+    raf.tick();
+
+    expect(avatar.interrupt).toHaveBeenCalled();
+    expect(ws.sent).toContainEqual({ type: "barge_in", utteranceId: "u1" });
+  });
+
   it("keeps playing later sentences in the same turn after an earlier sentence's playback throws", async () => {
     const { connectPromise, ws, avatar } = setupHarness();
     await connectPromise;
