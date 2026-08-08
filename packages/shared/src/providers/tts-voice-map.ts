@@ -4,15 +4,44 @@
 // `export *` ambiguity in index.ts.
 import type { Gender, VoiceTone } from "../tutor/avatar-config.js";
 
-// The approved Piper model (en_US-libritts_r-medium, CC BY 4.0) is a single
-// multi-speaker model — every gender resolves to the same model name here;
-// which speaker inside it actually gets used is controlled separately by
-// resolveVoiceGender()'s "male"/"female" result, passed as
-// TTSSynthesizeOptions.voiceGender at synthesize() call time (see
-// tts-echogarden.ts). Tone still isn't curated per-speaker on this model
-// (no per-tone metadata exists for its speakers), so DEEP/NEUTRAL/WARM all
-// sound the same on the primary provider today — only gender varies here.
-const PRIMARY_VOICE = "en_US-libritts_r-medium";
+// Every en_US Piper voice below (CC BY 4.0, via echogarden's "vits" engine)
+// is single-speaker and carries a real, package-declared gender tag —
+// verified by reading the installed echogarden@3.0.5 package's own voice
+// catalog directly (node_modules/echogarden/dist/synthesis/VitsTTS.js).
+// This used to be one shared multi-speaker model
+// (en_US-libritts_r-medium, 904 speakers) for every gender, with
+// TTSSynthesizeOptions.voiceGender ("male"/"female") supposedly picking a
+// speaker inside it — that never worked: echogarden's voiceGender option
+// only filters the CATALOG (which model/voice name to load), it does not
+// select a speaker id inside a multi-speaker model, and libritts_r-medium's
+// catalog entry is tagged gender: 'unknown', which always passes that
+// filter regardless of the requested value. So every avatar — Male or
+// Female — synthesized through speaker id 0 of the same model, and the
+// selected gender had no audible effect at all. Picking a genuinely
+// single-speaker, correctly-tagged voice per gender (mirroring
+// FALLBACK_VOICE_BY_GENDER_AND_TONE's existing gender+tone shape below)
+// is what actually fixes that, with no reliance on voiceGender doing
+// anything for the primary provider.
+const PRIMARY_VOICE_BY_GENDER_AND_TONE: Record<Gender, Record<VoiceTone, string>> = {
+  MALE: {
+    DEEP: "en_US-ryan-high",
+    NEUTRAL: "en_US-ryan-medium",
+    WARM: "en_US-joe-medium",
+  },
+  FEMALE: {
+    DEEP: "en_US-hfc_female-medium",
+    NEUTRAL: "en_US-amy-medium",
+    WARM: "en_US-lessac-medium",
+  },
+  // No true gender-neutral single-speaker Piper voice exists in the catalog
+  // — reuses the FEMALE set, same reasoning as
+  // FALLBACK_VOICE_BY_GENDER_AND_TONE's NEUTRAL row below.
+  NEUTRAL: {
+    DEEP: "en_US-hfc_female-medium",
+    NEUTRAL: "en_US-amy-medium",
+    WARM: "en_US-lessac-medium",
+  },
+};
 
 // Real en-US Azure neural voice names, fetched live via msedge-tts's own
 // getVoices() (Microsoft's endpoint) and confirmed against each entry's
@@ -45,8 +74,8 @@ const FALLBACK_VOICE_BY_GENDER_AND_TONE: Record<Gender, Record<VoiceTone, string
   },
 };
 
-export function resolvePrimaryVoice(_tone: VoiceTone): string {
-  return PRIMARY_VOICE;
+export function resolvePrimaryVoice(tone: VoiceTone, gender: Gender): string {
+  return PRIMARY_VOICE_BY_GENDER_AND_TONE[gender][tone];
 }
 
 export function resolveFallbackVoice(tone: VoiceTone, gender: Gender): string {
@@ -54,10 +83,16 @@ export function resolveFallbackVoice(tone: VoiceTone, gender: Gender): string {
 }
 
 /**
- * Speaker-gender hint for the primary (echogarden/VITS) provider's
- * multi-speaker model — see PRIMARY_VOICE's doc comment above. NEUTRAL maps
- * to "female" for the same reason FALLBACK_VOICE_BY_GENDER_AND_TONE's
- * NEUTRAL row reuses the female voices.
+ * Passed through as TTSSynthesizeOptions.voiceGender alongside
+ * resolvePrimaryVoice()'s already gender-specific voice name — belt-and-
+ * suspenders defense against a future catalog/voice-map change accidentally
+ * reintroducing a gender mismatch, not the actual selection mechanism (see
+ * PRIMARY_VOICE_BY_GENDER_AND_TONE's doc comment: echogarden's voiceGender
+ * option only filters by a voice's own catalog-declared gender tag, so it
+ * has no effect when, as here, the requested voice name already resolves to
+ * exactly one correctly-tagged entry). NEUTRAL maps to "female" for the same
+ * reason FALLBACK_VOICE_BY_GENDER_AND_TONE's NEUTRAL row reuses the female
+ * voices.
  */
 export function resolveVoiceGender(gender: Gender): "male" | "female" {
   return gender === "MALE" ? "male" : "female";

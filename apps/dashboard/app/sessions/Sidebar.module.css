@@ -172,11 +172,16 @@
   color: var(--vc-text-muted);
 }
 
-.userSettings {
+.userSettings,
+.userLogout {
   background: none;
   border: none;
   color: var(--vc-text-muted);
   cursor: pointer;
   display: flex;
   padding: 2px;
+}
+
+.userLogout:hover {
+  color: var(--vc-text-primary);
 }

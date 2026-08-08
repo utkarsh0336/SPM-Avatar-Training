@@ -159,6 +159,9 @@ export function LoginForm() {
       <p className={styles.footerNote}>
         Need access? <a href="mailto:admin@avatrain.com">Contact your admin</a>
       </p>
+      <p className={styles.footerNote}>
+        Don&apos;t have an account? <a href="/signup">Create Account</a>
+      </p>
     </div>
   );
 }
