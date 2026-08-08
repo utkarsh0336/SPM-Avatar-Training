@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { logout } from "../../lib/api-client";
 import styles from "./Sidebar.module.css";
 import {
   BellIcon,
@@ -10,6 +11,7 @@ import {
   GearIcon,
   GridIcon,
   HelpCircleIcon,
+  LogOutIcon,
   MicIcon,
   SparkleIcon,
   UserIcon,
@@ -22,6 +24,16 @@ import {
 // .claude/specs/video-chat-session.md UI Changes / Files to Create.
 export function Sidebar() {
   const [personaDismissed, setPersonaDismissed] = useState(false);
+
+  // Same logout call + redirect as (dashboard)/LogoutButton.tsx — this
+  // sidebar persists across /sessions and /sessions/[trainingSessionId], so
+  // this is the only logout affordance visible while a live avatar call is
+  // in progress (the (dashboard) route group's header never wraps this
+  // section — see apps/dashboard/app/sessions/layout.tsx).
+  async function handleLogout(): Promise<void> {
+    await logout();
+    window.location.assign("/login");
+  }
 
   return (
     <aside className={styles.sidebar}>
@@ -98,6 +110,9 @@ export function Sidebar() {
         </div>
         <button type="button" className={styles.userSettings} aria-label="Settings">
           <GearIcon size={16} />
+        </button>
+        <button type="button" className={styles.userLogout} aria-label="Log out" onClick={() => void handleLogout()}>
+          <LogOutIcon size={16} />
         </button>
       </div>
     </aside>

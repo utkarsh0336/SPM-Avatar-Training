@@ -13,11 +13,9 @@ export interface CreateTTSProviderFromEnvOptions {
  * TTS_PROVIDER picks which candidate is tried first (mirrors LLM_PROVIDER in
  * llm-factory.ts) — the other is always kept configured as the automatic
  * fallback, so this also doubles as a manual way to exercise the fallback
- * path without deliberately breaking the primary. `gender` only affects the
- * msedge-tts candidate's specific named voice here — the echogarden
- * candidate's voice (model name) doesn't vary by gender; its speaker is
- * selected per-call via TTSSynthesizeOptions.voiceGender instead (the
- * caller must pass resolveVoiceGender(gender) there too).
+ * path without deliberately breaking the primary. `gender` picks each
+ * candidate's specific named voice — both echogarden's and msedge-tts's —
+ * via resolvePrimaryVoice/resolveFallbackVoice; see tts-voice-map.ts.
  */
 export function createTTSProviderFromEnv(
   tone: VoiceTone,
@@ -29,7 +27,7 @@ export function createTTSProviderFromEnv(
 
   const echogarden: TTSProviderCandidate = {
     name: "echogarden",
-    voice: resolvePrimaryVoice(tone),
+    voice: resolvePrimaryVoice(tone, gender),
     provider: createEchogardenTTSProvider(),
   };
   const msedge: TTSProviderCandidate = {

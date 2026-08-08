@@ -35,13 +35,17 @@ export interface STTProvider {
 export interface TTSSynthesizeOptions {
   signal: AbortSignal;
   /**
-   * Selects a speaker within a multi-speaker voice model — currently only
-   * consumed by the echogarden/VITS provider (its en_US-libritts_r-medium
-   * model has no per-tone/gender speaker curation otherwise, so every
-   * avatar sounded identical regardless of the selected gender; verified
-   * live that echogarden's own voiceGender option actually selects a
-   * different speaker, not a no-op — see tts-voice-map.ts). Providers with
-   * a single fixed voice per candidate (msedge-tts) ignore this.
+   * Redundant confirmation of the gender already encoded in the requested
+   * voice name (see resolvePrimaryVoice/resolveVoiceGender in
+   * tts-voice-map.ts), not a real selection mechanism — echogarden's
+   * voiceGender option only filters its voice catalog by each entry's own
+   * declared gender tag; it cannot pick a speaker id inside a multi-speaker
+   * model. (A previous version of this comment claimed the opposite; that
+   * was wrong — verified directly against the installed echogarden package's
+   * source, not a live listening test, which is exactly how it went
+   * unnoticed: every avatar was actually resolving to the same untagged
+   * multi-speaker model's default speaker regardless of gender.) Providers
+   * with a single fixed voice per candidate (msedge-tts) ignore this.
    */
   voiceGender?: "male" | "female";
 }

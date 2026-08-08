@@ -144,6 +144,14 @@ export const GENDER_PHOTOS: Record<Gender, string> = {
   NEUTRAL: "/avatars/gender/neutral.png",
 };
 
+// Style-picker thumbnails for the two non-photoreal styles (StyleStep.tsx) —
+// REALISTIC uses GENDER_PHOTOS instead, since that style IS a per-gender
+// Simli face. Not gender-specific: one representative preview per style.
+export const STYLE_PREVIEW_PHOTOS: Partial<Record<AvatarStyle, string>> = {
+  ANIMATED: "/avatars/style/animated.jpg",
+  STYLIZED_3D: "/avatars/style/stylized_3d.jpeg",
+};
+
 export const HAIR_STYLE_LABELS: Record<HairStyle, string> = {
   SHORT: "Short",
   MEDIUM: "Medium",
