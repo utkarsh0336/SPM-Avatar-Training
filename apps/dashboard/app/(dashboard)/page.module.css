@@ -1,0 +1,249 @@
+.root {
+  flex: 1;
+  min-width: 0;
+  height: 100vh;
+  overflow-y: auto;
+  padding: 40px 48px 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.eyebrow {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--vc-accent-violet);
+}
+
+.title {
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--vc-text-primary);
+}
+
+.subtitle {
+  font-size: 14.5px;
+  color: var(--vc-text-secondary);
+}
+
+.actionGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.actionCard {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 16px;
+  background: var(--vc-panel-bg);
+  border: 1px solid var(--vc-border-soft);
+  text-decoration: none;
+  transition:
+    border-color 0.15s,
+    transform 0.15s;
+}
+
+.actionCard:hover {
+  border-color: var(--vc-accent-violet);
+  transform: translateY(-1px);
+}
+
+.actionIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  flex-shrink: 0;
+  color: #fff;
+}
+
+.actionIconVideo {
+  background: var(--vc-accent-gradient);
+}
+
+.actionIconVoice {
+  background: linear-gradient(135deg, #2dd4bf, #22c55e);
+}
+
+.actionIconAvatar {
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+}
+
+.actionMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.actionTitle {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--vc-text-primary);
+}
+
+.actionSubtitle {
+  font-size: 12px;
+  color: var(--vc-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actionChevron {
+  color: var(--vc-text-muted);
+  flex-shrink: 0;
+}
+
+.statGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+}
+
+.statCard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px 20px;
+  border-radius: 14px;
+  background: var(--vc-panel-bg-raised);
+  border: 1px solid var(--vc-border-soft);
+}
+
+.statIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--vc-chip-bg);
+  color: var(--vc-accent-violet);
+}
+
+.statValue {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--vc-text-primary);
+}
+
+.statLabel {
+  font-size: 12px;
+  color: var(--vc-text-muted);
+}
+
+.activityPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px;
+  border-radius: 16px;
+  background: var(--vc-panel-bg);
+  border: 1px solid var(--vc-border-soft);
+}
+
+.sectionLabel {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--vc-text-muted);
+}
+
+.emptyActivity {
+  font-size: 13px;
+  color: var(--vc-text-muted);
+  padding: 12px 0;
+}
+
+.activityList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.activityItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 10px;
+  border-radius: 10px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.activityItem:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.activityIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  flex-shrink: 0;
+  color: #fff;
+}
+
+.activityIconVideo {
+  background: linear-gradient(135deg, #4f7cff, #8b5cf6);
+}
+
+.activityIconVoice {
+  background: linear-gradient(135deg, #2dd4bf, #22c55e);
+}
+
+.activityMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.activityTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--vc-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activityPin {
+  color: var(--vc-accent-violet);
+  flex-shrink: 0;
+}
+
+.activitySubtitle {
+  font-size: 12px;
+  color: var(--vc-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activityTime {
+  font-size: 11.5px;
+  color: var(--vc-text-muted);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
