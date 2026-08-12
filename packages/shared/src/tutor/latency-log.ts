@@ -7,6 +7,8 @@ export interface TurnLatencyServedBy {
 export interface TurnLatencyBreakdown {
   turnId: string;
   sttMs?: number;
+  /** Knowledge retrieval — see .claude/specs/knowledge-management.md. Marked between STT and the LLM call; docs/ARCHITECTURE.md §5 sets a <100ms p95 budget. */
+  retrievalMs?: number;
   llmFirstTokenMs?: number;
   ttsFirstChunkMs?: number;
   totalMs: number;
@@ -26,6 +28,7 @@ export function logTurnLatency(entry: TurnLatencyBreakdown): void {
 
 export interface TurnLatencyTracker {
   markSttDone(): void;
+  markRetrievalDone(): void;
   markLlmFirstToken(): void;
   markTtsFirstChunk(): void;
   /** Computes totalMs, logs the entry, and returns it. */
@@ -39,12 +42,16 @@ export function createTurnLatencyTracker(
 ): TurnLatencyTracker {
   const start = now();
   let sttMs: number | undefined;
+  let retrievalMs: number | undefined;
   let llmFirstTokenMs: number | undefined;
   let ttsFirstChunkMs: number | undefined;
 
   return {
     markSttDone() {
       sttMs = now() - start;
+    },
+    markRetrievalDone() {
+      retrievalMs = now() - start;
     },
     markLlmFirstToken() {
       llmFirstTokenMs = now() - start;
@@ -56,6 +63,7 @@ export function createTurnLatencyTracker(
       const entry: TurnLatencyBreakdown = {
         turnId,
         sttMs,
+        retrievalMs,
         llmFirstTokenMs,
         ttsFirstChunkMs,
         totalMs: now() - start,

@@ -1,5 +1,6 @@
 import type { WebSocket, RawData } from "ws";
 import {
+  appendKnowledgeContext,
   buildSystemPrompt,
   createLLMProviderFromEnv,
   createSTTProviderFromEnv,
@@ -11,6 +12,7 @@ import {
   resolveWhisperLanguageCode,
   serverMessageSchema,
   type ClientMessage,
+  type KnowledgeSource,
   type ServerMessage,
   type Gender,
   type Language,
@@ -20,6 +22,16 @@ import {
   type VoiceTone,
 } from "@avatrain/shared";
 import type { WsTicketClaims } from "../lib/ws-tickets.js";
+import { retrieveContext, toKnowledgeSources } from "./retrieval-service.js";
+
+// docs/ARCHITECTURE.md §5's retrieval budget ("<100ms p95 ... or it needs a
+// filler utterance") — this pipeline has no filler-utterance mechanism, so
+// instead: bound the wait so a hung embedding call or DB query can't stall
+// a turn indefinitely. Set a couple times the p95 target, not "however long
+// we can afford" — latency-auditor flagged an earlier 800ms value as far
+// too loose (most of a mediated-mode turn's entire TTFA budget on its own);
+// this is a circuit breaker for pathological cases, not slack to lean on.
+const RETRIEVAL_TIMEOUT_MS = 250;
 
 // Rolling window, not a wire-level cap — bounds LLM prompt size (and
 // therefore per-turn Gemini/Groq latency) so it stays flat across a long
@@ -57,6 +69,35 @@ export interface ConversationHandlerDeps {
   createSTT?: typeof createSTTProviderFromEnv;
   /** Injectable for tests; defaults to the real @avatrain/shared factory. */
   createTTS?: typeof createTTSProviderFromEnv;
+  /** Injectable for tests; defaults to the real ./retrieval-service.js. */
+  retrieveContext?: typeof retrieveContext;
+}
+
+/**
+ * Races `promise` against a timeout that resolves to `[]` rather than
+ * rejecting — a slow/hung retrieval degrades to "nothing retrieved"
+ * (Priority-3 territory), not a turn failure. See RETRIEVAL_TIMEOUT_MS.
+ * Logs on timeout — apps/api runs Fastify({logger:false}), so console.error
+ * is the only record of a retrieval that's silently degrading turns to
+ * ungrounded generation; see knowledge-management.md's Realtime Changes §8.
+ */
+function withRetrievalTimeout<T>(promise: Promise<T[]>, timeoutMs: number): Promise<T[]> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      console.error(`knowledge retrieval exceeded ${timeoutMs}ms — degrading turn to ungrounded generation`);
+      resolve([]);
+    }, timeoutMs);
+    promise.then(
+      (result) => {
+        clearTimeout(timer);
+        resolve(result);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve([]);
+      },
+    );
+  });
 }
 
 /**
@@ -70,12 +111,13 @@ export interface ConversationHandlerDeps {
  */
 export function createConversationHandler(
   socket: WebSocket,
-  _claims: WsTicketClaims,
+  claims: WsTicketClaims,
   deps: ConversationHandlerDeps = {},
 ): void {
   const createLLM = deps.createLLM ?? createLLMProviderFromEnv;
   const createSTT = deps.createSTT ?? createSTTProviderFromEnv;
   const createTTS = deps.createTTS ?? createTTSProviderFromEnv;
+  const retrieveKnowledge = deps.retrieveContext ?? retrieveContext;
   const messages: LLMMessage[] = [];
 
   let llm: LLMProvider | null = null;
@@ -169,6 +211,24 @@ export function createConversationHandler(
     currentTurnLlmServedBy = undefined;
     send({ type: "turn.started", utteranceId });
 
+    // Retrieval-augmented grounding (SOW §3.3) — embed the learner's own
+    // utterance, look up the org's most relevant KnowledgeChunks, and fold
+    // them into THIS turn's system prompt only (never persisted into the
+    // rolling `messages` history, since retrieval is query-dependent).
+    // Failure or timeout degrades to the ungrounded Priority-3 path rather
+    // than failing the turn — see .claude/rules/realtime.md "degrade,
+    // never drop" and .claude/specs/knowledge-management.md.
+    const retrievedChunks = await withRetrievalTimeout(
+      retrieveKnowledge(claims.orgId, text).catch((error: unknown) => {
+        console.error("knowledge retrieval failed — degrading turn to ungrounded generation", error);
+        return [];
+      }),
+      RETRIEVAL_TIMEOUT_MS,
+    );
+    tracker.markRetrievalDone();
+    const turnSystemPrompt = appendKnowledgeContext(systemPrompt, retrievedChunks);
+    const sources: KnowledgeSource[] = toKnowledgeSources(retrievedChunks);
+
     const chunker = new SentenceChunker();
     const sentencePromises: Promise<SynthesizedSentence | null>[] = [];
     let lastServedByTts: string | undefined;
@@ -187,7 +247,7 @@ export function createConversationHandler(
 
     try {
       for await (const delta of llm.chat(messages, {
-        systemPrompt,
+        systemPrompt: turnSystemPrompt,
         signal: controller.signal,
         // onResolved for LLM is bound once at session.start (see below) and
         // writes into currentTurnLlmServedBy — safe here since only one
@@ -261,7 +321,16 @@ export function createConversationHandler(
     }
 
     messages.push({ role: "assistant", content: fullReply });
-    send({ type: "transcript", role: "avatar", text: fullReply, utteranceId, final: true });
+    send({
+      type: "transcript",
+      role: "avatar",
+      text: fullReply,
+      utteranceId,
+      final: true,
+      // Omitted (not []) when ungrounded — matches transcriptMessageSchema's
+      // documented contract for a Priority-3 reply.
+      ...(sources.length > 0 ? { sources } : {}),
+    });
     send({ type: "turn.ended", utteranceId });
     currentUtteranceId = null;
 
@@ -270,6 +339,7 @@ export function createConversationHandler(
       type: "latency",
       utteranceId,
       sttMs: latency.sttMs,
+      retrievalMs: latency.retrievalMs,
       llmFirstTokenMs: latency.llmFirstTokenMs,
       ttsFirstChunkMs: latency.ttsFirstChunkMs,
       totalMs: latency.totalMs,

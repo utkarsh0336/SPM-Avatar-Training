@@ -87,6 +87,13 @@ enum AvatarPreviewProvider {
   READY_PLAYER_ME
 }
 
+enum KnowledgeDocumentStatus {
+  PENDING
+  PROCESSING
+  INDEXED
+  FAILED
+}
+
 /// Tenant root. Not itself org-scoped — everything else hangs off org_id.
 model Organization {
   id                 String       @id @default(uuid()) @db.Uuid
@@ -100,10 +107,12 @@ model Organization {
   secondaryColorHex  String?      @map("secondary_color_hex")
   createdAt          DateTime     @default(now()) @map("created_at")
 
-  applications Application[]
-  memberships  Membership[]
-  sessions     Session[]
-  avatars      Avatar[]
+  applications        Application[]
+  memberships         Membership[]
+  sessions            Session[]
+  avatars             Avatar[]
+  knowledgeDocuments  KnowledgeDocument[]
+  knowledgeChunks     KnowledgeChunk[]
 
   @@map("organizations")
 }
@@ -255,4 +264,66 @@ model Avatar {
   @@index([orgId])
   @@index([orgId, createdById, status])
   @@map("avatars")
+}
+
+/// Tenant-scoped. org_id + RLS policy required — see .claude/rules/tenancy.md.
+/// Owned by .claude/specs/knowledge-management.md. One uploaded source file
+/// (SOP, policy, manual, ...) that gets parsed, chunked, and embedded into
+/// KnowledgeChunk rows. status tracks the async ingestion pipeline; the raw
+/// file itself lives outside Postgres (see apps/api's DocumentStorage
+/// adapter), addressed here only by storageKey.
+model KnowledgeDocument {
+  id               String                  @id @default(uuid()) @db.Uuid
+  orgId            String                  @map("org_id") @db.Uuid
+  uploadedById     String                  @map("uploaded_by_id") @db.Uuid
+
+  title            String
+  originalFilename String                  @map("original_filename")
+  mimeType         String                  @map("mime_type")
+  fileSizeBytes    Int                     @map("file_size_bytes")
+  storageKey       String                  @map("storage_key")
+
+  status           KnowledgeDocumentStatus @default(PENDING)
+  errorMessage     String?                 @map("error_message")
+  chunkCount       Int                     @default(0) @map("chunk_count")
+
+  createdAt        DateTime                @default(now()) @map("created_at")
+  updatedAt        DateTime                @updatedAt @map("updated_at")
+
+  organization Organization     @relation(fields: [orgId], references: [id])
+  chunks       KnowledgeChunk[]
+
+  @@index([orgId])
+  @@map("knowledge_documents")
+}
+
+/// Tenant-scoped. org_id + RLS policy required — see .claude/rules/tenancy.md.
+/// Owned by .claude/specs/knowledge-management.md. orgId is denormalized
+/// from the parent KnowledgeDocument (not joined for RLS/retrieval) so both
+/// the RLS policy and retrieval-service's similarity search filter on an
+/// indexed column directly, matching every other tenant-scoped table here.
+/// embedding is Unsupported — pgvector has no native Prisma type, so all
+/// reads/writes on it go through $queryRaw/$executeRaw (see
+/// apps/api/src/services/retrieval-service.ts and knowledge-service.ts).
+/// vector(384) matches the default local embedding provider's output
+/// dimension (Xenova/all-MiniLM-L6-v2) — switching embedding providers to a
+/// different dimension requires a migration and a full re-embed.
+model KnowledgeChunk {
+  id         String   @id @default(uuid()) @db.Uuid
+  orgId      String   @map("org_id") @db.Uuid
+  documentId String   @map("document_id") @db.Uuid
+
+  chunkIndex Int                        @map("chunk_index")
+  content    String
+  embedding  Unsupported("vector(384)")
+  tokenCount Int                        @map("token_count")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  organization Organization      @relation(fields: [orgId], references: [id])
+  document     KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([documentId])
+  @@map("knowledge_chunks")
 }

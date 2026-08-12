@@ -62,3 +62,19 @@ export interface TTSProvider {
   /** Yields audio chunks (per-sentence for the primary provider). */
   synthesize(text: string, voice: string, opts: TTSSynthesizeOptions): AsyncIterable<Uint8Array>;
 }
+
+/**
+ * Fifth provider interface, added by .claude/specs/knowledge-management.md.
+ * `dimensions` is load-bearing, not descriptive — it's what
+ * `KnowledgeChunk.embedding`'s `vector(384)` column width has to match, so a
+ * provider swap either keeps this the same (a pure config change) or forces
+ * a migration + full re-embed. Batch-shaped (`texts` in, one vector per
+ * text out) rather than one-string-in/one-vector-out — both the ingestion
+ * pipeline (many chunks per document) and retrieval (one query at a time,
+ * still just a length-1 batch) are naturally expressed as a batch call.
+ */
+export interface EmbeddingProvider {
+  readonly name: string;
+  readonly dimensions: number;
+  embed(texts: string[]): Promise<number[][]>;
+}

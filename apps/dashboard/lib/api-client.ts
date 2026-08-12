@@ -12,6 +12,13 @@ import {
   type OnboardingDraftResponse,
 } from "@avatrain/shared/onboarding";
 import { orgBrandingResultSchema, type OrgBrandingUpdateInput } from "@avatrain/shared/org";
+import {
+  listKnowledgeDocumentsResponseSchema,
+  uploadKnowledgeDocumentResponseSchema,
+  type KnowledgeDocumentResult,
+  type ListKnowledgeDocumentsResponse,
+  type UploadKnowledgeDocumentResponse,
+} from "@avatrain/shared/knowledge";
 
 export interface AuthUser {
   id: string;
@@ -183,3 +190,40 @@ export async function updateOrgBranding(patch: OrgBrandingUpdateInput): Promise<
   });
   return orgBrandingResultSchema.parse(result);
 }
+
+/** GET /v1/knowledge/documents — OWNER only. See .claude/specs/knowledge-management.md. */
+export async function listKnowledgeDocuments(): Promise<ListKnowledgeDocumentsResponse> {
+  const result = await apiFetch<unknown>("/knowledge/documents", { method: "GET" });
+  return listKnowledgeDocumentsResponseSchema.parse(result);
+}
+
+/**
+ * POST /v1/knowledge/documents — multipart upload. Bypasses apiFetch: the
+ * browser sets the multipart boundary itself from a FormData body, which
+ * apiFetch's unconditional `Content-Type: application/json` would break.
+ */
+export async function uploadKnowledgeDocument(file: File): Promise<UploadKnowledgeDocumentResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetch("/api/knowledge/documents", { method: "POST", body: formData });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({ error: "unknown_error" }))) as ApiErrorBody;
+    throw new ApiError(response.status, body);
+  }
+  return uploadKnowledgeDocumentResponseSchema.parse(await response.json());
+}
+
+/**
+ * DELETE /v1/knowledge/documents/:id — 204 No Content on success. Bypasses
+ * apiFetch, which always calls response.json() — parsing an empty 204 body
+ * as JSON throws.
+ */
+export async function deleteKnowledgeDocument(documentId: string): Promise<void> {
+  const response = await fetch(`/api/knowledge/documents/${documentId}`, { method: "DELETE" });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({ error: "unknown_error" }))) as ApiErrorBody;
+    throw new ApiError(response.status, body);
+  }
+}
+
+export type { KnowledgeDocumentResult };

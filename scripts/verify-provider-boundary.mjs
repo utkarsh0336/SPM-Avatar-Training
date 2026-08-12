@@ -16,6 +16,9 @@ const IGNORE_DIRS = new Set(["node_modules", "dist", ".next", ".turbo", "coverag
 const RESTRICTED_IMPORTS = {
   echogarden: ["packages/shared/src/providers/tts-echogarden.ts"],
   "msedge-tts": ["packages/shared/src/providers/tts-msedge.ts"],
+  "@xenova/transformers": ["packages/shared/src/providers/embedding-local.ts"],
+  "pdf-parse": ["apps/api/src/lib/document-parsers/pdf.ts"],
+  mammoth: ["apps/api/src/lib/document-parsers/docx.ts"],
 };
 
 function findSourceFiles(dir) {

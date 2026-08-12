@@ -7,6 +7,7 @@ import styles from "./Sidebar.module.css";
 import {
   BellIcon,
   BookmarkIcon,
+  BookOpenIcon,
   ChevronRightIcon,
   CloseIcon,
   GearIcon,
@@ -38,11 +39,13 @@ export function Sidebar({ org }: SidebarProps) {
   // /sessions, /voice-ai, and / (dashboard) are separate top-level route
   // trees sharing this one sidebar (see this file's own doc comment above) —
   // the active nav item reflects whichever hub the current route belongs to.
-  const activeHub: "dashboard" | "new-chat" | "voice-ai" = pathname?.startsWith("/voice-ai")
+  const activeHub: "dashboard" | "new-chat" | "voice-ai" | "knowledge" = pathname?.startsWith("/voice-ai")
     ? "voice-ai"
-    : pathname?.startsWith("/sessions")
-      ? "new-chat"
-      : "dashboard";
+    : pathname?.startsWith("/knowledge")
+      ? "knowledge"
+      : pathname?.startsWith("/sessions")
+        ? "new-chat"
+        : "dashboard";
 
   // Same logout call + redirect as (dashboard)/LogoutButton.tsx — this
   // sidebar persists across /sessions and /sessions/[trainingSessionId], so
@@ -97,6 +100,11 @@ export function Sidebar({ org }: SidebarProps) {
           <a href="/sessions" className={styles.navItem}>
             <BookmarkIcon size={16} className={styles.navIcon} />
             <span className={styles.navText}>Saved Conversations</span>
+          </a>
+          <a href="/knowledge" className={activeHub === "knowledge" ? styles.navItemActive : styles.navItem}>
+            <BookOpenIcon size={16} className={styles.navIcon} />
+            <span className={styles.navText}>Knowledge Base</span>
+            {activeHub === "knowledge" && <ChevronRightIcon size={14} className={styles.navChevron} />}
           </a>
         </div>
 

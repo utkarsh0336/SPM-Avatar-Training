@@ -11,8 +11,11 @@
   },
   "dependencies": {
     "@avatrain/shared": "workspace:*",
+    "@fastify/multipart": "^10.1.0",
     "@fastify/websocket": "^11.3.0",
     "fastify": "^5.2.0",
+    "mammoth": "^1.12.1",
+    "pdf-parse": "^2.4.5",
     "simli-client": "^3.0.2",
     "zod": "^3.24.1"
   },
