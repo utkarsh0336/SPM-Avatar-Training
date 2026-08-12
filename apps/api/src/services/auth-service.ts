@@ -13,10 +13,12 @@ import {
   type GoogleProfile,
   type InviteInput,
   type LoginInput,
+  type OrgBrandingResult,
   type Role,
   type SignupInput,
 } from "@avatrain/shared";
 import { badRequest, conflict, gone, unauthorized } from "../lib/http-errors.js";
+import { toOrgResult } from "../lib/org-result.js";
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -30,13 +32,13 @@ interface UserResult {
 export interface SessionResult {
   token: string;
   user: UserResult;
-  org: { id: string; name: string };
+  org: OrgBrandingResult;
   role: Role;
 }
 
 export interface MeResult {
   user: UserResult;
-  org: { id: string; name: string };
+  org: OrgBrandingResult;
   role: Role;
 }
 
@@ -80,7 +82,7 @@ async function createSessionForUser(userId: string): Promise<SessionResult> {
   return {
     token,
     user: toUserResult(user),
-    org: { id: org.id, name: org.name },
+    org: toOrgResult(org),
     role: membership.role,
   };
 }
@@ -122,7 +124,9 @@ export async function signup(input: SignupInput): Promise<SessionResult> {
   return {
     token,
     user: { id: userId, email: input.email, onboardingCompletedAt: null },
-    org: { id: orgId, name: input.orgName },
+    // A freshly created org always has null branding fields — no need to
+    // re-SELECT after the insert just to confirm what we already know.
+    org: { id: orgId, name: input.orgName, logoUrl: null, primaryColorHex: null, secondaryColorHex: null },
     role: "OWNER",
   };
 }
@@ -162,7 +166,7 @@ export async function login(input: LoginInput): Promise<SessionResult> {
   return {
     token,
     user: toUserResult(user),
-    org: { id: org.id, name: org.name },
+    org: toOrgResult(org),
     role: membership.role,
   };
 }
@@ -186,7 +190,7 @@ export async function me(authContext: {
   ]);
   return {
     user: toUserResult(user),
-    org: { id: org.id, name: org.name },
+    org: toOrgResult(org),
     role: authContext.role,
   };
 }
@@ -270,7 +274,7 @@ export async function acceptInvite(input: AcceptInviteInput): Promise<SessionRes
   return {
     token,
     user: toUserResult(user),
-    org: { id: org.id, name: org.name },
+    org: toOrgResult(org),
     role: membership.role,
   };
 }

@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { getMe } from "../../lib/server-api";
+import { orgAccentStyle } from "../../lib/org-theme";
 import { Sidebar } from "./Sidebar";
 import { SessionListColumn } from "./SessionListColumn";
 import styles from "./layout.module.css";
@@ -15,10 +17,17 @@ export const metadata = {
 // A second, locally-scoped provider here would just create an isolated
 // second copy of the in-memory session list that onboarding's session was
 // never added to.
-export default function SessionsLayout({ children }: { children: ReactNode }) {
+//
+// getMe() here is for branding data only, not an auth gate — this route
+// tree still relies on middleware.ts's cookie-presence redirect the same as
+// before this change; a null result (no session, or the call failed) just
+// falls back to the product's own default look. See
+// .claude/specs/tenant-branding.md.
+export default async function SessionsLayout({ children }: { children: ReactNode }) {
+  const me = await getMe();
   return (
-    <div className={`${tokens.tokens} ${styles.shell}`}>
-      <Sidebar />
+    <div className={`${tokens.tokens} ${styles.shell}`} style={orgAccentStyle(me?.org)}>
+      <Sidebar org={me?.org} />
       <SessionListColumn />
       <div className={styles.content}>{children}</div>
     </div>

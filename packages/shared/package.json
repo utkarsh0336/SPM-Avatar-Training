@@ -21,6 +21,10 @@
     "./onboarding": {
       "types": "./dist/onboarding/index.d.ts",
       "default": "./dist/onboarding/index.js"
+    },
+    "./org": {
+      "types": "./dist/org/index.d.ts",
+      "default": "./dist/org/index.js"
     }
   },
   "scripts": {

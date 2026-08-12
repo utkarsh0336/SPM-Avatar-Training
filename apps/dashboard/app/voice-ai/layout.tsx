@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { getMe } from "../../lib/server-api";
+import { orgAccentStyle } from "../../lib/org-theme";
 import { Sidebar } from "../sessions/Sidebar";
 import styles from "../sessions/layout.module.css";
 import tokens from "../sessions/tokens.module.css";
@@ -14,10 +16,14 @@ export const metadata = {
 // requires instead of two copies drifting apart. Unlike /sessions, the
 // history column only appears on the live-session route ([voiceSessionId]),
 // not on the picker (page.tsx) — so it isn't rendered here in the layout.
-export default function VoiceAiLayout({ children }: { children: ReactNode }) {
+//
+// getMe() here is for branding data only, not an auth gate — same reasoning
+// as sessions/layout.tsx. See .claude/specs/tenant-branding.md.
+export default async function VoiceAiLayout({ children }: { children: ReactNode }) {
+  const me = await getMe();
   return (
-    <div className={`${tokens.tokens} ${styles.shell}`}>
-      <Sidebar />
+    <div className={`${tokens.tokens} ${styles.shell}`} style={orgAccentStyle(me?.org)}>
+      <Sidebar org={me?.org} />
       <div className={styles.content}>{children}</div>
     </div>
   );

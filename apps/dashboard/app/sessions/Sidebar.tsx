@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { usePathname } from "next/navigation";
-import { logout } from "../../lib/api-client";
+import { logout, type AuthOrg } from "../../lib/api-client";
 import styles from "./Sidebar.module.css";
 import {
   BellIcon,
@@ -23,7 +23,16 @@ import {
 // (session list + video chat). Kept as its own copy per this codebase's existing
 // per-feature convention rather than a premature shared-package extraction — see
 // .claude/specs/video-chat-session.md UI Changes / Files to Create.
-export function Sidebar() {
+export interface SidebarProps {
+  // Undefined while the parent layout's getMe() is still resolving server-side
+  // (never actually observable client-side, since layouts await it before
+  // rendering) or null if it failed — either way, falls back to the
+  // product's own name/default look rather than crashing. See
+  // .claude/specs/tenant-branding.md.
+  org?: AuthOrg | null;
+}
+
+export function Sidebar({ org }: SidebarProps) {
   const pathname = usePathname();
   const [personaDismissed, setPersonaDismissed] = useState(false);
   // /sessions, /voice-ai, and / (dashboard) are separate top-level route
@@ -47,7 +56,10 @@ export function Sidebar() {
 
   return (
     <aside className={styles.sidebar}>
-      <div className={styles.workspace}>SPM MEDICARE AI</div>
+      <div className={styles.workspace}>
+        {org?.logoUrl && <img src={org.logoUrl} alt="" className={styles.workspaceLogo} />}
+        <span>{org?.name ?? "Avatrain"}</span>
+      </div>
 
       {!personaDismissed && (
         <div className={styles.personaCard}>
@@ -120,7 +132,12 @@ export function Sidebar() {
           <span className={styles.userName}>Rahul Sharma</span>
           <span className={styles.userRole}>Sales Team</span>
         </div>
-        <button type="button" className={styles.userSettings} aria-label="Settings">
+        <button
+          type="button"
+          className={styles.userSettings}
+          aria-label="Settings"
+          onClick={() => window.location.assign("/settings")}
+        >
           <GearIcon size={16} />
         </button>
         <button type="button" className={styles.userLogout} aria-label="Log out" onClick={() => void handleLogout()}>

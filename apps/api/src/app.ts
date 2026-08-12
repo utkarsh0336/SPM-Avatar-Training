@@ -5,6 +5,7 @@ import { registerAuthPlugin } from "./plugins/auth.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerConversationRoutes } from "./routes/conversations.js";
 import { registerOnboardingRoutes } from "./routes/onboarding.js";
+import { registerOrgRoutes } from "./routes/org.js";
 
 export function buildApp() {
   const app = Fastify({ logger: false });
@@ -24,6 +25,7 @@ export function buildApp() {
   registerAuthPlugin(app);
   registerAuthRoutes(app);
   registerOnboardingRoutes(app);
+  registerOrgRoutes(app);
 
   app.get("/healthz", async () => ({ status: "ok" }));
 
