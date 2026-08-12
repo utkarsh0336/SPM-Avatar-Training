@@ -85,3 +85,42 @@ ${contextBlock}
 
 If the answer isn't contained in the context above, say so plainly and answer from your own general knowledge instead — never imply organization-specific content when you are actually relying on general knowledge.`;
 }
+
+export interface CurriculumContextObjective {
+  id: string;
+  title: string;
+  teachingContent: string;
+  checkQuestion: string;
+}
+
+/**
+ * Replaces the generic "offer a short quiz" instruction in
+ * buildSystemPrompt's step 4 with a real, checkable curriculum — see
+ * .claude/specs/interactive-assessment.md. Built once per session (unlike
+ * appendKnowledgeContext, which is query-dependent and rebuilt per turn)
+ * since the objective list doesn't change mid-session. A no-op (returns
+ * systemPrompt unchanged) when the avatar has no attached curriculum, so
+ * every existing avatar's behavior is unaffected.
+ */
+export function appendCurriculumContext(systemPrompt: string, objectives: CurriculumContextObjective[]): string {
+  if (objectives.length === 0) return systemPrompt;
+
+  const objectiveList = objectives
+    .map(
+      (objective, index) =>
+        `${index + 1}. [id: ${objective.id}] ${objective.title}\n   Teach: ${objective.teachingContent}\n   Check question: ${objective.checkQuestion}`,
+    )
+    .join("\n");
+
+  return `${systemPrompt}
+
+This session has a structured curriculum with the following objectives, in order:
+
+${objectiveList}
+
+Teach each objective's material, then ask its check question to verify understanding, using these tools as you go:
+- Call start_checkpoint with the objective's id right before asking its check question.
+- Call grade_answer with the objective's id immediately after the learner answers.
+- If grade_answer returns PASS, call record_progress with the objective's id, then move on to the next objective. If it returns RETRY, briefly explain what was missing and let the learner try again — do not call record_progress until they pass.
+- Once every objective has been recorded as passed, call end_module to confirm the session is complete.`;
+}

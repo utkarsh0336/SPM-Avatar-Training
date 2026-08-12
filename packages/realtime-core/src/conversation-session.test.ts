@@ -128,6 +128,9 @@ function setupHarness(decodedSample?: number) {
   const onTranscript = vi.fn();
   const onLatency = vi.fn();
   const onError = vi.fn();
+  const onCheckpointStarted = vi.fn();
+  const onCheckpointResult = vi.fn();
+  const onModuleCompleted = vi.fn();
 
   const connectPromise = connectConversationSession({
     wsUrl: "wss://example.test/v1/conversations/s1/ws?ticket=abc",
@@ -137,6 +140,9 @@ function setupHarness(decodedSample?: number) {
     onStatusChange,
     onTranscript,
     onLatency,
+    onCheckpointStarted,
+    onCheckpointResult,
+    onModuleCompleted,
     onError,
     createWebSocket: () => ws as unknown as WebSocket,
     createMediaRecorder: () => new FakeMediaRecorder() as unknown as MediaRecorder,
@@ -146,7 +152,21 @@ function setupHarness(decodedSample?: number) {
 
   ws.open();
 
-  return { ws, audioContext, raf, avatar, onStatusChange, onTranscript, onLatency, onError, connectPromise, amplitude };
+  return {
+    ws,
+    audioContext,
+    raf,
+    avatar,
+    onStatusChange,
+    onTranscript,
+    onLatency,
+    onCheckpointStarted,
+    onCheckpointResult,
+    onModuleCompleted,
+    onError,
+    connectPromise,
+    amplitude,
+  };
 }
 
 describe("connectConversationSession", () => {
@@ -549,6 +569,38 @@ describe("connectConversationSession", () => {
       totalMs: 950,
       servedBy: { llm: "gemini", stt: "groq-whisper", tts: "echogarden" },
     });
+  });
+
+  it("forwards checkpoint.started events", async () => {
+    const { connectPromise, ws, onCheckpointStarted } = setupHarness();
+    await connectPromise;
+    ws.emitMessage({ type: "checkpoint.started", objectiveId: "obj-1", objectiveTitle: "Leave basics" });
+    expect(onCheckpointStarted).toHaveBeenCalledWith({ objectiveId: "obj-1", objectiveTitle: "Leave basics" });
+  });
+
+  it("forwards checkpoint.result events", async () => {
+    const { connectPromise, ws, onCheckpointResult } = setupHarness();
+    await connectPromise;
+    ws.emitMessage({
+      type: "checkpoint.result",
+      objectiveId: "obj-1",
+      verdict: "PASS",
+      feedback: "Correct.",
+      attempts: 1,
+    });
+    expect(onCheckpointResult).toHaveBeenCalledWith({
+      objectiveId: "obj-1",
+      verdict: "PASS",
+      feedback: "Correct.",
+      attempts: 1,
+    });
+  });
+
+  it("forwards module.completed events", async () => {
+    const { connectPromise, ws, onModuleCompleted } = setupHarness();
+    await connectPromise;
+    ws.emitMessage({ type: "module.completed", curriculumId: "curr-1" });
+    expect(onModuleCompleted).toHaveBeenCalledWith({ curriculumId: "curr-1" });
   });
 
   it("disconnect() sends session.end, closes the socket, and reports ended", async () => {

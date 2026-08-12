@@ -141,6 +141,42 @@ export function useConversationSession({
               { id: `${entry.utteranceId}-${entry.role}`, role: entry.role === "user" ? "USER" : "AVATAR", text: entry.text },
             ]);
           },
+          // Checkpoint/grading feedback — see
+          // .claude/specs/interactive-assessment.md's UI Changes. Rendered
+          // as synthetic AVATAR-role transcript entries rather than a
+          // separate UI surface, deliberately staying inside
+          // ConversationMessage's existing {id, role, text} shape so
+          // TranscriptPanel/TranscriptBubble need no changes — a richer,
+          // visually distinct treatment is a natural follow-up, not part of
+          // this pass. Never fire for a session whose sessionConfig lacked
+          // avatarId (not yet sent — see the field's doc comment in
+          // packages/shared/src/realtime/ws-messages.ts).
+          onCheckpointStarted: (event) => {
+            if (cancelled) return;
+            setMessages((prev) => [
+              ...prev,
+              { id: `checkpoint-started-${event.objectiveId}-${prev.length}`, role: "AVATAR", text: `Checking understanding: ${event.objectiveTitle}` },
+            ]);
+          },
+          onCheckpointResult: (event) => {
+            if (cancelled) return;
+            const verdictLabel = event.verdict === "PASS" ? "✓ Correct" : "Try again";
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: `checkpoint-result-${event.objectiveId}-${event.attempts}`,
+                role: "AVATAR",
+                text: `${verdictLabel} — ${event.feedback}`,
+              },
+            ]);
+          },
+          onModuleCompleted: (event) => {
+            if (cancelled) return;
+            setMessages((prev) => [
+              ...prev,
+              { id: `module-completed-${event.curriculumId}`, role: "AVATAR", text: "🎉 Module complete — every objective passed." },
+            ]);
+          },
           onError: (message) => {
             console.error("[useConversationSession] turn error:", message);
           },

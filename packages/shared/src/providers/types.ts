@@ -10,20 +10,55 @@
  * only (no secrets) and lives in packages/avatar-core instead.
  */
 
+/**
+ * "tool" messages carry a prior tool call's result back to the model —
+ * toolCallId ties it to the toolCalls entry that requested it. "assistant"
+ * messages set toolCalls only for a turn where the model called a tool
+ * instead of (or before) replying in text — see
+ * .claude/specs/interactive-assessment.md's Realtime Changes. Both fields
+ * are optional so every existing plain-text LLMMessage literal in the
+ * codebase keeps compiling unchanged.
+ */
 export interface LLMMessage {
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "tool";
   content: string;
+  toolCallId?: string;
+  toolCalls?: { id: string; name: string; args: unknown }[];
 }
+
+/**
+ * A tool the model may call mid-turn (SOW §3.4/§3.5's
+ * start_checkpoint/grade_answer/record_progress/end_module — see
+ * packages/shared/src/curriculum/tools.ts). `parameters` is a hand-written
+ * JSON Schema object, not derived via a zod-to-json-schema dependency —
+ * only four tools exist, not worth the new dependency.
+ */
+export interface LLMToolDefinition {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+}
+
+/**
+ * A provider's chat() yields these instead of raw text once tool-calling is
+ * in play — "text" is a token/text delta exactly as before, "tool_call" is
+ * one complete model-invoked tool call (arguments always fully assembled
+ * before this is yielded, even for providers like Groq/OpenAI that stream
+ * a call's arguments in fragments — assembly is the adapter's job).
+ */
+export type LLMStreamEvent = { type: "text"; text: string } | { type: "tool_call"; id: string; name: string; args: unknown };
 
 export interface LLMChatOptions {
   systemPrompt: string;
   signal: AbortSignal;
+  /** Omitted (or empty) means no tool-calling for this call — every event yielded is {type:"text"}. */
+  tools?: LLMToolDefinition[];
 }
 
 export interface LLMProvider {
   readonly name: string;
-  /** Yields token/text deltas as they stream in. */
-  chat(messages: LLMMessage[], opts: LLMChatOptions): AsyncIterable<string>;
+  /** Yields text deltas and/or tool-call events as they stream in — see LLMStreamEvent. */
+  chat(messages: LLMMessage[], opts: LLMChatOptions): AsyncIterable<LLMStreamEvent>;
 }
 
 export interface STTTranscribeOptions {

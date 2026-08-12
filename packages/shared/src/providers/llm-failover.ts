@@ -1,4 +1,4 @@
-import type { LLMChatOptions, LLMMessage, LLMProvider } from "./types.js";
+import type { LLMChatOptions, LLMMessage, LLMProvider, LLMStreamEvent } from "./types.js";
 import { logProviderEvent } from "./provider-log.js";
 import { ProviderError } from "./provider-error.js";
 
@@ -42,14 +42,14 @@ export function createFailoverLLMProvider(
 
   return {
     name: "failover",
-    async *chat(messages: LLMMessage[], chatOpts: LLMChatOptions): AsyncIterable<string> {
+    async *chat(messages: LLMMessage[], chatOpts: LLMChatOptions): AsyncIterable<LLMStreamEvent> {
       const attempted: string[] = [];
 
       for (const candidate of candidates) {
         attempted.push(candidate.name);
         const iterator = candidate.provider.chat(messages, chatOpts)[Symbol.asyncIterator]();
 
-        let first: IteratorResult<string>;
+        let first: IteratorResult<LLMStreamEvent>;
         try {
           first = await iterator.next();
         } catch (error) {

@@ -19,6 +19,20 @@ import {
   type ListKnowledgeDocumentsResponse,
   type UploadKnowledgeDocumentResponse,
 } from "@avatrain/shared/knowledge";
+import {
+  createCurriculumResponseSchema,
+  curriculumSchema,
+  listAvatarsResponseSchema,
+  listCurriculumProgressResponseSchema,
+  replaceCurriculumObjectivesResponseSchema,
+  type CreateCurriculumRequest,
+  type CreateCurriculumResponse,
+  type CurriculumResult,
+  type ListAvatarsResponse,
+  type ListCurriculumProgressResponse,
+  type ObjectiveInput,
+  type ReplaceCurriculumObjectivesResponse,
+} from "@avatrain/shared/curriculum";
 
 export interface AuthUser {
   id: string;
@@ -227,3 +241,52 @@ export async function deleteKnowledgeDocument(documentId: string): Promise<void>
 }
 
 export type { KnowledgeDocumentResult };
+
+/** GET /v1/avatars — OWNER only. See .claude/specs/interactive-assessment.md. */
+export async function listActiveAvatars(): Promise<ListAvatarsResponse> {
+  const result = await apiFetch<unknown>("/avatars", { method: "GET" });
+  return listAvatarsResponseSchema.parse(result);
+}
+
+/** POST /v1/curricula — OWNER only. 409s if the avatar already has a curriculum. */
+export async function createCurriculum(input: CreateCurriculumRequest): Promise<CreateCurriculumResponse> {
+  const result = await apiFetch<unknown>("/curricula", { method: "POST", body: JSON.stringify(input) });
+  return createCurriculumResponseSchema.parse(result);
+}
+
+/** GET /v1/curricula/:id — curriculum + ordered objectives. */
+export async function getCurriculum(curriculumId: string): Promise<CurriculumResult> {
+  const result = await apiFetch<unknown>(`/curricula/${curriculumId}`, { method: "GET" });
+  return curriculumSchema.parse(result);
+}
+
+/** PUT /v1/curricula/:id/objectives — replace-the-whole-list semantics. */
+export async function replaceCurriculumObjectives(
+  curriculumId: string,
+  objectives: ObjectiveInput[],
+): Promise<ReplaceCurriculumObjectivesResponse> {
+  const result = await apiFetch<unknown>(`/curricula/${curriculumId}/objectives`, {
+    method: "PUT",
+    body: JSON.stringify({ objectives }),
+  });
+  return replaceCurriculumObjectivesResponseSchema.parse(result);
+}
+
+/**
+ * DELETE /v1/curricula/:id — 204 No Content on success. Bypasses apiFetch,
+ * which always calls response.json() — parsing an empty 204 body as JSON
+ * throws.
+ */
+export async function deleteCurriculum(curriculumId: string): Promise<void> {
+  const response = await fetch(`/api/curricula/${curriculumId}`, { method: "DELETE" });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({ error: "unknown_error" }))) as ApiErrorBody;
+    throw new ApiError(response.status, body);
+  }
+}
+
+/** GET /v1/curricula/:id/progress */
+export async function listCurriculumProgress(curriculumId: string): Promise<ListCurriculumProgressResponse> {
+  const result = await apiFetch<unknown>(`/curricula/${curriculumId}/progress`, { method: "GET" });
+  return listCurriculumProgressResponseSchema.parse(result);
+}

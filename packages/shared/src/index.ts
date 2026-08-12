@@ -22,3 +22,4 @@ export * from "./tutor/index.js";
 export * from "./onboarding/index.js";
 export * from "./org/index.js";
 export * from "./knowledge/index.js";
+export * from "./curriculum/index.js";

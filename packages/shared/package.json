@@ -29,6 +29,10 @@
     "./knowledge": {
       "types": "./dist/knowledge/index.d.ts",
       "default": "./dist/knowledge/index.js"
+    },
+    "./curriculum": {
+      "types": "./dist/curriculum/index.d.ts",
+      "default": "./dist/curriculum/index.js"
     }
   },
   "scripts": {
