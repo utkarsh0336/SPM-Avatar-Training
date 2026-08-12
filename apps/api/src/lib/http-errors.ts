@@ -29,6 +29,7 @@ export const unauthorized = (code = "unauthorized", message?: string) =>
   new HttpError(401, code, message);
 export const forbidden = (code = "forbidden", message?: string) =>
   new HttpError(403, code, message);
+export const notFound = (code = "not_found", message?: string) => new HttpError(404, code, message);
 export const conflict = (code: string, message?: string) => new HttpError(409, code, message);
 export const badRequest = (code = "bad_request", message?: string, fields?: HttpErrorField[]) =>
   new HttpError(400, code, message, fields);

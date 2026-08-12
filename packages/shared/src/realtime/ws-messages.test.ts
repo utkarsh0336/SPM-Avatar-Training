@@ -138,6 +138,39 @@ describe("serverMessageSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  it("accepts a latency message with retrievalMs set", () => {
+    const result = serverMessageSchema.safeParse({
+      type: "latency",
+      utteranceId: "u1",
+      totalMs: 950,
+      retrievalMs: 42,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts an avatar transcript message with source attribution", () => {
+    const result = serverMessageSchema.safeParse({
+      type: "transcript",
+      role: "avatar",
+      text: "Employees get 20 days of leave per year.",
+      utteranceId: "u1",
+      final: true,
+      sources: [{ documentId: "8c9a6c1a-6d1a-4c2e-9c1a-6d1a4c2e9c1a", title: "Leave Policy" }],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts a transcript message with sources omitted (ungrounded reply)", () => {
+    const result = serverMessageSchema.safeParse({
+      type: "transcript",
+      role: "avatar",
+      text: "General knowledge answer.",
+      utteranceId: "u1",
+      final: true,
+    });
+    expect(result.success).toBe(true);
+  });
+
   it("rejects a negative sentenceIndex", () => {
     const result = serverMessageSchema.safeParse({
       type: "tts.chunk",

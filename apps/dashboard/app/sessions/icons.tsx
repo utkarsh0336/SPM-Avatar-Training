@@ -124,6 +124,82 @@ export function BookmarkIcon({ size = 16, className }: IconProps) {
   );
 }
 
+export function BookOpenIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M2 5c2.5-1 5.5-1 8 0v14c-2.5-1-5.5-1-8 0V5z" />
+      <path d="M22 5c-2.5-1-5.5-1-8 0v14c2.5-1 5.5-1 8 0V5z" />
+    </svg>
+  );
+}
+
+export function UploadIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M12 16V4M12 4l-5 5M12 4l5 5" />
+      <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+    </svg>
+  );
+}
+
+export function TrashIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13" />
+    </svg>
+  );
+}
+
+export function FileTextIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M6 2h9l5 5v15H6V2z" />
+      <path d="M15 2v5h5" />
+      <path d="M9 13h6M9 17h6" />
+    </svg>
+  );
+}
+
 export function GridIcon({ size = 16, className }: IconProps) {
   return (
     <svg

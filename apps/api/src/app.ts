@@ -1,11 +1,14 @@
 import Fastify from "fastify";
 import websocket from "@fastify/websocket";
+import multipart from "@fastify/multipart";
+import { MAX_KNOWLEDGE_DOCUMENT_BYTES } from "@avatrain/shared";
 import { handleError } from "./lib/http-errors.js";
 import { registerAuthPlugin } from "./plugins/auth.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerConversationRoutes } from "./routes/conversations.js";
 import { registerOnboardingRoutes } from "./routes/onboarding.js";
 import { registerOrgRoutes } from "./routes/org.js";
+import { registerKnowledgeRoutes } from "./routes/knowledge.js";
 
 export function buildApp() {
   const app = Fastify({ logger: false });
@@ -22,10 +25,15 @@ export function buildApp() {
   app.after(() => {
     registerConversationRoutes(app);
   });
+  // Own limit matches MAX_KNOWLEDGE_DOCUMENT_BYTES — @fastify/multipart's
+  // own default (1MB) would otherwise silently truncate uploads well under
+  // knowledge-service.ts's own size-cap check.
+  app.register(multipart, { limits: { fileSize: MAX_KNOWLEDGE_DOCUMENT_BYTES } });
   registerAuthPlugin(app);
   registerAuthRoutes(app);
   registerOnboardingRoutes(app);
   registerOrgRoutes(app);
+  registerKnowledgeRoutes(app);
 
   app.get("/healthz", async () => ({ status: "ok" }));
 

@@ -1,0 +1,22 @@
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 43e86574372777afc313f2bc8e4e7ed6aab67842..aa00cc4c05173f2620d1ca1285010e76c5dbcc32 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts	
+@@ -1,2 +1,2 @@
+-export { SimliClient, generateSimliSessionToken, generateIceServers, LogLevel } from './Client';
+-export type { SimliSessionRequest, } from './Client';
++export { SimliClient, generateSimliSessionToken, generateIceServers, LogLevel } from './client';
++export type { SimliSessionRequest, } from './client';
+diff --git a/dist/index.js b/dist/index.js
+index 5e05c80a9f53588ba354b79e0a94f28171706413..fdff80557db9555c9f8617e57a65c9ee88df287c 100644
+--- a/dist/index.js
++++ b/dist/index.js	
+@@ -1,7 +1,7 @@
+ "use strict";
+ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.LogLevel = exports.generateIceServers = exports.generateSimliSessionToken = exports.SimliClient = void 0;
+-var Client_1 = require("./Client");
++var Client_1 = require("./client");
+ Object.defineProperty(exports, "SimliClient", { enumerable: true, get: function () { return Client_1.SimliClient; } });
+ Object.defineProperty(exports, "generateSimliSessionToken", { enumerable: true, get: function () { return Client_1.generateSimliSessionToken; } });
+ Object.defineProperty(exports, "generateIceServers", { enumerable: true, get: function () { return Client_1.generateIceServers; } });

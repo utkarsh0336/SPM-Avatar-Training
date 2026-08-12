@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSystemPrompt } from "./system-prompt.js";
+import { appendKnowledgeContext, buildSystemPrompt } from "./system-prompt.js";
 
 describe("buildSystemPrompt", () => {
   it("includes the avatar name and the resolved topic title", () => {
@@ -47,5 +47,31 @@ describe("buildSystemPrompt", () => {
     ] as const;
     const prompts = expertiseValues.map((expertise) => buildSystemPrompt({ avatarName: "N", expertise }));
     expect(new Set(prompts).size).toBe(expertiseValues.length);
+  });
+});
+
+describe("appendKnowledgeContext", () => {
+  it("returns the base prompt unchanged when there are no chunks", () => {
+    const base = "You are Nancy, an AI avatar trainer.";
+    expect(appendKnowledgeContext(base, [])).toBe(base);
+  });
+
+  it("appends every chunk's content under its own source label", () => {
+    const base = "You are Nancy, an AI avatar trainer.";
+    const result = appendKnowledgeContext(base, [
+      { documentTitle: "Leave Policy", content: "Employees get 20 days of leave." },
+      { documentTitle: "Travel Policy", content: "Business travel requires manager approval." },
+    ]);
+
+    expect(result).toContain(base);
+    expect(result).toContain("[Source: Leave Policy]");
+    expect(result).toContain("Employees get 20 days of leave.");
+    expect(result).toContain("[Source: Travel Policy]");
+    expect(result).toContain("Business travel requires manager approval.");
+  });
+
+  it("instructs the model to fall back to general knowledge, clearly flagged, when context doesn't cover the question", () => {
+    const result = appendKnowledgeContext("base", [{ documentTitle: "Doc", content: "content" }]);
+    expect(result).toMatch(/general knowledge/i);
   });
 });

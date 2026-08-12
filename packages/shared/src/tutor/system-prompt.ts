@@ -55,3 +55,33 @@ Follow a structured lesson plan rather than only answering reactively:
 
 If the learner interrupts or asks an off-topic question, answer it briefly, then steer back to ${topic} unless they explicitly ask to change subjects.`;
 }
+
+export interface KnowledgeContextChunk {
+  documentTitle: string;
+  content: string;
+}
+
+/**
+ * Implements SOW §3.3's Response Priority Hierarchy and its "clearly
+ * distinguish organization-specific knowledge from externally generated
+ * content" requirement: grounds the reply in retrieved org knowledge when
+ * relevant (Priority 1/2), instructing the model to fall back to its own
+ * general knowledge — explicitly flagged as such — when the context doesn't
+ * cover the question (Priority 3). Built fresh per turn (retrieval is
+ * query-dependent) by conversation-service.ts — never mutates the base
+ * systemPrompt that persists across a session's turns. A no-op (returns
+ * systemPrompt unchanged) when nothing relevant was retrieved.
+ */
+export function appendKnowledgeContext(systemPrompt: string, chunks: KnowledgeContextChunk[]): string {
+  if (chunks.length === 0) return systemPrompt;
+
+  const contextBlock = chunks.map((chunk) => `[Source: ${chunk.documentTitle}]\n${chunk.content}`).join("\n\n");
+
+  return `${systemPrompt}
+
+Use the following organization knowledge to answer the learner's question when it's relevant:
+
+${contextBlock}
+
+If the answer isn't contained in the context above, say so plainly and answer from your own general knowledge instead — never imply organization-specific content when you are actually relying on general knowledge.`;
+}

@@ -7,6 +7,7 @@ import {
   outfitSchema,
   voiceToneSchema,
 } from "../tutor/avatar-config.js";
+import { knowledgeSourceSchema } from "../knowledge/schema.js";
 
 /**
  * WebSocket protocol for GET /v1/conversations/:trainingSessionId/ws (see
@@ -92,6 +93,13 @@ export const transcriptMessageSchema = z.object({
   text: z.string(),
   utteranceId: z.string(),
   final: z.boolean(),
+  // Source attribution (SOW §3.3) — only ever set on role:"avatar" messages,
+  // and only when the reply was actually grounded in retrieved
+  // KnowledgeChunks. Omitted (not an empty array) for an ungrounded
+  // Priority-3 reply, and omitted entirely for role:"user" — optional so
+  // pre-knowledge-management clients still validate this message unchanged.
+  // See .claude/specs/knowledge-management.md's Realtime Changes.
+  sources: z.array(knowledgeSourceSchema).optional(),
 });
 export type TranscriptMessage = z.infer<typeof transcriptMessageSchema>;
 
@@ -150,6 +158,8 @@ export const latencyMessageSchema = z.object({
   type: z.literal("latency"),
   utteranceId: z.string(),
   sttMs: z.number().optional(),
+  // Knowledge retrieval hop — docs/ARCHITECTURE.md §5's <100ms p95 budget.
+  retrievalMs: z.number().optional(),
   llmFirstTokenMs: z.number().optional(),
   ttsFirstChunkMs: z.number().optional(),
   totalMs: z.number(),

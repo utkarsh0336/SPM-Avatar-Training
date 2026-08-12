@@ -13,7 +13,10 @@ const BUNDLE_DIR = join(DASHBOARD_DIR, ".next");
 // Server-only secrets that must never end up in a browser bundle — every
 // key the four providers use. NEXT_PUBLIC_* vars are excluded on purpose:
 // those are meant to reach the browser (e.g. NEXT_PUBLIC_API_WS_URL).
-const SECRET_ENV_VARS = ["GEMINI_API_KEY", "GROQ_API_KEY"];
+// OPENAI_API_KEY added by .claude/specs/knowledge-management.md's
+// embedding-openai.ts adapter — a placeholder provider, but it reads this
+// var server-side exactly like the other three, so it needs the same check.
+const SECRET_ENV_VARS = ["GEMINI_API_KEY", "GROQ_API_KEY", "OPENAI_API_KEY"];
 const MIN_SECRET_LENGTH = 8; // skip trivially short values — nothing meaningful to grep for
 
 console.log(`Building ${DASHBOARD_DIR} — this check needs the real production bundle, not source.`);

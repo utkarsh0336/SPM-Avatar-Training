@@ -1,0 +1,199 @@
+.root {
+  flex: 1;
+  min-width: 0;
+  height: 100vh;
+  overflow-y: auto;
+  padding: 40px 48px 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.eyebrow {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--vc-accent-violet);
+}
+
+.title {
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--vc-text-primary);
+}
+
+.subtitle {
+  font-size: 14.5px;
+  color: var(--vc-text-secondary);
+  max-width: 640px;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 640px;
+}
+
+.uploadCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 24px;
+  border-radius: 16px;
+  background: var(--vc-panel-bg);
+  border: 1px dashed var(--vc-border);
+}
+
+.uploadInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+}
+
+.uploadLabel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 20px;
+  border-radius: 10px;
+  cursor: pointer;
+  color: var(--vc-text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.uploadLabel:hover {
+  background: var(--vc-chip-bg);
+}
+
+.uploadHint {
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--vc-text-muted);
+}
+
+.error {
+  font-size: 13px;
+  color: var(--vc-red);
+}
+
+.empty {
+  font-size: 14px;
+  color: var(--vc-text-muted);
+  padding: 24px;
+  text-align: center;
+  border-radius: 16px;
+  background: var(--vc-panel-bg);
+  border: 1px solid var(--vc-border-soft);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.listItem {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--vc-panel-bg);
+  border: 1px solid var(--vc-border-soft);
+}
+
+.listIcon {
+  flex-shrink: 0;
+  color: var(--vc-text-secondary);
+}
+
+.listMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.listTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--vc-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.listSubtitle {
+  font-size: 12.5px;
+  color: var(--vc-text-muted);
+}
+
+.listError {
+  font-size: 12.5px;
+  color: var(--vc-red);
+}
+
+.statusBadge {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.statusPending {
+  color: var(--vc-text-secondary);
+  background: var(--vc-chip-bg);
+}
+
+.statusProcessing {
+  color: var(--vc-accent-violet);
+  background: rgba(139, 92, 246, 0.12);
+}
+
+.statusIndexed {
+  color: var(--vc-green);
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.statusFailed {
+  color: var(--vc-red);
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.deleteButton {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--vc-border);
+  background: transparent;
+  color: var(--vc-text-secondary);
+  cursor: pointer;
+}
+
+.deleteButton:hover {
+  color: var(--vc-red);
+  border-color: var(--vc-red);
+}
+
+.deleteButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

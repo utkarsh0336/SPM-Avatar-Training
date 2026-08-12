@@ -26,6 +26,26 @@ describe("createTurnLatencyTracker", () => {
     });
   });
 
+  it("records retrievalMs between sttMs and llmFirstTokenMs", () => {
+    let t = 0;
+    const now = () => t;
+    const tracker = createTurnLatencyTracker("turn-retrieval", now);
+
+    t = 50;
+    tracker.markSttDone();
+    t = 90;
+    tracker.markRetrievalDone();
+    t = 200;
+    tracker.markLlmFirstToken();
+    t = 260;
+    const entry = tracker.finish();
+
+    expect(entry.sttMs).toBe(50);
+    expect(entry.retrievalMs).toBe(90);
+    expect(entry.llmFirstTokenMs).toBe(200);
+    expect(entry.totalMs).toBe(260);
+  });
+
   it("leaves unmarked hops undefined rather than zero", () => {
     let t = 0;
     const tracker = createTurnLatencyTracker("turn-2", () => t);
