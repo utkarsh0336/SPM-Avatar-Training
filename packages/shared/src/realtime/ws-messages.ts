@@ -39,6 +39,17 @@ export const sessionStartMessageSchema = z.object({
   topic: z.string(),
   /** Drives the LLM's reply language, TTS voice, and STT language hint (see conversation-service.ts). Defaults to English so older clients that predate this field still validate. */
   language: languageSchema.default("English"),
+  /**
+   * Optional so older/curriculum-less clients still validate unchanged —
+   * see .claude/specs/interactive-assessment.md. When present,
+   * conversation-service.ts loads that Avatar's Curriculum (if one exists)
+   * and enables the checkpoint/grading tool loop for the session; when
+   * absent, behavior is identical to before this field existed. Not yet
+   * sent by apps/dashboard's session screen — the onboarding handoff has
+   * no persisted Avatar id to send today (a separate, larger prerequisite;
+   * see conversation-service.ts's session.start handler comment).
+   */
+  avatarId: z.string().uuid().optional(),
 });
 export type SessionStartMessage = z.infer<typeof sessionStartMessageSchema>;
 
@@ -180,6 +191,32 @@ export const errorMessageSchema = z.object({
 });
 export type ErrorMessage = z.infer<typeof errorMessageSchema>;
 
+// The checkpoint/grading tool loop's client-visible events — see
+// .claude/specs/interactive-assessment.md's Realtime Changes. Sent only for
+// sessions whose avatar has a Curriculum attached (session.start's optional
+// avatarId); absent entirely otherwise.
+export const checkpointStartedMessageSchema = z.object({
+  type: z.literal("checkpoint.started"),
+  objectiveId: z.string(),
+  objectiveTitle: z.string(),
+});
+export type CheckpointStartedMessage = z.infer<typeof checkpointStartedMessageSchema>;
+
+export const checkpointResultMessageSchema = z.object({
+  type: z.literal("checkpoint.result"),
+  objectiveId: z.string(),
+  verdict: z.enum(["PASS", "RETRY"]),
+  feedback: z.string(),
+  attempts: z.number().int().positive(),
+});
+export type CheckpointResultMessage = z.infer<typeof checkpointResultMessageSchema>;
+
+export const moduleCompletedMessageSchema = z.object({
+  type: z.literal("module.completed"),
+  curriculumId: z.string(),
+});
+export type ModuleCompletedMessage = z.infer<typeof moduleCompletedMessageSchema>;
+
 export const serverMessageSchema = z.discriminatedUnion("type", [
   sessionReadyMessageSchema,
   transcriptMessageSchema,
@@ -191,5 +228,8 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
   turnFailedMessageSchema,
   latencyMessageSchema,
   errorMessageSchema,
+  checkpointStartedMessageSchema,
+  checkpointResultMessageSchema,
+  moduleCompletedMessageSchema,
 ]);
 export type ServerMessage = z.infer<typeof serverMessageSchema>;

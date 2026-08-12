@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createGroqLLMProvider } from "./llm-groq.js";
+import type { LLMStreamEvent } from "./types.js";
 
 function sseResponse(lines: string[], init?: { status?: number }): Response {
   const status = init?.status ?? 200;
@@ -14,9 +15,9 @@ function sseResponse(lines: string[], init?: { status?: number }): Response {
   return new Response(body, { status: 200 });
 }
 
-async function collect(iterable: AsyncIterable<string>): Promise<string[]> {
-  const out: string[] = [];
-  for await (const chunk of iterable) out.push(chunk);
+async function collect(iterable: AsyncIterable<LLMStreamEvent>): Promise<LLMStreamEvent[]> {
+  const out: LLMStreamEvent[] = [];
+  for await (const event of iterable) out.push(event);
   return out;
 }
 
@@ -29,13 +30,81 @@ describe("createGroqLLMProvider", () => {
         "data: [DONE]\n\n",
       ]);
     const provider = createGroqLLMProvider({ apiKey: "k", fetchImpl });
-    const chunks = await collect(
+    const events = await collect(
       provider.chat([{ role: "user", content: "hi" }], {
         systemPrompt: "sys",
         signal: new AbortController().signal,
       }),
     );
-    expect(chunks).toEqual(["Hi", " there"]);
+    expect(events).toEqual([
+      { type: "text", text: "Hi" },
+      { type: "text", text: " there" },
+    ]);
+  });
+
+  it("accumulates fragmented tool_call arguments across chunks by index and flushes on finish_reason", async () => {
+    const fetchImpl = async () =>
+      sseResponse([
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_abc","function":{"name":"grade_answer","arguments":""}}]}}]}\n\n',
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"objectiveId\\":"}}]}}]}\n\n',
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\\"obj-1\\"}"}}]}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}\n\n',
+        "data: [DONE]\n\n",
+      ]);
+    const provider = createGroqLLMProvider({ apiKey: "k", fetchImpl });
+    const events = await collect(
+      provider.chat([{ role: "user", content: "hi" }], {
+        systemPrompt: "sys",
+        signal: new AbortController().signal,
+        tools: [{ name: "grade_answer", description: "d", parameters: { type: "object", properties: {} } }],
+      }),
+    );
+    expect(events).toEqual([{ type: "tool_call", id: "call_abc", name: "grade_answer", args: { objectiveId: "obj-1" } }]);
+  });
+
+  it("sends tools in the OpenAI-compatible shape when opts.tools is provided", async () => {
+    let capturedInit: RequestInit | undefined;
+    const fetchImpl = async (_url: string | URL | Request, init?: RequestInit) => {
+      capturedInit = init;
+      return sseResponse([]);
+    };
+    const provider = createGroqLLMProvider({ apiKey: "k", fetchImpl });
+    await collect(
+      provider.chat([{ role: "user", content: "hi" }], {
+        systemPrompt: "sys",
+        signal: new AbortController().signal,
+        tools: [{ name: "end_module", description: "d", parameters: { type: "object", properties: {} } }],
+      }),
+    );
+    const body = JSON.parse(capturedInit?.body as string);
+    expect(body.tools).toEqual([
+      { type: "function", function: { name: "end_module", description: "d", parameters: { type: "object", properties: {} } } },
+    ]);
+  });
+
+  it("maps a tool-result message to role:tool with tool_call_id", async () => {
+    let capturedInit: RequestInit | undefined;
+    const fetchImpl = async (_url: string | URL | Request, init?: RequestInit) => {
+      capturedInit = init;
+      return sseResponse([]);
+    };
+    const provider = createGroqLLMProvider({ apiKey: "k", fetchImpl });
+    await collect(
+      provider.chat(
+        [
+          { role: "assistant", content: "", toolCalls: [{ id: "call-1", name: "grade_answer", args: { objectiveId: "obj-1" } }] },
+          { role: "tool", content: "PASS", toolCallId: "call-1" },
+        ],
+        { systemPrompt: "sys", signal: new AbortController().signal },
+      ),
+    );
+    const body = JSON.parse(capturedInit?.body as string);
+    expect(body.messages[1]).toEqual({
+      role: "assistant",
+      content: null,
+      tool_calls: [{ id: "call-1", type: "function", function: { name: "grade_answer", arguments: '{"objectiveId":"obj-1"}' } }],
+    });
+    expect(body.messages[2]).toEqual({ role: "tool", content: "PASS", tool_call_id: "call-1" });
   });
 
   it("sends a bearer token and prepends the system prompt as a system message", async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appendKnowledgeContext, buildSystemPrompt } from "./system-prompt.js";
+import { appendCurriculumContext, appendKnowledgeContext, buildSystemPrompt } from "./system-prompt.js";
 
 describe("buildSystemPrompt", () => {
   it("includes the avatar name and the resolved topic title", () => {
@@ -73,5 +73,38 @@ describe("appendKnowledgeContext", () => {
   it("instructs the model to fall back to general knowledge, clearly flagged, when context doesn't cover the question", () => {
     const result = appendKnowledgeContext("base", [{ documentTitle: "Doc", content: "content" }]);
     expect(result).toMatch(/general knowledge/i);
+  });
+});
+
+describe("appendCurriculumContext", () => {
+  it("returns the base prompt unchanged when there are no objectives", () => {
+    const base = "You are Nancy, an AI avatar trainer.";
+    expect(appendCurriculumContext(base, [])).toBe(base);
+  });
+
+  it("lists every objective's id, title, teaching content, and check question", () => {
+    const base = "You are Nancy, an AI avatar trainer.";
+    const result = appendCurriculumContext(base, [
+      { id: "obj-1", title: "Leave policy basics", teachingContent: "Employees get 20 days.", checkQuestion: "How many days?" },
+      { id: "obj-2", title: "Approval process", teachingContent: "Manager sign-off required.", checkQuestion: "Who approves?" },
+    ]);
+
+    expect(result).toContain(base);
+    expect(result).toContain("obj-1");
+    expect(result).toContain("Leave policy basics");
+    expect(result).toContain("Employees get 20 days.");
+    expect(result).toContain("How many days?");
+    expect(result).toContain("obj-2");
+    expect(result).toContain("Approval process");
+  });
+
+  it("instructs the model to use start_checkpoint, grade_answer, record_progress, and end_module", () => {
+    const result = appendCurriculumContext("base", [
+      { id: "obj-1", title: "T", teachingContent: "C", checkQuestion: "Q" },
+    ]);
+    expect(result).toMatch(/start_checkpoint/);
+    expect(result).toMatch(/grade_answer/);
+    expect(result).toMatch(/record_progress/);
+    expect(result).toMatch(/end_module/);
   });
 });

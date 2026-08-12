@@ -31,6 +31,30 @@ export interface ConversationLatencyEvent {
 }
 
 /**
+ * The checkpoint/grading tool loop's client-visible events — see
+ * .claude/specs/interactive-assessment.md. Declared locally (own shape,
+ * not the raw parsed ServerMessage variant) for the same decoupling reason
+ * as ConversationTranscriptEntry/ConversationLatencyEvent above. Only ever
+ * fire for a session whose sessionConfig.avatarId resolved to an avatar
+ * with a Curriculum attached; absent entirely otherwise.
+ */
+export interface ConversationCheckpointStartedEvent {
+  objectiveId: string;
+  objectiveTitle: string;
+}
+
+export interface ConversationCheckpointResultEvent {
+  objectiveId: string;
+  verdict: "PASS" | "RETRY";
+  feedback: string;
+  attempts: number;
+}
+
+export interface ConversationModuleCompletedEvent {
+  curriculumId: string;
+}
+
+/**
  * Minimal structural subset of packages/avatar-core's AvatarProvider —
  * declared locally rather than imported so this package stays decoupled
  * from a specific avatar implementation, matching the existing pattern
@@ -53,6 +77,9 @@ export interface ConnectConversationSessionOptions {
   onStatusChange: (status: ConversationSessionStatus) => void;
   onTranscript?: (entry: ConversationTranscriptEntry) => void;
   onLatency?: (event: ConversationLatencyEvent) => void;
+  onCheckpointStarted?: (event: ConversationCheckpointStartedEvent) => void;
+  onCheckpointResult?: (event: ConversationCheckpointResultEvent) => void;
+  onModuleCompleted?: (event: ConversationModuleCompletedEvent) => void;
   onError?: (message: string) => void;
   /** Injectable for tests; defaults to `new WebSocket(url)`. */
   createWebSocket?: (url: string) => WebSocket;
@@ -364,6 +391,20 @@ export async function connectConversationSession(
         break;
       case "error":
         options.onError?.(parsed.message ?? parsed.code);
+        break;
+      case "checkpoint.started":
+        options.onCheckpointStarted?.({ objectiveId: parsed.objectiveId, objectiveTitle: parsed.objectiveTitle });
+        break;
+      case "checkpoint.result":
+        options.onCheckpointResult?.({
+          objectiveId: parsed.objectiveId,
+          verdict: parsed.verdict,
+          feedback: parsed.feedback,
+          attempts: parsed.attempts,
+        });
+        break;
+      case "module.completed":
+        options.onModuleCompleted?.({ curriculumId: parsed.curriculumId });
         break;
     }
   }

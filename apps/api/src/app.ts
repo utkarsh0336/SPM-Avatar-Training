@@ -9,6 +9,8 @@ import { registerConversationRoutes } from "./routes/conversations.js";
 import { registerOnboardingRoutes } from "./routes/onboarding.js";
 import { registerOrgRoutes } from "./routes/org.js";
 import { registerKnowledgeRoutes } from "./routes/knowledge.js";
+import { registerCurriculumRoutes } from "./routes/curriculum.js";
+import { registerAvatarRoutes } from "./routes/avatars.js";
 
 export function buildApp() {
   const app = Fastify({ logger: false });
@@ -34,6 +36,8 @@ export function buildApp() {
   registerOnboardingRoutes(app);
   registerOrgRoutes(app);
   registerKnowledgeRoutes(app);
+  registerCurriculumRoutes(app);
+  registerAvatarRoutes(app);
 
   app.get("/healthz", async () => ({ status: "ok" }));
 

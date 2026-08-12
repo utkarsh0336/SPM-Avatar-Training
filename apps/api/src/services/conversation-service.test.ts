@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import type { LLMProvider, STTProvider, TTSProvider, VoiceTone } from "@avatrain/shared";
+import type { LLMMessage, LLMProvider, LLMStreamEvent, ObjectiveProgressVerdict, STTProvider, TTSProvider, VoiceTone } from "@avatrain/shared";
 import { createConversationHandler, type ConversationHandlerDeps } from "./conversation-service.js";
 import type { RetrievedChunk } from "./retrieval-service.js";
+import type { SessionCurriculum, SessionCurriculumObjective } from "./curriculum-service.js";
 
 class FakeSocket {
   readyState = 1;
@@ -36,10 +37,45 @@ function fakeLLM(behavior: "success" | "throw", replyChunks: string[] = []): Con
       async *chat() {
         if (behavior === "throw") throw new Error("llm down");
         opts?.onResolved?.("fake-gemini");
-        for (const chunk of replyChunks) yield chunk;
+        for (const chunk of replyChunks) yield { type: "text", text: chunk } satisfies LLMStreamEvent;
       },
     } as LLMProvider;
   });
+}
+
+/**
+ * Scripts the "teaching" provider's chat() across multiple calls (one
+ * script array per round-trip within a turn) while ALSO handling the
+ * separate grade_answer judge call — both come through this same injected
+ * createLLM factory (see conversation-service.ts's gradeAnswerWithJudge,
+ * which calls the injected factory fresh rather than reusing the session's
+ * `llm`), distinguished by systemPrompt content since that's the only
+ * signal chat() receives that tells the two apart.
+ */
+function fakeCurriculumLLM(
+  teachingScript: LLMStreamEvent[][],
+  judgeVerdict: ObjectiveProgressVerdict = "PASS",
+): ConversationHandlerDeps["createLLM"] {
+  let teachingCallIndex = 0;
+  return vi.fn((_env, opts) => {
+    return {
+      name: "fake-llm",
+      async *chat(_messages: LLMMessage[], chatOpts: { systemPrompt: string }) {
+        if (chatOpts.systemPrompt.startsWith("You are grading")) {
+          yield { type: "text", text: `VERDICT: ${judgeVerdict}\nFeedback line.` } satisfies LLMStreamEvent;
+          return;
+        }
+        opts?.onResolved?.("fake-gemini");
+        const events = teachingScript[teachingCallIndex] ?? [];
+        teachingCallIndex += 1;
+        for (const event of events) yield event;
+      },
+    } as unknown as LLMProvider;
+  });
+}
+
+function fakeCurriculum(objectives: SessionCurriculumObjective[]): ConversationHandlerDeps["getCurriculumForAvatar"] {
+  return vi.fn(async (): Promise<SessionCurriculum> => ({ curriculumId: "curr-1", objectives }));
 }
 
 function fakeSTT(behavior: "success" | "fail" | "unconfigured", text = "hello there"): ConversationHandlerDeps["createSTT"] {
@@ -79,6 +115,20 @@ const claims = { orgId: "org-1", userId: "user-1" };
 
 const noRetrieval = { retrieveContext: fakeRetrieveContext() };
 
+// No curriculum by default — every test that doesn't care about the
+// checkpoint/grading loop gets the exact pre-existing behavior (no avatarId
+// sent, so getCurriculumForAvatar is never even called).
+const sessionStartBase = {
+  type: "session.start" as const,
+  avatarName: "Nancy",
+  expertise: "HR_LEAVE_POLICY" as const,
+  voiceTone: "WARM" as const,
+  style: "REALISTIC" as const,
+  gender: "FEMALE" as const,
+  outfit: "BUSINESS_FORMAL" as const,
+  topic: "HR & Leave Policy",
+};
+
 function findMessages(socket: FakeSocket, type: string): Record<string, unknown>[] {
   return socket.sent.filter(
     (m): m is Record<string, unknown> => typeof m === "object" && m !== null && (m as { type?: string }).type === type,
@@ -93,16 +143,7 @@ describe("createConversationHandler", () => {
     const createTTS = fakeTTS("success");
     createConversationHandler(socket as never, claims, { createLLM, createSTT, createTTS, ...noRetrieval });
 
-    socket.emitMessage({
-      type: "session.start",
-      avatarName: "Nancy",
-      expertise: "HR_LEAVE_POLICY",
-      voiceTone: "WARM",
-      style: "REALISTIC",
-      gender: "FEMALE",
-      outfit: "BUSINESS_FORMAL",
-      topic: "HR & Leave Policy",
-    });
+    socket.emitMessage(sessionStartBase);
 
     expect(socket.sent).toContainEqual({ type: "session.ready" });
     expect(createLLM).toHaveBeenCalled();
@@ -117,16 +158,7 @@ describe("createConversationHandler", () => {
       createTTS: fakeTTS("success"),
       ...noRetrieval,
     });
-    socket.emitMessage({
-      type: "session.start",
-      avatarName: "Nancy",
-      expertise: "HR_LEAVE_POLICY",
-      voiceTone: "WARM",
-      style: "REALISTIC",
-      gender: "FEMALE",
-      outfit: "BUSINESS_FORMAL",
-      topic: "t",
-    });
+    socket.emitMessage(sessionStartBase);
     expect(socket.sent).toContainEqual({ type: "session.ready" });
   });
 
@@ -140,17 +172,7 @@ describe("createConversationHandler", () => {
       createTTS,
       ...noRetrieval,
     });
-    socket.emitMessage({
-      type: "session.start",
-      avatarName: "Priya",
-      expertise: "HR_LEAVE_POLICY",
-      voiceTone: "WARM",
-      style: "REALISTIC",
-      gender: "FEMALE",
-      outfit: "BUSINESS_FORMAL",
-      topic: "HR & Leave Policy",
-      language: "Hindi",
-    });
+    socket.emitMessage({ ...sessionStartBase, avatarName: "Priya", language: "Hindi" });
     socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
 
     await vi.waitFor(() => {
@@ -171,16 +193,7 @@ describe("createConversationHandler", () => {
       createTTS: fakeTTS("success"),
       ...noRetrieval,
     });
-    socket.emitMessage({
-      type: "session.start",
-      avatarName: "Nancy",
-      expertise: "HR_LEAVE_POLICY",
-      voiceTone: "WARM",
-      style: "REALISTIC",
-      gender: "FEMALE",
-      outfit: "BUSINESS_FORMAL",
-      topic: "HR & Leave Policy",
-    });
+    socket.emitMessage(sessionStartBase);
 
     socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
 
@@ -223,7 +236,7 @@ describe("createConversationHandler", () => {
         async *chat(_messages: unknown, chatOpts: { systemPrompt: string }) {
           capturedSystemPrompt = chatOpts.systemPrompt;
           opts?.onResolved?.("fake-gemini");
-          yield "You get 20 days. ";
+          yield { type: "text", text: "You get 20 days. " } satisfies LLMStreamEvent;
         },
       } as LLMProvider;
     });
@@ -233,16 +246,7 @@ describe("createConversationHandler", () => {
       createTTS: fakeTTS("success"),
       retrieveContext,
     });
-    socket.emitMessage({
-      type: "session.start",
-      avatarName: "Nancy",
-      expertise: "HR_LEAVE_POLICY",
-      voiceTone: "WARM",
-      style: "REALISTIC",
-      gender: "FEMALE",
-      outfit: "BUSINESS_FORMAL",
-      topic: "t",
-    });
+    socket.emitMessage(sessionStartBase);
     socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
 
     await vi.waitFor(() => {
@@ -270,16 +274,7 @@ describe("createConversationHandler", () => {
       createTTS: fakeTTS("success"),
       retrieveContext,
     });
-    socket.emitMessage({
-      type: "session.start",
-      avatarName: "Nancy",
-      expertise: "HR_LEAVE_POLICY",
-      voiceTone: "WARM",
-      style: "REALISTIC",
-      gender: "FEMALE",
-      outfit: "BUSINESS_FORMAL",
-      topic: "t",
-    });
+    socket.emitMessage(sessionStartBase);
     socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
 
     await vi.waitFor(() => {
@@ -298,16 +293,7 @@ describe("createConversationHandler", () => {
       createTTS: fakeTTS("success"),
       ...noRetrieval,
     });
-    socket.emitMessage({
-      type: "session.start",
-      avatarName: "Nancy",
-      expertise: "HR_LEAVE_POLICY",
-      voiceTone: "WARM",
-      style: "REALISTIC",
-      gender: "FEMALE",
-      outfit: "BUSINESS_FORMAL",
-      topic: "t",
-    });
+    socket.emitMessage(sessionStartBase);
     socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
 
     await vi.waitFor(() => {
@@ -325,16 +311,7 @@ describe("createConversationHandler", () => {
       createTTS: fakeTTS("success"),
       ...noRetrieval,
     });
-    socket.emitMessage({
-      type: "session.start",
-      avatarName: "Nancy",
-      expertise: "HR_LEAVE_POLICY",
-      voiceTone: "WARM",
-      style: "REALISTIC",
-      gender: "FEMALE",
-      outfit: "BUSINESS_FORMAL",
-      topic: "t",
-    });
+    socket.emitMessage(sessionStartBase);
     socket.emitMessage({ type: "text.fallback", utteranceId: "u1", text: "recognized via web speech" });
 
     await vi.waitFor(() => {
@@ -357,16 +334,7 @@ describe("createConversationHandler", () => {
       createTTS: fakeTTS("success"),
       ...noRetrieval,
     });
-    socket.emitMessage({
-      type: "session.start",
-      avatarName: "Nancy",
-      expertise: "HR_LEAVE_POLICY",
-      voiceTone: "WARM",
-      style: "REALISTIC",
-      gender: "FEMALE",
-      outfit: "BUSINESS_FORMAL",
-      topic: "t",
-    });
+    socket.emitMessage(sessionStartBase);
     socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
 
     await vi.waitFor(() => {
@@ -384,16 +352,7 @@ describe("createConversationHandler", () => {
       createTTS: fakeTTS("fail"),
       ...noRetrieval,
     });
-    socket.emitMessage({
-      type: "session.start",
-      avatarName: "Nancy",
-      expertise: "HR_LEAVE_POLICY",
-      voiceTone: "WARM",
-      style: "REALISTIC",
-      gender: "FEMALE",
-      outfit: "BUSINESS_FORMAL",
-      topic: "t",
-    });
+    socket.emitMessage(sessionStartBase);
     socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
 
     await vi.waitFor(() => {
@@ -414,10 +373,10 @@ describe("createConversationHandler", () => {
         name: "fake-llm",
         async *chat(_messages: unknown, chatOpts: { signal: AbortSignal }) {
           opts?.onResolved?.("fake-gemini");
-          yield "First. ";
+          yield { type: "text", text: "First. " } satisfies LLMStreamEvent;
           await chatGate;
           if (chatOpts.signal.aborted) return;
-          yield "Should not arrive. ";
+          yield { type: "text", text: "Should not arrive. " } satisfies LLMStreamEvent;
         },
       } as LLMProvider;
     });
@@ -427,16 +386,7 @@ describe("createConversationHandler", () => {
       createTTS: fakeTTS("success"),
       ...noRetrieval,
     });
-    socket.emitMessage({
-      type: "session.start",
-      avatarName: "Nancy",
-      expertise: "HR_LEAVE_POLICY",
-      voiceTone: "WARM",
-      style: "REALISTIC",
-      gender: "FEMALE",
-      outfit: "BUSINESS_FORMAL",
-      topic: "t",
-    });
+    socket.emitMessage(sessionStartBase);
     socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
 
     await vi.waitFor(() => {
@@ -472,16 +422,7 @@ describe("createConversationHandler", () => {
       createTTS: fakeTTS("success"),
       retrieveContext,
     });
-    socket.emitMessage({
-      type: "session.start",
-      avatarName: "Nancy",
-      expertise: "HR_LEAVE_POLICY",
-      voiceTone: "WARM",
-      style: "REALISTIC",
-      gender: "FEMALE",
-      outfit: "BUSINESS_FORMAL",
-      topic: "t",
-    });
+    socket.emitMessage(sessionStartBase);
     socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
 
     await vi.waitFor(() => {
@@ -536,5 +477,278 @@ describe("createConversationHandler", () => {
     });
     expect(() => socket.emitMessage({ type: "not.a.real.type" })).not.toThrow();
     expect(findMessages(socket, "error")).toEqual([{ type: "error", code: "invalid_message" }]);
+  });
+
+  describe("checkpoint/grading tool loop", () => {
+    const objectives: SessionCurriculumObjective[] = [
+      { id: "obj-1", title: "Leave basics", teachingContent: "20 days a year.", checkQuestion: "How many days?", gradingCriteria: "Answer must say 20 days." },
+    ];
+
+    it("does nothing tool-related when session.start omits avatarId, even with a curriculum dep configured", async () => {
+      const socket = new FakeSocket();
+      const getCurriculumForAvatar = fakeCurriculum(objectives);
+      createConversationHandler(socket as never, claims, {
+        createLLM: fakeLLM("success", ["Just talking. "]),
+        createSTT: fakeSTT("success"),
+        createTTS: fakeTTS("success"),
+        getCurriculumForAvatar,
+        ...noRetrieval,
+      });
+      socket.emitMessage(sessionStartBase);
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+      expect(getCurriculumForAvatar).not.toHaveBeenCalled();
+      expect(findMessages(socket, "checkpoint.started")).toHaveLength(0);
+    });
+
+    it("start_checkpoint sends checkpoint.started with the objective's title", async () => {
+      const socket = new FakeSocket();
+      createConversationHandler(socket as never, claims, {
+        createLLM: fakeCurriculumLLM([
+          [{ type: "tool_call", id: "call-1", name: "start_checkpoint", args: { objectiveId: "obj-1" } }],
+          [{ type: "text", text: "How many days do you get?" }],
+        ]),
+        createSTT: fakeSTT("success"),
+        createTTS: fakeTTS("success"),
+        getCurriculumForAvatar: fakeCurriculum(objectives),
+        ...noRetrieval,
+      });
+      socket.emitMessage({ ...sessionStartBase, avatarId: "11111111-1111-1111-1111-111111111111" });
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+      expect(findMessages(socket, "checkpoint.started")).toEqual([
+        { type: "checkpoint.started", objectiveId: "obj-1", objectiveTitle: "Leave basics" },
+      ]);
+      const avatarTranscript = findMessages(socket, "transcript").find((m) => m.role === "avatar");
+      expect(avatarTranscript?.text).toBe("How many days do you get?");
+    });
+
+    it("flushes sentence audio spoken before a tool call immediately, not held hostage behind the tool round-trip", async () => {
+      const socket = new FakeSocket();
+      let releaseRound2!: () => void;
+      const round2Gate = new Promise<void>((resolve) => {
+        releaseRound2 = resolve;
+      });
+      let callIndex = 0;
+      const createLLM = vi.fn((_env, opts) => {
+        return {
+          name: "fake-llm",
+          async *chat(_messages: LLMMessage[], _chatOpts: { systemPrompt: string }) {
+            opts?.onResolved?.("fake-gemini");
+            const index = callIndex;
+            callIndex += 1;
+            if (index === 0) {
+              yield { type: "text", text: "Let me check that. " } satisfies LLMStreamEvent;
+              yield {
+                type: "tool_call",
+                id: "call-1",
+                name: "start_checkpoint",
+                args: { objectiveId: "obj-1" },
+              } satisfies LLMStreamEvent;
+            } else {
+              await round2Gate;
+              yield { type: "text", text: "How many days do you get?" } satisfies LLMStreamEvent;
+            }
+          },
+        } as unknown as LLMProvider;
+      });
+
+      createConversationHandler(socket as never, claims, {
+        createLLM,
+        createSTT: fakeSTT("success"),
+        createTTS: fakeTTS("success"),
+        getCurriculumForAvatar: fakeCurriculum(objectives),
+        ...noRetrieval,
+      });
+      socket.emitMessage({ ...sessionStartBase, avatarId: "11111111-1111-1111-1111-111111111111" });
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      // Round 2 (the continuation after the tool call) is deliberately
+      // still blocked here — this proves sentence 0's audio was flushed
+      // before, not after, the tool round-trip completed.
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "tts.chunk")).toHaveLength(1);
+      });
+      expect(findMessages(socket, "tts.chunk")[0]).toMatchObject({
+        sentenceIndex: 0,
+        text: "Let me check that.",
+        isLastForUtterance: false,
+      });
+      expect(findMessages(socket, "turn.ended")).toHaveLength(0);
+
+      releaseRound2();
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+      const chunks = findMessages(socket, "tts.chunk");
+      expect(chunks).toHaveLength(2);
+      expect(chunks[1]).toMatchObject({ sentenceIndex: 1, text: "How many days do you get?", isLastForUtterance: true });
+    });
+
+    it("grade_answer (PASS) then record_progress persists progress and sends checkpoint.result", async () => {
+      const socket = new FakeSocket();
+      const recordObjectiveProgress = vi.fn(async () => ({ attempts: 1 }));
+      createConversationHandler(socket as never, claims, {
+        createLLM: fakeCurriculumLLM(
+          [
+            [{ type: "tool_call", id: "call-1", name: "grade_answer", args: { objectiveId: "obj-1" } }],
+            [{ type: "tool_call", id: "call-2", name: "record_progress", args: { objectiveId: "obj-1" } }],
+            [{ type: "text", text: "Correct, well done!" }],
+          ],
+          "PASS",
+        ),
+        createSTT: fakeSTT("success", "20 days"),
+        createTTS: fakeTTS("success"),
+        getCurriculumForAvatar: fakeCurriculum(objectives),
+        recordObjectiveProgress,
+        ...noRetrieval,
+      });
+      socket.emitMessage({ ...sessionStartBase, avatarId: "11111111-1111-1111-1111-111111111111" });
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+
+      expect(recordObjectiveProgress).toHaveBeenCalledWith("org-1", "obj-1", "user-1", "PASS", "Feedback line.");
+      expect(findMessages(socket, "checkpoint.result")).toEqual([
+        { type: "checkpoint.result", objectiveId: "obj-1", verdict: "PASS", feedback: "Feedback line.", attempts: 1 },
+      ]);
+      const avatarTranscript = findMessages(socket, "transcript").find((m) => m.role === "avatar");
+      expect(avatarTranscript?.text).toBe("Correct, well done!");
+    });
+
+    it("record_progress without a prior grade_answer this turn returns a tool error and does not persist", async () => {
+      const socket = new FakeSocket();
+      const recordObjectiveProgress = vi.fn(async () => ({ attempts: 1 }));
+      createConversationHandler(socket as never, claims, {
+        createLLM: fakeCurriculumLLM([
+          [{ type: "tool_call", id: "call-1", name: "record_progress", args: { objectiveId: "obj-1" } }],
+          [{ type: "text", text: "Okay." }],
+        ]),
+        createSTT: fakeSTT("success"),
+        createTTS: fakeTTS("success"),
+        getCurriculumForAvatar: fakeCurriculum(objectives),
+        recordObjectiveProgress,
+        ...noRetrieval,
+      });
+      socket.emitMessage({ ...sessionStartBase, avatarId: "11111111-1111-1111-1111-111111111111" });
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+      expect(recordObjectiveProgress).not.toHaveBeenCalled();
+      expect(findMessages(socket, "checkpoint.result")).toHaveLength(0);
+    });
+
+    it("a tool handler that throws degrades to a synthetic error result instead of failing the turn", async () => {
+      const socket = new FakeSocket();
+      const recordObjectiveProgress = vi.fn(async () => {
+        throw new Error("db unavailable");
+      });
+      createConversationHandler(socket as never, claims, {
+        createLLM: fakeCurriculumLLM(
+          [
+            [{ type: "tool_call", id: "call-1", name: "grade_answer", args: { objectiveId: "obj-1" } }],
+            [{ type: "tool_call", id: "call-2", name: "record_progress", args: { objectiveId: "obj-1" } }],
+            [{ type: "text", text: "Continuing anyway." }],
+          ],
+          "PASS",
+        ),
+        createSTT: fakeSTT("success", "20 days"),
+        createTTS: fakeTTS("success"),
+        getCurriculumForAvatar: fakeCurriculum(objectives),
+        recordObjectiveProgress,
+        ...noRetrieval,
+      });
+      socket.emitMessage({ ...sessionStartBase, avatarId: "11111111-1111-1111-1111-111111111111" });
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+      const avatarTranscript = findMessages(socket, "transcript").find((m) => m.role === "avatar");
+      expect(avatarTranscript?.text).toBe("Continuing anyway.");
+      expect(findMessages(socket, "checkpoint.result")).toHaveLength(0);
+      expect(findMessages(socket, "turn.failed")).toHaveLength(0);
+    });
+
+    it("exceeding the max tool round-trips fails the turn instead of looping forever", async () => {
+      const socket = new FakeSocket();
+      // Every round-trip calls start_checkpoint again — never finishes in
+      // plain text — to exercise the round-trip cap.
+      const infiniteScript: LLMStreamEvent[][] = Array.from({ length: 10 }, () => [
+        { type: "tool_call", id: "call-loop", name: "start_checkpoint", args: { objectiveId: "obj-1" } },
+      ]);
+      createConversationHandler(socket as never, claims, {
+        createLLM: fakeCurriculumLLM(infiniteScript),
+        createSTT: fakeSTT("success"),
+        createTTS: fakeTTS("success"),
+        getCurriculumForAvatar: fakeCurriculum(objectives),
+        ...noRetrieval,
+      });
+      socket.emitMessage({ ...sessionStartBase, avatarId: "11111111-1111-1111-1111-111111111111" });
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.failed")).toHaveLength(1);
+      });
+      expect(findMessages(socket, "turn.failed")[0]).toMatchObject({ kind: "llm" });
+      expect(findMessages(socket, "turn.ended")).toHaveLength(0);
+    });
+
+    it("end_module reports remaining objectives instead of completing when not everything has passed", async () => {
+      const socket = new FakeSocket();
+      const getRemainingObjectiveTitles = vi.fn(async () => ["Leave basics"]);
+      createConversationHandler(socket as never, claims, {
+        createLLM: fakeCurriculumLLM([
+          [{ type: "tool_call", id: "call-1", name: "end_module", args: {} }],
+          [{ type: "text", text: "Let's keep going." }],
+        ]),
+        createSTT: fakeSTT("success"),
+        createTTS: fakeTTS("success"),
+        getCurriculumForAvatar: fakeCurriculum(objectives),
+        getRemainingObjectiveTitles,
+        ...noRetrieval,
+      });
+      socket.emitMessage({ ...sessionStartBase, avatarId: "11111111-1111-1111-1111-111111111111" });
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+      expect(findMessages(socket, "module.completed")).toHaveLength(0);
+    });
+
+    it("end_module sends module.completed once every objective has passed", async () => {
+      const socket = new FakeSocket();
+      const getRemainingObjectiveTitles = vi.fn(async () => []);
+      createConversationHandler(socket as never, claims, {
+        createLLM: fakeCurriculumLLM([
+          [{ type: "tool_call", id: "call-1", name: "end_module", args: {} }],
+          [{ type: "text", text: "Great work, you're done!" }],
+        ]),
+        createSTT: fakeSTT("success"),
+        createTTS: fakeTTS("success"),
+        getCurriculumForAvatar: fakeCurriculum(objectives),
+        getRemainingObjectiveTitles,
+        ...noRetrieval,
+      });
+      socket.emitMessage({ ...sessionStartBase, avatarId: "11111111-1111-1111-1111-111111111111" });
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+      expect(findMessages(socket, "module.completed")).toEqual([{ type: "module.completed", curriculumId: "curr-1" }]);
+    });
   });
 });

@@ -94,6 +94,12 @@ enum KnowledgeDocumentStatus {
   FAILED
 }
 
+/// Owned by .claude/specs/interactive-assessment.md.
+enum ObjectiveProgressVerdict {
+  PASS
+  RETRY
+}
+
 /// Tenant root. Not itself org-scoped — everything else hangs off org_id.
 model Organization {
   id                 String       @id @default(uuid()) @db.Uuid
@@ -113,6 +119,9 @@ model Organization {
   avatars             Avatar[]
   knowledgeDocuments  KnowledgeDocument[]
   knowledgeChunks     KnowledgeChunk[]
+  curricula           Curriculum[]
+  objectives          Objective[]
+  objectiveProgresses ObjectiveProgress[]
 
   @@map("organizations")
 }
@@ -148,9 +157,10 @@ model User {
   createdAt              DateTime   @default(now()) @map("created_at")
   updatedAt              DateTime   @updatedAt @map("updated_at")
 
-  memberships   Membership[]
-  sessions      Session[]
-  oauthAccounts OAuthAccount[]
+  memberships         Membership[]
+  sessions            Session[]
+  oauthAccounts       OAuthAccount[]
+  objectiveProgresses ObjectiveProgress[]
 
   @@map("users")
 }
@@ -260,6 +270,7 @@ model Avatar {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   organization Organization @relation(fields: [orgId], references: [id])
+  curriculum   Curriculum?
 
   @@index([orgId])
   @@index([orgId, createdById, status])
@@ -326,4 +337,79 @@ model KnowledgeChunk {
   @@index([orgId])
   @@index([documentId])
   @@map("knowledge_chunks")
+}
+
+/// Tenant-scoped. org_id + RLS policy required — see .claude/rules/tenancy.md. Owned by
+/// .claude/specs/interactive-assessment.md. One curriculum per Avatar (1:1) — the smallest
+/// structure that makes start_checkpoint/grade_answer/record_progress/end_module meaningful.
+/// Multi-curriculum-per-avatar and avatar-agnostic curricula are deferred — see the spec's
+/// "Scope decisions".
+model Curriculum {
+  id          String   @id @default(uuid()) @db.Uuid
+  orgId       String   @map("org_id") @db.Uuid
+  avatarId    String   @unique @map("avatar_id") @db.Uuid
+  createdById String   @map("created_by_id") @db.Uuid
+  title       String
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [orgId], references: [id])
+  avatar       Avatar       @relation(fields: [avatarId], references: [id])
+  objectives   Objective[]
+
+  @@index([orgId])
+  @@map("curricula")
+}
+
+/// Tenant-scoped. org_id + RLS policy required — see .claude/rules/tenancy.md. Owned by
+/// .claude/specs/interactive-assessment.md. orgId denormalized from Curriculum, same reasoning as
+/// KnowledgeChunk (RLS and lookups filter on an indexed column directly, no join needed). One
+/// teachable, checkable unit within a Curriculum.
+model Objective {
+  id              String   @id @default(uuid()) @db.Uuid
+  orgId           String   @map("org_id") @db.Uuid
+  curriculumId    String   @map("curriculum_id") @db.Uuid
+  order           Int
+  title           String
+  teachingContent String   @map("teaching_content")
+  checkQuestion   String   @map("check_question")
+  gradingCriteria String   @map("grading_criteria")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  organization Organization        @relation(fields: [orgId], references: [id])
+  curriculum   Curriculum          @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
+  progress     ObjectiveProgress[]
+
+  @@unique([curriculumId, order])
+  @@index([orgId])
+  @@index([curriculumId])
+  @@map("objectives")
+}
+
+/// Tenant-scoped. org_id + RLS policy required — see .claude/rules/tenancy.md. Owned by
+/// .claude/specs/interactive-assessment.md. Server-only writes — record_progress is serverOnly
+/// per .claude/rules/tenancy.md. Never written from a route driven by request-body input; only
+/// from conversation-service's tool dispatcher, fed by grade_answer's own server-computed verdict
+/// for the SAME turn (never a verdict argument supplied by the model). One row per
+/// (objective, learner) — upserted on every grade_answer + record_progress pair.
+model ObjectiveProgress {
+  id          String                   @id @default(uuid()) @db.Uuid
+  orgId       String                   @map("org_id") @db.Uuid
+  objectiveId String                   @map("objective_id") @db.Uuid
+  learnerId   String                   @map("learner_id") @db.Uuid
+  verdict     ObjectiveProgressVerdict
+  attempts    Int                      @default(1)
+  feedback    String
+  createdAt   DateTime                 @default(now()) @map("created_at")
+  updatedAt   DateTime                 @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [orgId], references: [id])
+  objective    Objective    @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+  learner      User         @relation(fields: [learnerId], references: [id])
+
+  @@unique([objectiveId, learnerId])
+  @@index([orgId])
+  @@index([learnerId])
+  @@map("objective_progress")
 }
