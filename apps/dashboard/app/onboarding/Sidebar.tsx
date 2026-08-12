@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { AuthOrg } from "../../lib/api-client";
 import styles from "./Sidebar.module.css";
 import {
   BellIcon,
@@ -14,10 +15,17 @@ import {
   VideoIcon,
 } from "./icons";
 
-export function Sidebar() {
+export interface SidebarProps {
+  org?: AuthOrg | null;
+}
+
+export function Sidebar({ org }: SidebarProps) {
   return (
     <aside className={styles.sidebar}>
-      <div className={styles.workspace}>SPM MEDICARE AI</div>
+      <div className={styles.workspace}>
+        {org?.logoUrl && <img src={org.logoUrl} alt="" className={styles.workspaceLogo} />}
+        <span>{org?.name ?? "Avatrain"}</span>
+      </div>
 
       <div className={styles.personaCard}>
         <span className={styles.personaIcon}>
@@ -81,9 +89,9 @@ export function Sidebar() {
           <span className={styles.userName}>Rahul Sharma</span>
           <span className={styles.userRole}>Sales Team</span>
         </div>
-        <button type="button" className={styles.userSettings} aria-label="Settings">
+        <a href="/settings" className={styles.userSettings} aria-label="Settings">
           <GearIcon size={16} />
-        </button>
+        </a>
       </div>
     </aside>
   );

@@ -89,10 +89,16 @@ enum AvatarPreviewProvider {
 
 /// Tenant root. Not itself org-scoped — everything else hangs off org_id.
 model Organization {
-  id         String       @id @default(uuid()) @db.Uuid
-  name       String
-  dataRegion DataRegion   @default(US) @map("data_region")
-  createdAt  DateTime     @default(now()) @map("created_at")
+  id                 String       @id @default(uuid()) @db.Uuid
+  name               String
+  dataRegion         DataRegion   @default(US) @map("data_region")
+  // Additive branding fields — see .claude/specs/tenant-branding.md. All
+  // nullable: an org that never sets them renders with the product's
+  // existing hardcoded defaults, never breaks.
+  logoUrl            String?      @map("logo_url")
+  primaryColorHex    String?      @map("primary_color_hex")
+  secondaryColorHex  String?      @map("secondary_color_hex")
+  createdAt          DateTime     @default(now()) @map("created_at")
 
   applications Application[]
   memberships  Membership[]

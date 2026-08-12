@@ -11,6 +11,7 @@ import {
   type OnboardingDraftInput,
   type OnboardingDraftResponse,
 } from "@avatrain/shared/onboarding";
+import { orgBrandingResultSchema, type OrgBrandingUpdateInput } from "@avatrain/shared/org";
 
 export interface AuthUser {
   id: string;
@@ -21,6 +22,9 @@ export interface AuthUser {
 export interface AuthOrg {
   id: string;
   name: string;
+  logoUrl: string | null;
+  primaryColorHex: string | null;
+  secondaryColorHex: string | null;
 }
 
 export type AuthRole = "OWNER" | "MEMBER";
@@ -167,4 +171,15 @@ export async function patchOnboardingDraft(
 export async function completeOnboarding(): Promise<OnboardingCompleteResponse> {
   const result = await apiFetch<unknown>("/onboarding/complete", { method: "POST" });
   return onboardingCompleteResponseSchema.parse(result);
+}
+
+/** PATCH /v1/org/branding — OWNER only, 403s otherwise. Partial update: any
+ * subset of OrgBrandingUpdateInput's fields. See
+ * .claude/specs/tenant-branding.md. */
+export async function updateOrgBranding(patch: OrgBrandingUpdateInput): Promise<AuthOrg> {
+  const result = await apiFetch<unknown>("/org/branding", {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+  return orgBrandingResultSchema.parse(result);
 }
