@@ -34,6 +34,7 @@ import {
   type SessionCurriculum,
   type SessionCurriculumObjective,
 } from "./curriculum-service.js";
+import { getAvatarById } from "./avatar-service.js";
 
 // docs/ARCHITECTURE.md §5's retrieval budget ("<100ms p95 ... or it needs a
 // filler utterance") — this pipeline has no filler-utterance mechanism, so
@@ -110,6 +111,8 @@ export interface ConversationHandlerDeps {
   recordObjectiveProgress?: typeof recordObjectiveProgress;
   /** Injectable for tests; defaults to the real ./curriculum-service.js. */
   getRemainingObjectiveTitles?: typeof getRemainingObjectiveTitles;
+  /** Injectable for tests; defaults to the real ./avatar-service.js. Only called when claims.pinnedAvatarId is set (embed sessions). */
+  getAvatarById?: typeof getAvatarById;
 }
 
 /**
@@ -231,6 +234,7 @@ export function createConversationHandler(
   const loadCurriculum = deps.getCurriculumForAvatar ?? getCurriculumForAvatar;
   const persistProgress = deps.recordObjectiveProgress ?? recordObjectiveProgress;
   const remainingObjectiveTitles = deps.getRemainingObjectiveTitles ?? getRemainingObjectiveTitles;
+  const loadAvatarById = deps.getAvatarById ?? getAvatarById;
   const messages: LLMMessage[] = [];
 
   let llm: LLMProvider | null = null;
@@ -470,6 +474,17 @@ Grading criteria: ${objective.gradingCriteria}`;
           if (!objectiveId || !graded) {
             return "error: call grade_answer for this objective in this same turn before recording progress";
           }
+          // .claude/rules/tenancy.md: "Unsigned (anonymous) identity may
+          // never write to ObjectiveProgress." Embed sessions (claims.userId
+          // null) still get the grading feedback streamed for UX — it just
+          // never persists, so it won't survive a refresh and end_module
+          // (below) can't measure completion against it.
+          if (!claims.userId) {
+            if (!controller.signal.aborted) {
+              send({ type: "checkpoint.result", objectiveId, verdict: graded.verdict, feedback: graded.feedback, attempts: 1 });
+            }
+            return "ok: progress noted for this turn (not persisted — anonymous session)";
+          }
           const { attempts } = await persistProgress(
             claims.orgId,
             objectiveId,
@@ -483,6 +498,9 @@ Grading criteria: ${objective.gradingCriteria}`;
           return "ok: progress recorded";
         }
         case "end_module": {
+          if (!claims.userId) {
+            return "error: module completion tracking isn't available in this anonymous session";
+          }
           const remaining = await remainingObjectiveTitles(claims.orgId, curriculum.curriculumId, claims.userId);
           if (remaining.length > 0) return `error: objectives not yet passed: ${remaining.join(", ")}`;
           if (!controller.signal.aborted) send({ type: "module.completed", curriculumId: curriculum.curriculumId });
@@ -616,13 +634,33 @@ Grading criteria: ${objective.gradingCriteria}`;
     switch (message.type) {
       case "session.start": {
         language = message.language;
-        systemPrompt = buildSystemPrompt({
-          avatarName: message.avatarName,
-          expertise: message.expertise,
-          language,
-        });
-        voiceTone = message.voiceTone;
-        gender = message.gender;
+
+        let avatarName = message.avatarName;
+        let expertise = message.expertise;
+        let resolvedVoiceTone = message.voiceTone;
+        let resolvedGender = message.gender;
+        let effectiveAvatarId = message.avatarId;
+
+        // Embed sessions (claims.pinnedAvatarId set by routes/embed.ts's
+        // ticket mint) never trust client-supplied persona fields — an
+        // anonymous visitor on a third-party page could otherwise send an
+        // arbitrary system-prompt-shaping payload. Same trust posture
+        // getCallerSimliFaceId already applies to simliFaceId: resolved
+        // server-side from the org's own data, once per session.start.
+        if (claims.pinnedAvatarId) {
+          const pinned = await loadAvatarById(claims.orgId, claims.pinnedAvatarId);
+          if (pinned) {
+            avatarName = pinned.name ?? avatarName;
+            expertise = pinned.expertise ?? expertise;
+            resolvedVoiceTone = pinned.voice ?? resolvedVoiceTone;
+            resolvedGender = pinned.gender ?? resolvedGender;
+          }
+          effectiveAvatarId = claims.pinnedAvatarId;
+        }
+
+        systemPrompt = buildSystemPrompt({ avatarName, expertise, language });
+        voiceTone = resolvedVoiceTone;
+        gender = resolvedGender;
         llm = createLLM(process.env, {
           onResolved: (name) => {
             currentTurnLlmServedBy = name;
@@ -630,12 +668,9 @@ Grading criteria: ${objective.gradingCriteria}`;
         });
         stt = createSTT(process.env);
 
-        // Not yet sent by apps/dashboard's session screen (see
-        // ws-messages.ts's avatarId doc comment) — a session without it
-        // behaves exactly as before this feature existed.
-        if (message.avatarId) {
+        if (effectiveAvatarId) {
           curriculum = await withCurriculumTimeout(
-            loadCurriculum(claims.orgId, message.avatarId),
+            loadCurriculum(claims.orgId, effectiveAvatarId),
             CURRICULUM_LOAD_TIMEOUT_MS,
           );
           if (curriculum) systemPrompt = appendCurriculumContext(systemPrompt, curriculum.objectives);

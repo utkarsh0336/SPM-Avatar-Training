@@ -1,5 +1,6 @@
 import type { AvatarProvider, AvatarProviderStartConfig } from "./index.js";
 import { idleClipPath, placeholderClipPath } from "./idle-clip-path.js";
+import { startAudioAmplitudeLoop, type AudioAmplitudeLoopHandle } from "./audio-amplitude.js";
 
 export interface MockAvatarProviderOptions {
   onSubtitleChange?: (text: string) => void;
@@ -45,49 +46,19 @@ export function createMockAvatarProvider(options: MockAvatarProviderOptions = {}
   const audioElement = options.createAudioElement?.() ?? document.createElement("audio");
   audioElement.autoplay = true;
 
-  // Resolved lazily via globalThis (a safe property access, never a
-  // ReferenceError) rather than bound eagerly at factory-creation time —
-  // start()/stop() never touch these, so a test that never calls speak()
-  // should never need requestAnimationFrame to exist at all (it doesn't in
-  // the plain Node vitest environment this package's tests run under).
-  const raf = (callback: () => void): number =>
-    (options.requestAnimationFrame ?? globalThis.requestAnimationFrame)(callback);
-  const caf = (handle: number): void =>
-    (options.cancelAnimationFrame ?? globalThis.cancelAnimationFrame)?.(handle);
   const createMediaStream = options.createMediaStream ?? ((tracks: MediaStreamTrack[]) => new MediaStream(tracks));
 
   let container: HTMLElement | null = null;
   let mounted = false;
   let audioContext: AudioContext | null = null;
-  let analyser: AnalyserNode | null = null;
   let sourceNode: { disconnect(): void } | null = null;
-  let amplitudeRafHandle: number | null = null;
+  let amplitudeLoop: AudioAmplitudeLoopHandle | null = null;
 
   function stopAmplitudeLoop(): void {
-    if (amplitudeRafHandle !== null) {
-      caf(amplitudeRafHandle);
-      amplitudeRafHandle = null;
-    }
+    amplitudeLoop?.stop();
+    amplitudeLoop = null;
     sourceNode?.disconnect();
     sourceNode = null;
-    analyser = null;
-    options.onAmplitudeChange?.(0);
-  }
-
-  function runAmplitudeLoop(activeAnalyser: AnalyserNode): void {
-    const data = new Uint8Array(activeAnalyser.frequencyBinCount);
-    const tick = () => {
-      if (!analyser) return;
-      analyser.getByteTimeDomainData(data);
-      let sumSquares = 0;
-      for (let i = 0; i < data.length; i++) {
-        const normalized = (data[i]! - 128) / 128;
-        sumSquares += normalized * normalized;
-      }
-      options.onAmplitudeChange?.(Math.sqrt(sumSquares / data.length));
-      amplitudeRafHandle = raf(tick);
-    };
-    amplitudeRafHandle = raf(tick);
   }
 
   return {
@@ -109,14 +80,17 @@ export function createMockAvatarProvider(options: MockAvatarProviderOptions = {}
       options.onSubtitleChange?.(subtitleText);
 
       audioContext = options.createAudioContext?.() ?? new AudioContext();
-      const newAnalyser = audioContext.createAnalyser();
-      newAnalyser.fftSize = 2048;
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 2048;
       const newSource = audioContext.createMediaStreamSource(createMediaStream([audioTrack]));
-      newSource.connect(newAnalyser);
-
-      analyser = newAnalyser;
+      newSource.connect(analyser);
       sourceNode = newSource;
-      runAmplitudeLoop(newAnalyser);
+
+      amplitudeLoop?.stop();
+      amplitudeLoop = startAudioAmplitudeLoop(analyser, (amplitude) => options.onAmplitudeChange?.(amplitude), {
+        requestAnimationFrame: options.requestAnimationFrame,
+        cancelAnimationFrame: options.cancelAnimationFrame,
+      });
     },
 
     interrupt(): void {

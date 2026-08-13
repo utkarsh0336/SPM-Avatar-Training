@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getMe } from "../../../lib/server-api";
 import { BrandingForm } from "./BrandingForm";
@@ -30,6 +31,17 @@ export default async function SettingsPage() {
         </p>
       </div>
       <BrandingForm initialOrg={me.org} />
+
+      <div className={styles.form}>
+        <span className={styles.label}>EMBED ON A WEBSITE</span>
+        <p className={styles.subtitle}>
+          Put {me.org.name}&rsquo;s AI avatar on any site — create a publishable key, pin a persona, and allowlist
+          the origins that may load it.
+        </p>
+        <Link href="/settings/embed" className={styles.submit}>
+          Manage Embeds
+        </Link>
+      </div>
     </div>
   );
 }

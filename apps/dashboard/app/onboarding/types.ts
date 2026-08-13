@@ -1,3 +1,5 @@
+import { SKIN_TONE_HEX, HAIR_COLOR_HEX } from "@avatrain/shared/tutor";
+
 export const TOTAL_STEPS = 6;
 
 export type AvatarStyle = "REALISTIC" | "ANIMATED" | "STYLIZED_3D";
@@ -176,14 +178,11 @@ export const VOICE_SUBTITLES: Record<VoiceTone, string> = {
 // Order matters — rendered left-to-right in that order in the picker.
 export const SKIN_TONE_OPTIONS = ["TONE_1", "TONE_2", "TONE_3", "TONE_4", "TONE_5", "TONE_6"] as const;
 
-export const SKIN_TONE_SWATCHES: Record<string, string> = {
-  TONE_1: "#F7DFC4",
-  TONE_2: "#EFC9A2",
-  TONE_3: "#DCA477",
-  TONE_4: "#BE8148",
-  TONE_5: "#9C6432",
-  TONE_6: "#7A4A24",
-};
+// Sourced from @avatrain/shared so the wizard's swatch colors and
+// packages/avatar-core's VRM material tinting can never drift apart — see
+// SKIN_TONE_HEX/HAIR_COLOR_HEX's doc comment in
+// packages/shared/src/tutor/avatar-config.ts.
+export const SKIN_TONE_SWATCHES: Record<string, string> = SKIN_TONE_HEX;
 
 export const HAIR_COLOR_OPTIONS = [
   "BLACK",
@@ -196,13 +195,4 @@ export const HAIR_COLOR_OPTIONS = [
   "BLUE",
 ] as const;
 
-export const HAIR_COLOR_SWATCHES: Record<string, string> = {
-  BLACK: "#2B2724",
-  AUBURN: "#7A4020",
-  COPPER: "#A5622F",
-  BLONDE: "#D4A83C",
-  PLATINUM: "#EDE0C8",
-  RED: "#C43B2C",
-  PURPLE: "#7B3FA0",
-  BLUE: "#3B7FC4",
-};
+export const HAIR_COLOR_SWATCHES: Record<string, string> = HAIR_COLOR_HEX;

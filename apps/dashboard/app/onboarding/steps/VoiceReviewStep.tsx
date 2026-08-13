@@ -9,7 +9,6 @@ import { useOnboarding } from "../OnboardingContext";
 import { WizardNav } from "../WizardNav";
 import { HeartIcon, MicIcon, SparkleIcon, VolumeIcon, type IconComponent } from "../icons";
 import { EXPERTISE_LABELS, VOICE_LABELS, VOICE_SUBTITLES, type VoiceTone } from "../types";
-import { writeOnboardingAvatarHandoff } from "../../../lib/onboarding-handoff";
 import { useSessions } from "../../sessions/SessionsContext";
 import shared from "./steps.module.css";
 import styles from "./VoiceReviewStep.module.css";
@@ -37,12 +36,10 @@ export function VoiceReviewStep() {
       // before validating server-side, so a fast click-through can't lose it.
       await flush();
       await completeOnboarding();
-      // Kept alongside the new persisted completion call, not replaced by
-      // it — useConversationSession.ts still reads this localStorage handoff
-      // to seed a session's persona; migrating that consumer to the
-      // persisted Avatar record is a separate follow-up (see
-      // avatar-builder-customization.md Implementation Assumptions #5).
-      writeOnboardingAvatarHandoff(state);
+      // useConversationSession.ts now reads the persisted Avatar record
+      // (GET /v1/avatars/mine) rather than a localStorage handoff — see
+      // avatar-builder-customization.md's Implementation Assumptions #5,
+      // closed. No client-side handoff write needed here anymore.
       // Create the session and go straight into it — landing on /sessions
       // (the hub) after finishing the builder meant a second manual "New
       // Video Chat" step just to reach a live avatar, when the whole point

@@ -17,7 +17,16 @@ import { generateOpaqueToken } from "@avatrain/shared";
  */
 export interface WsTicketClaims {
   orgId: string;
-  userId: string;
+  /** null for an anonymous embed visitor (routes/embed.ts) — a publishable-key-minted ticket has no real user behind it. */
+  userId: string | null;
+  /**
+   * Set only by routes/embed.ts's ticket mint — the Application's pinned
+   * avatarId, authoritative for persona resolution server-side
+   * (conversation-service.ts ignores any client-sent persona fields when
+   * this is present, the same trust posture getCallerSimliFaceId already
+   * applies to simliFaceId). Undefined for a normal authenticated session.
+   */
+  pinnedAvatarId?: string;
 }
 
 interface StoredTicket extends WsTicketClaims {
@@ -48,5 +57,5 @@ export function redeemWsTicket(ticket: string): WsTicketClaims | null {
   tickets.delete(ticket);
   if (!stored) return null;
   if (stored.expiresAt < Date.now()) return null;
-  return { orgId: stored.orgId, userId: stored.userId };
+  return { orgId: stored.orgId, userId: stored.userId, pinnedAvatarId: stored.pinnedAvatarId };
 }

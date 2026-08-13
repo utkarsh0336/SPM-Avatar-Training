@@ -5,33 +5,31 @@ import {
   outfitSchema,
   expertiseSchema,
   voiceToneSchema,
+  hairStyleSchema,
+  SKIN_TONE_TOKENS,
+  skinToneSchema,
+  HAIR_COLOR_TOKENS,
+  hairColorSchema,
+  type HairStyleValue,
 } from "../tutor/avatar-config.js";
 
-export { avatarStyleSchema, avatarGenderSchema, outfitSchema, expertiseSchema, voiceToneSchema };
-
-export const hairStyleSchema = z.enum(["SHORT", "MEDIUM", "LONG", "CURLY", "WAVY", "BALD"]);
-export type HairStyleValue = z.infer<typeof hairStyleSchema>;
-
-// Application-layer allowlists — `avatars.skin_tone`/`hair_color` are plain
-// Postgres TEXT columns, not enums, so the palette can change without a
-// migration. See .claude/specs/onboarding.md's Database Changes. Values must
-// stay in sync with apps/dashboard/app/onboarding/types.ts's
-// SKIN_TONE_OPTIONS/HAIR_COLOR_OPTIONS — schema.test.ts drift-guards this,
-// same convention as tutor/avatar-config.test.ts.
-export const SKIN_TONE_TOKENS = ["TONE_1", "TONE_2", "TONE_3", "TONE_4", "TONE_5", "TONE_6"] as const;
-export const skinToneSchema = z.enum(SKIN_TONE_TOKENS);
-
-export const HAIR_COLOR_TOKENS = [
-  "BLACK",
-  "AUBURN",
-  "COPPER",
-  "BLONDE",
-  "PLATINUM",
-  "RED",
-  "PURPLE",
-  "BLUE",
-] as const;
-export const hairColorSchema = z.enum(HAIR_COLOR_TOKENS);
+// hairStyleSchema/SKIN_TONE_TOKENS/HAIR_COLOR_TOKENS moved to
+// tutor/avatar-config.ts (onboardingHandoffSchema needs them too, and that
+// file must not import back from here) — re-exported for every existing
+// consumer of this module.
+export {
+  avatarStyleSchema,
+  avatarGenderSchema,
+  outfitSchema,
+  expertiseSchema,
+  voiceToneSchema,
+  hairStyleSchema,
+  SKIN_TONE_TOKENS,
+  skinToneSchema,
+  HAIR_COLOR_TOKENS,
+  hairColorSchema,
+};
+export type { HairStyleValue };
 
 export const avatarPreviewProviderSchema = z.enum(["NONE", "READY_PLAYER_ME"]);
 export type AvatarPreviewProvider = z.infer<typeof avatarPreviewProviderSchema>;

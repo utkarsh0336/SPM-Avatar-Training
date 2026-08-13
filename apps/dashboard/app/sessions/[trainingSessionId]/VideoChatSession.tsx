@@ -72,7 +72,12 @@ function VideoChatSessionContent({ session }: VideoChatSessionProps) {
   }
 
   return (
-    <ConversationSessionProvider trainingSessionId={session.id} topic={session.topic} muted={state.muted}>
+    <ConversationSessionProvider
+      trainingSessionId={session.id}
+      topic={session.topic}
+      muted={state.muted}
+      avatarId={session.avatarId}
+    >
       <div className={styles.root} ref={rootRef}>
         <div className={styles.mainColumn}>
           <VideoStage session={session} />

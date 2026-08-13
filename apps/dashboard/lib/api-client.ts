@@ -33,6 +33,20 @@ import {
   type ObjectiveInput,
   type ReplaceCurriculumObjectivesResponse,
 } from "@avatrain/shared/curriculum";
+import {
+  listMyAvatarsResponseSchema,
+  getAvatarResponseSchema,
+  type ListMyAvatarsResponse,
+  type AvatarRecord,
+} from "@avatrain/shared/avatar";
+import {
+  listApplicationsResponseSchema,
+  getApplicationResponseSchema,
+  type ListApplicationsResponse,
+  type ApplicationRecord,
+  type CreateApplicationRequest,
+  type UpdateApplicationRequest,
+} from "@avatrain/shared/application";
 
 export interface AuthUser {
   id: string;
@@ -246,6 +260,81 @@ export type { KnowledgeDocumentResult };
 export async function listActiveAvatars(): Promise<ListAvatarsResponse> {
   const result = await apiFetch<unknown>("/avatars", { method: "GET" });
   return listAvatarsResponseSchema.parse(result);
+}
+
+/**
+ * GET /v1/avatars/mine — every avatar the caller has created, ACTIVE first.
+ * Replaces the old localStorage onboarding handoff as the source of truth
+ * for a live session's persona (useConversationSession.ts) — see
+ * .claude/specs/avatar-builder-customization.md's Implementation
+ * Assumptions #5.
+ */
+export async function getMyAvatars(): Promise<ListMyAvatarsResponse> {
+  const result = await apiFetch<unknown>("/avatars/mine", { method: "GET" });
+  return listMyAvatarsResponseSchema.parse(result);
+}
+
+/** GET /v1/avatars/:avatarId — any org member. 404s if the id doesn't exist or belongs to another org. */
+export async function getAvatar(avatarId: string): Promise<AvatarRecord> {
+  const result = await apiFetch<unknown>(`/avatars/${avatarId}`, { method: "GET" });
+  return getAvatarResponseSchema.parse(result).avatar;
+}
+
+/** GET /v1/avatars/all — OWNER only. Every avatar in the org, any status — powers the persona management page. */
+export async function listOrgAvatars(): Promise<ListMyAvatarsResponse> {
+  const result = await apiFetch<unknown>("/avatars/all", { method: "GET" });
+  return listMyAvatarsResponseSchema.parse(result);
+}
+
+/** POST /v1/avatars — OWNER only. Creates a blank DRAFT persona, ungated by onboarding's one-time-completion check. */
+export async function createAvatar(name?: string): Promise<AvatarRecord> {
+  const result = await apiFetch<unknown>("/avatars", { method: "POST", body: JSON.stringify(name ? { name } : {}) });
+  return getAvatarResponseSchema.parse(result).avatar;
+}
+
+/** PATCH /v1/avatars/:avatarId — OWNER only. Partial update, any subset of OnboardingDraftInput's fields. */
+export async function updateAvatar(avatarId: string, patch: OnboardingDraftInput): Promise<AvatarRecord> {
+  const result = await apiFetch<unknown>(`/avatars/${avatarId}`, { method: "PATCH", body: JSON.stringify(patch) });
+  return getAvatarResponseSchema.parse(result).avatar;
+}
+
+/** POST /v1/avatars/:avatarId/publish — OWNER only. Validates completeness and sets status ACTIVE (works from DRAFT or ARCHIVED). */
+export async function publishAvatar(avatarId: string): Promise<AvatarRecord> {
+  const result = await apiFetch<unknown>(`/avatars/${avatarId}/publish`, { method: "POST" });
+  return getAvatarResponseSchema.parse(result).avatar;
+}
+
+/** POST /v1/avatars/:avatarId/archive — OWNER only. Soft-delete: sets status ARCHIVED, preserving any attached Curriculum. */
+export async function archiveAvatar(avatarId: string): Promise<AvatarRecord> {
+  const result = await apiFetch<unknown>(`/avatars/${avatarId}/archive`, { method: "POST" });
+  return getAvatarResponseSchema.parse(result).avatar;
+}
+
+/** GET /v1/applications — OWNER only. Every embed configuration for the org. */
+export async function listApplications(): Promise<ListApplicationsResponse> {
+  const result = await apiFetch<unknown>("/applications", { method: "GET" });
+  return listApplicationsResponseSchema.parse(result);
+}
+
+/** POST /v1/applications — OWNER only. */
+export async function createApplication(input: CreateApplicationRequest): Promise<ApplicationRecord> {
+  const result = await apiFetch<unknown>("/applications", { method: "POST", body: JSON.stringify(input) });
+  return getApplicationResponseSchema.parse(result).application;
+}
+
+/** PATCH /v1/applications/:applicationId — OWNER only. Partial update. */
+export async function updateApplication(applicationId: string, patch: UpdateApplicationRequest): Promise<ApplicationRecord> {
+  const result = await apiFetch<unknown>(`/applications/${applicationId}`, { method: "PATCH", body: JSON.stringify(patch) });
+  return getApplicationResponseSchema.parse(result).application;
+}
+
+/** DELETE /v1/applications/:applicationId — OWNER only. 204 No Content on success. */
+export async function deleteApplication(applicationId: string): Promise<void> {
+  const response = await fetch(`/api/applications/${applicationId}`, { method: "DELETE" });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({ error: "unknown_error" }))) as ApiErrorBody;
+    throw new ApiError(response.status, body);
+  }
 }
 
 /** POST /v1/curricula — OWNER only. 409s if the avatar already has a curriculum. */

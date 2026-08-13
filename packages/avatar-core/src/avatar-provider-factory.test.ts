@@ -9,25 +9,45 @@ function createFakeAudioElement() {
 }
 
 describe("createAvatarProviderFromEnv", () => {
-  it("defaults to the mock provider when NEXT_PUBLIC_AVATAR_PROVIDER is unset", () => {
+  it("defaults to the vrm provider when NEXT_PUBLIC_AVATAR_PROVIDER is unset", () => {
     const provider = createAvatarProviderFromEnv({
       env: {},
       createVideoElement: createFakeVideoElement,
       createAudioElement: createFakeAudioElement,
     });
-    // Mock provider always reports a null videoTrack — a real Simli
-    // provider only does so before start() has resolved, but this alone
-    // isn't a reliable enough signal, so this test only asserts the
-    // factory didn't throw for the missing-token-requirement path below.
+    // vrm (like Mock) always reports a null videoTrack before/without a
+    // fallback becoming active — a real Simli provider only does so before
+    // start() has resolved, but this alone isn't a reliable enough signal,
+    // so this test only asserts the factory didn't throw at construction.
     expect(provider.videoTrack).toBeNull();
   });
 
-  it("defaults to mock for any value other than exactly 'simli'", () => {
+  it("defaults to vrm for any value other than exactly 'simli' or 'mock'", () => {
     expect(() =>
       createAvatarProviderFromEnv({
         env: { NEXT_PUBLIC_AVATAR_PROVIDER: "tavus" },
         createVideoElement: createFakeVideoElement,
         createAudioElement: createFakeAudioElement,
+      }),
+    ).not.toThrow();
+  });
+
+  it("constructs the mock provider when explicitly requested", () => {
+    const provider = createAvatarProviderFromEnv({
+      env: { NEXT_PUBLIC_AVATAR_PROVIDER: "mock" },
+      createVideoElement: createFakeVideoElement,
+      createAudioElement: createFakeAudioElement,
+    });
+    expect(provider.videoTrack).toBeNull();
+  });
+
+  it("constructs the vrm provider when explicitly requested, forwarding skin/hair hex", () => {
+    expect(() =>
+      createAvatarProviderFromEnv({
+        env: { NEXT_PUBLIC_AVATAR_PROVIDER: "vrm" },
+        createAudioElement: createFakeAudioElement,
+        skinToneHex: "#EFC9A2",
+        hairColorHex: "#7A4020",
       }),
     ).not.toThrow();
   });

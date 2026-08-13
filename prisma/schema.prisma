@@ -76,6 +76,12 @@ enum VoiceTone {
 enum AvatarStatus {
   DRAFT
   ACTIVE
+  /// Soft-deleted, not removed — Curriculum.avatarId is a required @unique
+  /// FK with no onDelete behavior specified, so a hard DELETE on an avatar
+  /// with a curriculum would throw a raw FK-violation. Archiving instead
+  /// preserves the curriculum and all ObjectiveProgress history and just
+  /// excludes the avatar from pickers/session-start/embed config.
+  ARCHIVED
 }
 
 /// Additive — reserved for an optional, free avatar-generation vendor. NONE
@@ -128,14 +134,30 @@ model Organization {
 
 /// Tenant-scoped. org_id + RLS policy required — see prisma/migrations and
 /// .claude/rules/tenancy.md.
+/// A single embeddable widget configuration — an org creates one Application
+/// per third-party site/embed it wants to run, each with its own
+/// publishableKey, allowed origins, and pinned avatar. No secret key: the
+/// public surface (apps/api/src/routes/embed.ts) only ever needs the
+/// publishable key, never privileged server-to-server access. See
+/// .claude/rules/embed.md.
 model Application {
-  id              String       @id @default(uuid()) @db.Uuid
-  orgId           String       @map("org_id") @db.Uuid
-  name            String
-  publishableKey  String       @unique @map("publishable_key")
-  createdAt       DateTime     @default(now()) @map("created_at")
+  id             String   @id @default(uuid()) @db.Uuid
+  orgId          String   @map("org_id") @db.Uuid
+  name           String
+  publishableKey String   @unique @map("publishable_key")
+  /// Exact-string origin allowlist (e.g. "https://example.com") — checked
+  /// against the request's Origin header by embed.ts before minting a
+  /// ticket or returning config. Never a wildcard/prefix match.
+  allowedOrigins String[] @default([]) @map("allowed_origins")
+  /// The persona this embed renders — nullable so an Application can be
+  /// created before an avatar exists yet; embed.ts 503s until it's set.
+  avatarId       String?  @map("avatar_id") @db.Uuid
+  /// Kill switch without rotating the key — embed.ts checks this first.
+  isEnabled      Boolean  @default(true) @map("is_enabled")
+  createdAt      DateTime @default(now()) @map("created_at")
 
   organization Organization @relation(fields: [orgId], references: [id])
+  avatar       Avatar?      @relation(fields: [avatarId], references: [id])
 
   @@index([orgId])
   @@map("applications")
@@ -271,6 +293,7 @@ model Avatar {
 
   organization Organization @relation(fields: [orgId], references: [id])
   curriculum   Curriculum?
+  applications Application[]
 
   @@index([orgId])
   @@index([orgId, createdById, status])

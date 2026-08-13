@@ -1,11 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { createAvatarProviderFromEnv, resolveReplicaId, type AvatarProvider } from "@avatrain/avatar-core";
+import {
+  createAvatarProviderFromEnv,
+  resolveReplicaId,
+  SKIN_TONE_HEX,
+  HAIR_COLOR_HEX,
+  type AvatarProvider,
+} from "@avatrain/avatar-core";
 import { connectConversationSession, type ConversationSessionStatus } from "@avatrain/realtime-core";
-import type { OnboardingHandoff } from "@avatrain/shared/tutor";
-import { mintConversationTicket, mintSimliSession } from "../../../lib/api-client";
-import { readOnboardingAvatarHandoff } from "../../../lib/onboarding-handoff";
+import type { AvatarStyle, Gender, Outfit, Expertise, VoiceTone } from "@avatrain/shared/tutor";
+import type { AvatarRecord } from "@avatrain/shared/avatar";
+import { getAvatar, getMyAvatars, mintConversationTicket, mintSimliSession } from "../../../lib/api-client";
 
 export interface ConversationMessage {
   id: string;
@@ -18,6 +24,8 @@ interface UseConversationSessionOptions {
   topic: string;
   containerRef: RefObject<HTMLDivElement>;
   muted: boolean;
+  /** The persona picked in NewSessionModal.tsx (session.avatarId) — when set, fetches that specific avatar instead of defaulting to the caller's own ACTIVE-first avatar. */
+  avatarId?: string | null;
 }
 
 interface UseConversationSessionResult {
@@ -28,16 +36,62 @@ interface UseConversationSessionResult {
   amplitude: number;
 }
 
-// Used whenever the trainer opens a session without having completed (or
-// after losing) the Avatar Builder handoff — never hard-fails a session.
-const DEFAULT_PERSONA: OnboardingHandoff = {
+interface ResolvedPersona {
+  avatarId: string | null;
+  name: string;
+  style: AvatarStyle;
+  gender: Gender;
+  skinTone: string;
+  hairStyle: string;
+  hairColor: string;
+  outfit: Outfit;
+  expertise: Expertise;
+  voice: VoiceTone;
+}
+
+// Used whenever the trainer opens a session without having completed
+// onboarding yet, or GET /v1/avatars/mine returns no rows (e.g. it 401s
+// mid-session-start) — never hard-fails a session. Also backfills any
+// individual field a DRAFT avatar left null (onboarding.md's fields are all
+// nullable until POST /complete requires them).
+const DEFAULT_PERSONA: ResolvedPersona = {
+  avatarId: null,
   style: "REALISTIC",
   gender: "FEMALE",
+  skinTone: "TONE_2",
+  hairStyle: "MEDIUM",
+  hairColor: "AUBURN",
   outfit: "BUSINESS_FORMAL",
   name: "My Avatar",
   expertise: "HR_LEAVE_POLICY",
   voice: "NEUTRAL",
 };
+
+/**
+ * Resolves the caller's persona from the persisted Avatar record (ACTIVE
+ * preferred, per avatar-service.ts's getMyAvatars ordering) rather than the
+ * old localStorage onboarding handoff — closes
+ * .claude/specs/avatar-builder-customization.md's Implementation
+ * Assumptions #5 ("an explicit, separate follow-up"). Falls back to
+ * DEFAULT_PERSONA wholesale on any fetch failure, and backfills individual
+ * null fields from it otherwise — a DRAFT-status record can have every
+ * customization field still unset.
+ */
+function resolvePersona(record: AvatarRecord | undefined): ResolvedPersona {
+  if (!record) return DEFAULT_PERSONA;
+  return {
+    avatarId: record.id,
+    name: record.name || DEFAULT_PERSONA.name,
+    style: record.style ?? DEFAULT_PERSONA.style,
+    gender: record.gender ?? DEFAULT_PERSONA.gender,
+    skinTone: record.skinTone ?? DEFAULT_PERSONA.skinTone,
+    hairStyle: record.hairStyle ?? DEFAULT_PERSONA.hairStyle,
+    hairColor: record.hairColor ?? DEFAULT_PERSONA.hairColor,
+    outfit: record.outfit ?? DEFAULT_PERSONA.outfit,
+    expertise: record.expertise ?? DEFAULT_PERSONA.expertise,
+    voice: record.voice ?? DEFAULT_PERSONA.voice,
+  };
+}
 
 const DEFAULT_WS_BASE = "ws://localhost:4000";
 
@@ -53,6 +107,7 @@ export function useConversationSession({
   topic,
   containerRef,
   muted,
+  avatarId,
 }: UseConversationSessionOptions): UseConversationSessionResult {
   const [status, setStatus] = useState<ConversationSessionStatus>("connecting");
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
@@ -75,7 +130,20 @@ export function useConversationSession({
       const container = containerRef.current;
       if (!container) return;
 
-      const persona = readOnboardingAvatarHandoff() ?? DEFAULT_PERSONA;
+      // Fetch, not localStorage — the persisted Avatar record is the source
+      // of truth for a live session's persona now (see resolvePersona's doc
+      // comment). Never hard-fails a session on a fetch error. When the
+      // session was created with an explicit avatarId (NewSessionModal.tsx's
+      // picker, shown once an org has more than one avatar), fetch that
+      // specific persona instead of defaulting to the caller's own
+      // ACTIVE-first avatar — a trainer must be able to run a session as a
+      // colleague's persona, not only their own.
+      const record = avatarId
+        ? await getAvatar(avatarId).catch(() => undefined)
+        : await getMyAvatars()
+            .then((result) => result.avatars[0])
+            .catch(() => undefined as AvatarRecord | undefined);
+      const persona = resolvePersona(record);
       const replicaId = resolveReplicaId({ style: persona.style, gender: persona.gender, outfit: persona.outfit });
 
       avatarProvider = createAvatarProviderFromEnv({
@@ -84,6 +152,8 @@ export function useConversationSession({
         // avatar-provider-factory.ts's env option doc comment.
         env: { NEXT_PUBLIC_AVATAR_PROVIDER: process.env.NEXT_PUBLIC_AVATAR_PROVIDER },
         getSimliSessionCredentials: mintSimliSession,
+        skinToneHex: SKIN_TONE_HEX[persona.skinTone] ?? null,
+        hairColorHex: HAIR_COLOR_HEX[persona.hairColor] ?? null,
         onSubtitleChange: (text) => {
           if (!cancelled) setCaptionText(text);
         },
@@ -130,6 +200,11 @@ export function useConversationSession({
             // the only language actually implemented end-to-end so far (see
             // Voice AI's useVoiceConversationSession.ts).
             language: "English",
+            // Now actually sent (was reserved-but-unused) — this is what
+            // activates conversation-service.ts's curriculum/checkpoint tool
+            // loop for a real training session, not just DEFAULT_PERSONA's
+            // no-curriculum fallback path.
+            avatarId: persona.avatarId ?? undefined,
           },
           onStatusChange: (next) => {
             if (!cancelled) setStatus(next);
@@ -148,9 +223,10 @@ export function useConversationSession({
           // ConversationMessage's existing {id, role, text} shape so
           // TranscriptPanel/TranscriptBubble need no changes — a richer,
           // visually distinct treatment is a natural follow-up, not part of
-          // this pass. Never fire for a session whose sessionConfig lacked
-          // avatarId (not yet sent — see the field's doc comment in
-          // packages/shared/src/realtime/ws-messages.ts).
+          // this pass. Only fires when sessionConfig.avatarId resolves to
+          // an avatar with a Curriculum attached — conversation-service.ts
+          // loads it server-side and is a no-op otherwise (e.g. DEFAULT_PERSONA's
+          // avatarId: null, or a persona with no Curriculum yet).
           onCheckpointStarted: (event) => {
             if (cancelled) return;
             setMessages((prev) => [
@@ -196,7 +272,7 @@ export function useConversationSession({
       micTrackRef.current = null;
       avatarProvider?.stop();
     };
-  }, [trainingSessionId, topic, containerRef]);
+  }, [trainingSessionId, topic, containerRef, avatarId]);
 
   return { status, messages, pendingTurn: status === "thinking", captionText, amplitude };
 }

@@ -6,6 +6,8 @@ import { INITIAL_MOCK_SESSIONS, type MockTrainingSession } from "../../lib/fixtu
 interface NewSessionInput {
   title: string;
   topic: string;
+  /** Which of the org's avatars to use — omitted/null lets useConversationSession.ts pick the caller's default. */
+  avatarId?: string | null;
 }
 
 interface SessionsContextValue {
@@ -36,6 +38,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
       relativeTime: "Just now",
       pinned: false,
       topic: input.topic,
+      avatarId: input.avatarId ?? null,
       captionText: "",
       transcript: [],
       pendingTurn: false,

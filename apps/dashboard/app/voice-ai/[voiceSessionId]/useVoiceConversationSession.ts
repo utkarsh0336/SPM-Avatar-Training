@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { createAvatarProviderFromEnv, resolveReplicaId, type AvatarProvider } from "@avatrain/avatar-core";
+import {
+  createAvatarProviderFromEnv,
+  resolveReplicaId,
+  SKIN_TONE_HEX,
+  HAIR_COLOR_HEX,
+  type AvatarProvider,
+} from "@avatrain/avatar-core";
 import { connectConversationSession, type ConversationSessionStatus } from "@avatrain/realtime-core";
 import type { Language } from "@avatrain/shared/tutor";
 import { mintConversationTicket, mintSimliSession } from "../../../lib/api-client";
@@ -79,6 +85,8 @@ export function useVoiceConversationSession({
       avatarProvider = createAvatarProviderFromEnv({
         env: { NEXT_PUBLIC_AVATAR_PROVIDER: process.env.NEXT_PUBLIC_AVATAR_PROVIDER },
         getSimliSessionCredentials: mintSimliSession,
+        skinToneHex: SKIN_TONE_HEX[expert.skinTone] ?? null,
+        hairColorHex: HAIR_COLOR_HEX[expert.hairColor] ?? null,
         onAmplitudeChange: (value) => {
           if (!cancelled) setAmplitude(value);
         },

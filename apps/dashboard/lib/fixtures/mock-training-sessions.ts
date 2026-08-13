@@ -20,6 +20,8 @@ export interface MockTrainingSession {
   pinned: boolean;
   /** Shown in the video header/topic pill and caption bar for this session. */
   topic: string;
+  /** Which of the org's avatars to render/speak as — null means "let useConversationSession.ts pick the caller's default (ACTIVE-first) avatar", the pre-multi-persona behavior. Picked in NewSessionModal.tsx when an org has more than one avatar. */
+  avatarId: string | null;
   captionText: string;
   transcript: MockTranscriptMessage[];
   /** True while the avatar is still composing/speaking its next turn. */
@@ -35,6 +37,7 @@ export const INITIAL_MOCK_SESSIONS: MockTrainingSession[] = [
     relativeTime: "Yesterday",
     pinned: true,
     topic: "HR & Leave Policy",
+    avatarId: null,
     captionText:
       "Let me walk you through the core concepts we'll cover in today's session on HR & Leave Policy…",
     transcript: [
@@ -66,6 +69,7 @@ export const INITIAL_MOCK_SESSIONS: MockTrainingSession[] = [
     relativeTime: "1h ago",
     pinned: true,
     topic: "Product Training",
+    avatarId: null,
     captionText: "Let's take a look at what's new in the v4.2 release…",
     transcript: [
       { id: "m1", role: "AVATAR", text: "Hi! Ready to walk through the CRM v4.2 feature demo?" },
@@ -81,6 +85,7 @@ export const INITIAL_MOCK_SESSIONS: MockTrainingSession[] = [
     relativeTime: "2 days ago",
     pinned: false,
     topic: "Compliance & Legal",
+    avatarId: null,
     captionText: "Today we'll review the key compliance obligations for your role…",
     transcript: [
       { id: "m1", role: "AVATAR", text: "Welcome back to Compliance Training." },
@@ -96,6 +101,7 @@ export const INITIAL_MOCK_SESSIONS: MockTrainingSession[] = [
     relativeTime: "4 days ago",
     pinned: false,
     topic: "Customer Support",
+    avatarId: null,
     captionText: "I'll play a frustrated customer — try to de-escalate the situation…",
     transcript: [
       { id: "m1", role: "AVATAR", text: "This is the third time I've called about this issue!" },
@@ -111,6 +117,7 @@ export const INITIAL_MOCK_SESSIONS: MockTrainingSession[] = [
     relativeTime: "1 week ago",
     pinned: false,
     topic: "HR & Leave Policy",
+    avatarId: null,
     captionText: "Let's walk through everything you need to know for your first week…",
     transcript: [
       { id: "m1", role: "AVATAR", text: "Welcome aboard! Let's get you set up." },

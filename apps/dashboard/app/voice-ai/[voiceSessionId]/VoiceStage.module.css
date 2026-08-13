@@ -70,25 +70,16 @@
   transition: transform 80ms linear;
 }
 
-/* Mounts the provider's video/audio — always painted first (see
-   VoiceStage.tsx's doc comment on why .avatarPhoto is stacked after it, not
-   the other way round) and kept full-size/visible so its <audio> element's
-   playback is never at risk of an autoplay suspend some browsers apply to
-   hidden or zero-size media elements. */
+/* Mounts the provider's video/canvas/audio — kept full-size/visible so its
+   <audio> element's playback is never at risk of an autoplay suspend some
+   browsers apply to hidden or zero-size media elements. */
 .avatarSink {
   position: absolute;
   inset: 0;
 }
 
-.avatarSink > :global(video) {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.avatarPhoto {
-  position: absolute;
-  inset: 0;
+.avatarSink > :global(video),
+.avatarSink > :global(canvas) {
   width: 100%;
   height: 100%;
   object-fit: cover;

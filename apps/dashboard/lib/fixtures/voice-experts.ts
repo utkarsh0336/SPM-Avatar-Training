@@ -15,6 +15,10 @@ export interface VoiceExpert {
   topic: string;
   style: AvatarStyle;
   gender: Gender;
+  /** Token, not a hex value — resolved to a hex paint color via @avatrain/avatar-core's SKIN_TONE_HEX/HAIR_COLOR_HEX at session-start, same as an onboarding-built Avatar record. */
+  skinTone: string;
+  hairStyle: string;
+  hairColor: string;
   outfit: Outfit;
   expertise: Expertise;
   voiceTone: VoiceTone;
@@ -28,6 +32,9 @@ const PRIYA: VoiceExpert = {
   topic: "HR & Leave Policy",
   style: "REALISTIC",
   gender: "FEMALE",
+  skinTone: "TONE_3",
+  hairStyle: "LONG",
+  hairColor: "BLACK",
   outfit: "BUSINESS_FORMAL",
   expertise: "HR_LEAVE_POLICY",
   voiceTone: "WARM",
@@ -41,6 +48,9 @@ const MARCUS: VoiceExpert = {
   topic: "Sales & Negotiation",
   style: "REALISTIC",
   gender: "MALE",
+  skinTone: "TONE_2",
+  hairStyle: "SHORT",
+  hairColor: "BLACK",
   outfit: "BUSINESS_CASUAL",
   expertise: "SALES_NEGOTIATION",
   voiceTone: "DEEP",
@@ -54,6 +64,9 @@ const KIRAN: VoiceExpert = {
   topic: "Product Training",
   style: "ANIMATED",
   gender: "NEUTRAL",
+  skinTone: "TONE_4",
+  hairStyle: "MEDIUM",
+  hairColor: "COPPER",
   outfit: "TECH_CREATIVE",
   expertise: "PRODUCT_TRAINING",
   voiceTone: "NEUTRAL",
@@ -67,6 +80,9 @@ const SHREYA: VoiceExpert = {
   topic: "Compliance & Legal",
   style: "STYLIZED_3D",
   gender: "FEMALE",
+  skinTone: "TONE_5",
+  hairStyle: "LONG",
+  hairColor: "AUBURN",
   outfit: "ACADEMIC_EDUCATOR",
   expertise: "COMPLIANCE_LEGAL",
   voiceTone: "NEUTRAL",
@@ -80,6 +96,9 @@ const ANANYA: VoiceExpert = {
   topic: "Product Training",
   style: "REALISTIC",
   gender: "FEMALE",
+  skinTone: "TONE_2",
+  hairStyle: "WAVY",
+  hairColor: "BLACK",
   outfit: "BUSINESS_FORMAL",
   expertise: "PRODUCT_TRAINING",
   voiceTone: "WARM",
@@ -93,6 +112,9 @@ const DAVID: VoiceExpert = {
   topic: "Customer Support",
   style: "REALISTIC",
   gender: "MALE",
+  skinTone: "TONE_3",
+  hairStyle: "SHORT",
+  hairColor: "BLONDE",
   outfit: "BUSINESS_CASUAL",
   expertise: "CUSTOMER_SUPPORT",
   voiceTone: "DEEP",

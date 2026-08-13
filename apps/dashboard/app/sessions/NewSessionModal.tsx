@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { AvatarRecord } from "@avatrain/shared/avatar";
 import styles from "./NewSessionModal.module.css";
 import { useSessions } from "./SessionsContext";
+import { getMyAvatars } from "../../lib/api-client";
 
 // Not shown in the reference screenshot — some flow state has to select which
 // avatar/topic to talk to before a session can start. See
@@ -25,11 +27,34 @@ export function NewSessionModal({ onClose }: NewSessionModalProps) {
   const { addSession } = useSessions();
   const [title, setTitle] = useState("");
   const [topic, setTopic] = useState<string>(TOPIC_OPTIONS[0] ?? "HR & Leave Policy");
+  const [myAvatars, setMyAvatars] = useState<AvatarRecord[]>([]);
+  const [avatarId, setAvatarId] = useState<string>("");
+
+  // Only fetched to decide whether the picker below is even worth showing —
+  // an org with a single avatar (the common case pre-multi-persona) sees no
+  // behavior change at all, matching this feature's own design intent.
+  useEffect(() => {
+    let cancelled = false;
+    getMyAvatars()
+      .then((result) => {
+        if (cancelled) return;
+        setMyAvatars(result.avatars);
+        const active = result.avatars.find((avatar) => avatar.status === "ACTIVE");
+        setAvatarId(active?.id ?? result.avatars[0]?.id ?? "");
+      })
+      .catch(() => {
+        // No hard failure — the picker just stays hidden and
+        // useConversationSession.ts falls back to its own default persona.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function handleStart() {
     const trimmed = title.trim();
     if (!trimmed) return;
-    const created = addSession({ title: trimmed, topic });
+    const created = addSession({ title: trimmed, topic, avatarId: avatarId || null });
     onClose();
     router.push(`/sessions/${created.id}`);
   }
@@ -64,6 +89,20 @@ export function NewSessionModal({ onClose }: NewSessionModalProps) {
             ))}
           </select>
         </label>
+
+        {myAvatars.length > 1 && (
+          <label className={styles.field}>
+            <span className={styles.label}>Persona</span>
+            <select className={styles.select} value={avatarId} onChange={(event) => setAvatarId(event.target.value)}>
+              {myAvatars.map((avatar) => (
+                <option key={avatar.id} value={avatar.id}>
+                  {avatar.name || "Untitled Avatar"}
+                  {avatar.status === "DRAFT" ? " (draft)" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <div className={styles.actions}>
           <button type="button" className={styles.cancelButton} onClick={onClose}>
