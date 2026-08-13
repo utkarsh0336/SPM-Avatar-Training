@@ -19,6 +19,7 @@ interface ConversationSessionProviderProps {
   trainingSessionId: string;
   topic: string;
   muted: boolean;
+  avatarId?: string | null;
   children: ReactNode;
 }
 
@@ -32,10 +33,11 @@ export function ConversationSessionProvider({
   trainingSessionId,
   topic,
   muted,
+  avatarId,
   children,
 }: ConversationSessionProviderProps) {
   const avatarContainerRef = useRef<HTMLDivElement>(null);
-  const session = useConversationSession({ trainingSessionId, topic, containerRef: avatarContainerRef, muted });
+  const session = useConversationSession({ trainingSessionId, topic, containerRef: avatarContainerRef, muted, avatarId });
 
   return (
     <ConversationSessionContext.Provider value={{ ...session, avatarContainerRef }}>

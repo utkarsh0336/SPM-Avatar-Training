@@ -10,6 +10,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@avatrain/avatar-core": "workspace:^",
+    "@avatrain/realtime-core": "workspace:^",
+    "@avatrain/shared": "workspace:^",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

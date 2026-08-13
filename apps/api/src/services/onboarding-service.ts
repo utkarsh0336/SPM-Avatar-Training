@@ -1,13 +1,8 @@
-import {
-  onboardingCompleteRequiredSchema,
-  prisma,
-  withAuthContext,
-  withOrg,
-  type OnboardingDraftInput,
-} from "@avatrain/shared";
+import { prisma, withAuthContext, withOrg, type OnboardingDraftInput } from "@avatrain/shared";
 import type { Avatar } from "@prisma/client";
-import { badRequest, conflict } from "../lib/http-errors.js";
-import { resolveSimliFaceId, type SimliGender } from "../lib/simli.js";
+import { conflict } from "../lib/http-errors.js";
+import { resolveSimliFaceId } from "../lib/simli.js";
+import { assertAvatarComplete, withRecomputedSimliFaceId } from "../lib/avatar-persona.js";
 
 export interface OnboardingDraftResult {
   name: string | null;
@@ -117,11 +112,8 @@ export async function updateDraft(
   // Recompute whenever gender changes, so the builder's live avatar and a
   // real training session both pick up the newly-selected gender's face —
   // not just whatever was resolved once at draft creation (when gender was
-  // still null). See lib/simli.ts's resolveSimliFaceId.
-  const data: OnboardingDraftInput & { simliFaceId?: string | null } = { ...patch };
-  if (patch.gender !== undefined) {
-    data.simliFaceId = resolveSimliFaceId(patch.gender as SimliGender);
-  }
+  // still null). See lib/avatar-persona.ts's withRecomputedSimliFaceId.
+  const data = withRecomputedSimliFaceId(patch);
   const updated = await withOrg(orgId, (tx) => tx.avatar.update({ where: { id: draft.id }, data }));
   return toDraftResult(updated);
 }
@@ -136,25 +128,7 @@ export async function completeDraft(orgId: string, userId: string): Promise<{ av
   await assertNotCompleted(userId);
   const draft = await findOrCreateDraftRow(orgId, userId);
 
-  const result = onboardingCompleteRequiredSchema.safeParse({
-    name: draft.name ?? undefined,
-    style: draft.style ?? undefined,
-    gender: draft.gender ?? undefined,
-    skinTone: draft.skinTone ?? undefined,
-    hairStyle: draft.hairStyle ?? undefined,
-    hairColor: draft.hairColor ?? undefined,
-    outfit: draft.outfit ?? undefined,
-    expertise: draft.expertise ?? undefined,
-    voice: draft.voice ?? undefined,
-  });
-
-  if (!result.success) {
-    const fields = result.error.issues.map((issue) => ({
-      path: issue.path.join(".") || "unknown",
-      message: issue.message,
-    }));
-    throw badRequest("incomplete_onboarding", "onboarding is incomplete", fields);
-  }
+  assertAvatarComplete(draft, "incomplete_onboarding");
 
   // Single transaction, both under one auth context: "avatars" needs
   // app.current_org_id set (RLS), "users" is RLS-exempt but still scoped to

@@ -8,26 +8,14 @@ import {
   AVATAR_PREVIEW_URL_ALLOWED_HOSTS,
 } from "./schema.js";
 
-// Drift guard: these literal sets must stay in sync with
-// apps/dashboard/app/onboarding/types.ts's SKIN_TONE_OPTIONS /
-// HAIR_COLOR_OPTIONS. packages/shared cannot import from apps/dashboard, so
-// this is a hardcoded snapshot, same convention as tutor/avatar-config.test.ts.
-describe("SKIN_TONE_TOKENS / HAIR_COLOR_TOKENS drift guard", () => {
-  it("matches the wizard's known skin tone options", () => {
-    expect(SKIN_TONE_TOKENS).toEqual(["TONE_1", "TONE_2", "TONE_3", "TONE_4", "TONE_5", "TONE_6"]);
-  });
-
-  it("matches the wizard's known hair color options", () => {
-    expect(HAIR_COLOR_TOKENS).toEqual([
-      "BLACK",
-      "AUBURN",
-      "COPPER",
-      "BLONDE",
-      "PLATINUM",
-      "RED",
-      "PURPLE",
-      "BLUE",
-    ]);
+// The literal-value drift guard for these tokens lives in
+// tutor/avatar-config.test.ts now (that's where they're actually defined —
+// see this file's import comment above). This just confirms the re-export
+// wiring itself still works.
+describe("SKIN_TONE_TOKENS / HAIR_COLOR_TOKENS re-export", () => {
+  it("re-exports non-empty token lists from tutor/avatar-config", () => {
+    expect(SKIN_TONE_TOKENS.length).toBeGreaterThan(0);
+    expect(HAIR_COLOR_TOKENS.length).toBeGreaterThan(0);
   });
 });
 

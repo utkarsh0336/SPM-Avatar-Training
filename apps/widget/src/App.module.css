@@ -1,0 +1,96 @@
+.root {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 20px 16px;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  /* Self-contained look, not inherited from the host page — a third-party
+     site embedding this widget can't be assumed to share any theme with it. */
+  background: #14161f;
+  color: #f4f4f6;
+}
+
+.avatarRing {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  padding: 4px;
+  background: linear-gradient(160deg, #2b3245, #1c2333);
+  transition: box-shadow 150ms ease;
+}
+
+.avatarRingSpeaking {
+  box-shadow: 0 0 0 4px rgba(124, 92, 255, 0.35);
+}
+
+.avatarSink {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #1c2333;
+  transition: transform 80ms linear;
+}
+
+.avatarSink > :global(video),
+.avatarSink > :global(canvas) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.caption {
+  margin: 0;
+  max-width: 320px;
+  text-align: center;
+  font-size: 13px;
+  color: #c7c9d9;
+}
+
+.error {
+  margin: 0;
+  max-width: 320px;
+  text-align: center;
+  font-size: 13px;
+  color: #f87171;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.statusPill {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.micButton,
+.micButtonMuted {
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.micButton {
+  background: #7c5cff;
+  color: #fff;
+}
+
+.micButtonMuted {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f4f4f6;
+}

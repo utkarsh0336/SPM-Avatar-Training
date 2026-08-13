@@ -38,29 +38,83 @@ export const voiceToneSchema = z.enum(["DEEP", "NEUTRAL", "WARM"]);
  */
 export const languageSchema = z.enum(["English", "Hindi"]);
 
+export const hairStyleSchema = z.enum(["SHORT", "MEDIUM", "LONG", "CURLY", "WAVY", "BALD"]);
+
+// Application-layer allowlists — `avatars.skin_tone`/`hair_color` are plain
+// Postgres TEXT columns, not enums, so the palette can change without a
+// migration. See .claude/specs/onboarding.md's Database Changes. Values must
+// stay in sync with apps/dashboard/app/onboarding/types.ts's
+// SKIN_TONE_OPTIONS/HAIR_COLOR_OPTIONS — avatar-config.test.ts drift-guards
+// this. Owned here (rather than onboarding/schema.ts, which re-exports them)
+// so vrm-material-tint.ts (packages/avatar-core) can resolve a token straight
+// to a paintable hex value without onboarding/schema.ts importing back from
+// this file — see SKIN_TONE_HEX/HAIR_COLOR_HEX below.
+export const SKIN_TONE_TOKENS = ["TONE_1", "TONE_2", "TONE_3", "TONE_4", "TONE_5", "TONE_6"] as const;
+export const skinToneSchema = z.enum(SKIN_TONE_TOKENS);
+
+export const HAIR_COLOR_TOKENS = [
+  "BLACK",
+  "AUBURN",
+  "COPPER",
+  "BLONDE",
+  "PLATINUM",
+  "RED",
+  "PURPLE",
+  "BLUE",
+] as const;
+export const hairColorSchema = z.enum(HAIR_COLOR_TOKENS);
+
+// Literal hex values for each token — single source of truth for both the
+// wizard's swatch pickers (apps/dashboard/app/onboarding/types.ts re-exports
+// these instead of hardcoding its own copy) and packages/avatar-core's VRM
+// material tinting (vrm-material-tint.ts). Values copied verbatim from the
+// wizard's original SKIN_TONE_SWATCHES/HAIR_COLOR_SWATCHES.
+export const SKIN_TONE_HEX: Record<(typeof SKIN_TONE_TOKENS)[number], string> = {
+  TONE_1: "#F7DFC4",
+  TONE_2: "#EFC9A2",
+  TONE_3: "#DCA477",
+  TONE_4: "#BE8148",
+  TONE_5: "#9C6432",
+  TONE_6: "#7A4A24",
+};
+
+export const HAIR_COLOR_HEX: Record<(typeof HAIR_COLOR_TOKENS)[number], string> = {
+  BLACK: "#2B2724",
+  AUBURN: "#7A4020",
+  COPPER: "#A5622F",
+  BLONDE: "#D4A83C",
+  PLATINUM: "#EDE0C8",
+  RED: "#C43B2C",
+  PURPLE: "#7B3FA0",
+  BLUE: "#3B7FC4",
+};
+
 export type AvatarStyle = z.infer<typeof avatarStyleSchema>;
 export type Gender = z.infer<typeof genderSchema>;
 export type Outfit = z.infer<typeof outfitSchema>;
 export type Expertise = z.infer<typeof expertiseSchema>;
 export type VoiceTone = z.infer<typeof voiceToneSchema>;
 export type Language = z.infer<typeof languageSchema>;
+export type HairStyleValue = z.infer<typeof hairStyleSchema>;
 
 /**
  * The subset of OnboardingState the session actually needs. skinTone,
- * hairStyle, and hairColor are deliberately excluded — the brief (§6) makes
- * them presentation-only (drive the wizard's preview card, never the
- * renderer or system prompt), and the Mock avatar renders a fixed idle clip
- * with no per-attribute customization. simliFaceId is deliberately excluded
- * too, but for a different reason: it doesn't need to travel through this
- * client-side handoff at all — POST /v1/conversations/simli-session
- * resolves it server-side from the caller's own authenticated Avatar
- * record, the same way for both the builder preview and a live training
- * session, rather than trusting a client-supplied value. See
- * .claude/specs/avatar-builder-customization.md.
+ * hairStyle, and hairColor now travel through this handoff too — the VRM
+ * avatar provider (packages/avatar-core's createVrmAvatarProvider) applies
+ * them as live material tints on the rendered model, so they're no longer
+ * presentation-only. simliFaceId is still deliberately excluded: it doesn't
+ * need to travel through this client-side handoff at all —
+ * POST /v1/conversations/simli-session resolves it server-side from the
+ * caller's own authenticated Avatar record, the same way for both the
+ * builder preview and a live training session, rather than trusting a
+ * client-supplied value. See .claude/specs/avatar-builder-customization.md.
  */
 export const onboardingHandoffSchema = z.object({
   style: avatarStyleSchema,
   gender: genderSchema,
+  skinTone: skinToneSchema,
+  hairStyle: hairStyleSchema,
+  hairColor: hairColorSchema,
   outfit: outfitSchema,
   name: z.string(),
   expertise: expertiseSchema,

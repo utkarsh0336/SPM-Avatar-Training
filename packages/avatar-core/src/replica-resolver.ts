@@ -5,6 +5,14 @@ export interface Replica {
   style: string;
   gender: string;
   outfit: string;
+  /**
+   * Overrides for vrm-material-tint.ts's default hint lists
+   * (["skin","face","body"] / ["hair"]) — only needed if this replica's
+   * .vrm source model uses non-standard material naming. Optional; most
+   * VRoid Studio exports need no override.
+   */
+  skinMaterialNameHints?: string[];
+  hairMaterialNameHints?: string[];
 }
 
 export interface ReplicaRegistry {

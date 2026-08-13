@@ -39,13 +39,15 @@ export function Sidebar({ org }: SidebarProps) {
   // /sessions, /voice-ai, and / (dashboard) are separate top-level route
   // trees sharing this one sidebar (see this file's own doc comment above) —
   // the active nav item reflects whichever hub the current route belongs to.
-  const activeHub: "dashboard" | "new-chat" | "voice-ai" | "knowledge" = pathname?.startsWith("/voice-ai")
+  const activeHub: "dashboard" | "new-chat" | "voice-ai" | "knowledge" | "avatars" = pathname?.startsWith("/voice-ai")
     ? "voice-ai"
     : pathname?.startsWith("/knowledge")
       ? "knowledge"
-      : pathname?.startsWith("/sessions")
-        ? "new-chat"
-        : "dashboard";
+      : pathname?.startsWith("/avatars")
+        ? "avatars"
+        : pathname?.startsWith("/sessions")
+          ? "new-chat"
+          : "dashboard";
 
   // Same logout call + redirect as (dashboard)/LogoutButton.tsx — this
   // sidebar persists across /sessions and /sessions/[trainingSessionId], so
@@ -105,6 +107,11 @@ export function Sidebar({ org }: SidebarProps) {
             <BookOpenIcon size={16} className={styles.navIcon} />
             <span className={styles.navText}>Knowledge Base</span>
             {activeHub === "knowledge" && <ChevronRightIcon size={14} className={styles.navChevron} />}
+          </a>
+          <a href="/avatars" className={activeHub === "avatars" ? styles.navItemActive : styles.navItem}>
+            <UserIcon size={16} className={styles.navIcon} />
+            <span className={styles.navText}>Avatars</span>
+            {activeHub === "avatars" && <ChevronRightIcon size={14} className={styles.navChevron} />}
           </a>
         </div>
 

@@ -11,8 +11,8 @@
     "test": "vitest run",
     "size": "node ../../scripts/check-embed-size.mjs"
   },
-  "dependencies": {},
   "devDependencies": {
+    "@avatrain/shared": "workspace:^",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   }

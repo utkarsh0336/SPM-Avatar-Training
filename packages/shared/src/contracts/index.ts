@@ -3,4 +3,4 @@
  * changes only — breaking changes need a new CDN major and a migration
  * note. See .claude/rules/embed.md.
  */
-export {};
+export * from "./embed-config.js";

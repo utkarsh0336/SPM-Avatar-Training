@@ -75,22 +75,18 @@ export function VoiceStage({ expert }: VoiceStageProps) {
           style={{ transform: `scale(${1 + Math.min(smoothedAmplitude, 1) * 0.06})` }}
         >
           {/*
-            The provider (Mock or Simli) mounts its own video/audio into this
-            container — see useVoiceConversationSession.ts's avatarProvider.start().
-            Neither can be made to render the SPECIFIC expert the user picked on
-            Page 1 (Mock's idle clips are generic stock footage per replica type;
-            Simli renders the caller's own onboarding-configured face, unrelated
-            to the Voice AI expert catalog entirely) — so it's rendered first,
-            and the expert's own photo is stacked after it in the DOM to always
-            paint on top (same stacking-context, later element wins with no
-            z-index needed), guaranteeing the visible avatar always matches the
-            one actually selected. The container itself stays full-size and
-            un-hidden (not display:none / zero-size) purely so its <audio>
-            element — the actual TTS playback — is never at risk of an autoplay
-            suspend some browsers apply to hidden/detached media elements.
+            The provider (vrm/mock/Simli) mounts its own video/canvas/audio
+            into this container — see
+            useVoiceConversationSession.ts's avatarProvider.start(). The
+            default vrm provider actually renders the picked expert's
+            style/gender/outfit/skinTone/hairColor (see
+            createAvatarProviderFromEnv's skinToneHex/hairColorHex options
+            above) — unlike Mock (generic stock idle clips) or Simli
+            (renders the caller's own onboarding-configured face, unrelated
+            to the Voice AI expert catalog), so no static photo overlay is
+            needed to guarantee the visible avatar matches the one selected.
           */}
           <div ref={avatarContainerRef} className={styles.avatarSink} />
-          <img src={expert.photoSrc} alt="" className={styles.avatarPhoto} />
         </div>
       </div>
 

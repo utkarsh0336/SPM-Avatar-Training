@@ -37,4 +37,14 @@ describe("ws-tickets", () => {
     expect(a.ticket).not.toBe(b.ticket);
     expect(a.ticket.length).toBeGreaterThan(20);
   });
+
+  it("supports an anonymous embed ticket (null userId) with a pinnedAvatarId", () => {
+    const { ticket } = mintWsTicket({ orgId: "org-1", userId: null, pinnedAvatarId: "avatar-1" });
+    expect(redeemWsTicket(ticket)).toEqual({ orgId: "org-1", userId: null, pinnedAvatarId: "avatar-1" });
+  });
+
+  it("omits pinnedAvatarId for a normal authenticated ticket", () => {
+    const { ticket } = mintWsTicket({ orgId: "org-1", userId: "user-1" });
+    expect(redeemWsTicket(ticket)?.pinnedAvatarId).toBeUndefined();
+  });
 });

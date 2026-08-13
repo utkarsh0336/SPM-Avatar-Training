@@ -750,5 +750,128 @@ describe("createConversationHandler", () => {
       });
       expect(findMessages(socket, "module.completed")).toEqual([{ type: "module.completed", curriculumId: "curr-1" }]);
     });
+
+    it("record_progress in an anonymous (embed) session streams feedback but never persists — tenancy.md's unsigned-write rule", async () => {
+      const socket = new FakeSocket();
+      const recordObjectiveProgress = vi.fn(async () => ({ attempts: 1 }));
+      const anonymousClaims = { orgId: "org-1", userId: null };
+      createConversationHandler(socket as never, anonymousClaims, {
+        createLLM: fakeCurriculumLLM(
+          [
+            [{ type: "tool_call", id: "call-1", name: "grade_answer", args: { objectiveId: "obj-1" } }],
+            [{ type: "tool_call", id: "call-2", name: "record_progress", args: { objectiveId: "obj-1" } }],
+            [{ type: "text", text: "Correct, well done!" }],
+          ],
+          "PASS",
+        ),
+        createSTT: fakeSTT("success", "20 days"),
+        createTTS: fakeTTS("success"),
+        getCurriculumForAvatar: fakeCurriculum(objectives),
+        recordObjectiveProgress,
+        ...noRetrieval,
+      });
+      socket.emitMessage({ ...sessionStartBase, avatarId: "11111111-1111-1111-1111-111111111111" });
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+
+      expect(recordObjectiveProgress).not.toHaveBeenCalled();
+      expect(findMessages(socket, "checkpoint.result")).toEqual([
+        { type: "checkpoint.result", objectiveId: "obj-1", verdict: "PASS", feedback: "Feedback line.", attempts: 1 },
+      ]);
+    });
+
+    it("end_module in an anonymous (embed) session is refused rather than measured against nothing", async () => {
+      const socket = new FakeSocket();
+      const getRemainingObjectiveTitles = vi.fn(async () => []);
+      const anonymousClaims = { orgId: "org-1", userId: null };
+      createConversationHandler(socket as never, anonymousClaims, {
+        createLLM: fakeCurriculumLLM([
+          [{ type: "tool_call", id: "call-1", name: "end_module", args: {} }],
+          [{ type: "text", text: "Noted." }],
+        ]),
+        createSTT: fakeSTT("success"),
+        createTTS: fakeTTS("success"),
+        getCurriculumForAvatar: fakeCurriculum(objectives),
+        getRemainingObjectiveTitles,
+        ...noRetrieval,
+      });
+      socket.emitMessage({ ...sessionStartBase, avatarId: "11111111-1111-1111-1111-111111111111" });
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+      expect(getRemainingObjectiveTitles).not.toHaveBeenCalled();
+      expect(findMessages(socket, "module.completed")).toHaveLength(0);
+    });
+  });
+
+  describe("embed sessions (claims.pinnedAvatarId)", () => {
+    it("resolves persona fields server-side from the pinned avatar, ignoring client-sent session.start fields", async () => {
+      const socket = new FakeSocket();
+      const getAvatarById = vi.fn(async () => ({
+        id: "avatar-1",
+        name: "Pinned Persona",
+        style: "REALISTIC" as const,
+        gender: "MALE" as const,
+        skinTone: "TONE_3" as const,
+        hairStyle: "SHORT" as const,
+        hairColor: "BLACK" as const,
+        outfit: "BUSINESS_CASUAL" as const,
+        expertise: "SALES_NEGOTIATION" as const,
+        voice: "DEEP" as const,
+        status: "ACTIVE" as const,
+        simliFaceId: null,
+      }));
+      const embedClaims = { orgId: "org-1", userId: null, pinnedAvatarId: "avatar-1" };
+      createConversationHandler(socket as never, embedClaims, {
+        createLLM: fakeLLM("success", ["Hi there."]),
+        createSTT: fakeSTT("success"),
+        createTTS: fakeTTS("success"),
+        getAvatarById,
+        ...noRetrieval,
+      });
+
+      // A malicious/misbehaving embed page could send anything here — none
+      // of it should reach the system prompt or TTS voice selection.
+      socket.emitMessage({
+        ...sessionStartBase,
+        avatarName: "Spoofed Name",
+        expertise: "IT_TECHNOLOGY",
+        voiceTone: "WARM",
+        gender: "FEMALE",
+        avatarId: "22222222-2222-2222-2222-222222222222",
+      });
+
+      await vi.waitFor(() => {
+        expect(socket.sent).toContainEqual({ type: "session.ready" });
+      });
+      expect(getAvatarById).toHaveBeenCalledWith("org-1", "avatar-1");
+    });
+
+    it("loads the curriculum for the pinned avatar, not whatever avatarId the client sent", async () => {
+      const socket = new FakeSocket();
+      const getAvatarById = vi.fn(async () => null); // avatar lookup miss doesn't block the session
+      const getCurriculumForAvatar = fakeCurriculum([]);
+      const embedClaims = { orgId: "org-1", userId: null, pinnedAvatarId: "avatar-1" };
+      createConversationHandler(socket as never, embedClaims, {
+        createLLM: fakeLLM("success", ["Hi."]),
+        createSTT: fakeSTT("success"),
+        createTTS: fakeTTS("success"),
+        getAvatarById,
+        getCurriculumForAvatar,
+        ...noRetrieval,
+      });
+
+      socket.emitMessage({ ...sessionStartBase, avatarId: "22222222-2222-2222-2222-222222222222" });
+
+      await vi.waitFor(() => {
+        expect(socket.sent).toContainEqual({ type: "session.ready" });
+      });
+      expect(getCurriculumForAvatar).toHaveBeenCalledWith("org-1", "avatar-1");
+    });
   });
 });
