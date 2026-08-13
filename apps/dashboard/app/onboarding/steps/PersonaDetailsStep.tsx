@@ -8,9 +8,11 @@ import {
   AGE_GROUP_LABELS,
   AVATAR_LANGUAGE_LABELS,
   AVATAR_REGION_LABELS,
+  READING_LEVEL_LABELS,
   type AgeGroup,
   type AvatarLanguage,
   type AvatarRegion,
+  type ReadingLevel,
 } from "../types";
 import shared from "./steps.module.css";
 
@@ -24,6 +26,7 @@ const AVATAR_REGION_OPTIONS: readonly AvatarRegion[] = [
   "APAC",
 ];
 const AVATAR_LANGUAGE_OPTIONS: readonly AvatarLanguage[] = ["ENGLISH", "HINDI"];
+const READING_LEVEL_OPTIONS: readonly ReadingLevel[] = ["SIMPLE", "STANDARD", "ADVANCED"];
 
 /**
  * SOW §3.1 "various age groups" / "regional and language-specific avatars" —
@@ -67,6 +70,16 @@ export function PersonaDetailsStep() {
           labels={AVATAR_LANGUAGE_LABELS}
           selected={state.preferredLanguage}
           onSelect={(value) => update({ preferredLanguage: value })}
+        />
+      </div>
+
+      <div className={shared.section}>
+        <span className={shared.sectionLabel}>READING LEVEL</span>
+        <PillPicker
+          options={READING_LEVEL_OPTIONS}
+          labels={READING_LEVEL_LABELS}
+          selected={state.readingLevel}
+          onSelect={(value) => update({ readingLevel: value })}
         />
       </div>
 

@@ -16,6 +16,7 @@ import {
   ageGroupSchema,
   avatarRegionSchema,
   avatarLanguageSchema,
+  readingLevelSchema,
 } from "./avatar-config.js";
 
 // Hardcoded snapshot of apps/dashboard/app/onboarding/types.ts's literal
@@ -50,6 +51,7 @@ const WIZARD_HAIR_COLORS = ["BLACK", "AUBURN", "COPPER", "BLONDE", "PLATINUM", "
 const WIZARD_AGE_GROUPS = ["YOUNG_ADULT", "MIDDLE_AGED", "SENIOR"];
 const WIZARD_AVATAR_REGIONS = ["GLOBAL", "INDIA", "NORTH_AMERICA", "EUROPE", "MIDDLE_EAST", "APAC"];
 const WIZARD_AVATAR_LANGUAGES = ["ENGLISH", "HINDI"];
+const WIZARD_READING_LEVELS = ["SIMPLE", "STANDARD", "ADVANCED"];
 
 describe("avatar-config drift guard", () => {
   it("avatarStyleSchema matches the wizard's AvatarStyle union", () => {
@@ -94,6 +96,10 @@ describe("avatar-config drift guard", () => {
 
   it("avatarLanguageSchema matches the wizard's AvatarLanguage union", () => {
     expect(avatarLanguageSchema.options).toEqual(WIZARD_AVATAR_LANGUAGES);
+  });
+
+  it("readingLevelSchema matches the wizard's ReadingLevel union", () => {
+    expect(readingLevelSchema.options).toEqual(WIZARD_READING_LEVELS);
   });
 });
 

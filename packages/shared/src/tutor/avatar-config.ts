@@ -43,6 +43,13 @@ export const avatarRegionSchema = z.enum(["GLOBAL", "INDIA", "NORTH_AMERICA", "E
  */
 export const avatarLanguageSchema = z.enum(["ENGLISH", "HINDI"]);
 /**
+ * Unlike ageGroup/region/preferredLanguage above (metadata only), this one is actually consumed —
+ * see system-prompt.ts's buildSystemPrompt and READING_LEVEL_INSTRUCTION. Trainer-set,
+ * audience-wide; not a per-learner preference — see
+ * .claude/specs/adaptive-learning-personalization.md's Scope decisions.
+ */
+export const readingLevelSchema = z.enum(["SIMPLE", "STANDARD", "ADVANCED"]);
+/**
  * The two languages actually wired end-to-end (LLM reply language, TTS voice,
  * STT hint) — see providers/tts-voice-map.ts's resolveHindiVoice doc comment
  * for why Hindi is Azure/msedge-tts-only (echogarden's installed Piper voice
@@ -109,6 +116,7 @@ export type VoiceTone = z.infer<typeof voiceToneSchema>;
 export type AgeGroup = z.infer<typeof ageGroupSchema>;
 export type AvatarRegion = z.infer<typeof avatarRegionSchema>;
 export type AvatarLanguage = z.infer<typeof avatarLanguageSchema>;
+export type ReadingLevel = z.infer<typeof readingLevelSchema>;
 export type Language = z.infer<typeof languageSchema>;
 export type HairStyleValue = z.infer<typeof hairStyleSchema>;
 

@@ -105,6 +105,16 @@ enum AvatarLanguage {
   HINDI
 }
 
+/// Additive avatar-configuration attribute. Unlike AgeGroup/AvatarRegion/AvatarLanguage (metadata
+/// only), this one is actually consumed — see tutor/system-prompt.ts's buildSystemPrompt and its
+/// READING_LEVEL_INSTRUCTION map. Trainer-set, audience-wide; not a per-learner preference — see
+/// .claude/specs/adaptive-learning-personalization.md's Scope decisions.
+enum ReadingLevel {
+  SIMPLE
+  STANDARD
+  ADVANCED
+}
+
 enum AvatarStatus {
   DRAFT
   ACTIVE
@@ -299,6 +309,9 @@ model Avatar {
   ageGroup          AgeGroup?       @map("age_group")
   region            AvatarRegion?
   preferredLanguage AvatarLanguage? @map("preferred_language")
+  // Additive, like the three above, but actually consumed by buildSystemPrompt — see the
+  // ReadingLevel enum's doc comment above.
+  readingLevel      ReadingLevel?   @map("reading_level")
 
   status          AvatarStatus @default(DRAFT)
   lastVisitedStep Int          @default(1) @map("last_visited_step")

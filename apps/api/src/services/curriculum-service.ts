@@ -5,6 +5,7 @@ import {
   type CreateCurriculumResponse,
   type CurriculumResult,
   type ObjectiveInput,
+  type ObjectiveMasteryStatus,
   type ObjectiveProgressEntry,
   type ObjectiveProgressVerdict,
   type ObjectiveResult,
@@ -148,6 +149,9 @@ export interface SessionCurriculumObjective {
   teachingContent: string;
   checkQuestion: string;
   gradingCriteria: string;
+  status: ObjectiveMasteryStatus;
+  lastFeedback?: string;
+  attempts?: number;
 }
 
 export interface SessionCurriculum {
@@ -161,25 +165,66 @@ export interface SessionCurriculum {
  * silent "teach without checkpoints" case, not an error). Returns null
  * rather than a curriculum with zero objectives, so callers can use a
  * single truthiness check.
+ *
+ * learnerId: string looks up THAT learner's own ObjectiveProgress rows
+ * (@@unique([objectiveId, learnerId]) guarantees at most one per objective)
+ * to compute a mastery status — see
+ * .claude/specs/adaptive-learning-personalization.md. learnerId: null
+ * (anonymous/embed sessions, which per .claude/rules/tenancy.md never have
+ * ObjectiveProgress rows to begin with) skips the progress query entirely
+ * and returns every objective NOT_STARTED — today's behavior, unchanged.
  */
-export async function getCurriculumForAvatar(orgId: string, avatarId: string): Promise<SessionCurriculum | null> {
+export async function getCurriculumForAvatar(
+  orgId: string,
+  avatarId: string,
+  learnerId: string | null,
+): Promise<SessionCurriculum | null> {
   const curriculum = await withOrg(orgId, (tx) => tx.curriculum.findFirst({ where: { avatarId, orgId } }));
   if (!curriculum) return null;
 
-  const objectives = await withOrg(orgId, (tx) =>
-    tx.objective.findMany({ where: { curriculumId: curriculum.id, orgId }, orderBy: { order: "asc" } }),
-  );
+  // Independent queries (progress doesn't depend on the objectives result, only on
+  // curriculum.id) — run concurrently rather than sequentially to keep this bootstrap
+  // lookup's added cost to one round trip, not two. See
+  // .claude/specs/adaptive-learning-personalization.md; latency-auditor flagged the
+  // sequential version as an avoidable extra round trip inside session.start's budget.
+  const [objectives, progressRows] = await Promise.all([
+    withOrg(orgId, (tx) =>
+      tx.objective.findMany({ where: { curriculumId: curriculum.id, orgId }, orderBy: { order: "asc" } }),
+    ),
+    learnerId
+      ? withOrg(orgId, (tx) =>
+          tx.objectiveProgress.findMany({ where: { orgId, learnerId, objective: { curriculumId: curriculum.id } } }),
+        )
+      : Promise.resolve([]),
+  ]);
   if (objectives.length === 0) return null;
+
+  const progressByObjectiveId = new Map<
+    string,
+    { verdict: ObjectiveProgressVerdict; feedback: string; attempts: number }
+  >();
+  for (const row of progressRows) progressByObjectiveId.set(row.objectiveId, row);
 
   return {
     curriculumId: curriculum.id,
-    objectives: objectives.map((o) => ({
-      id: o.id,
-      title: o.title,
-      teachingContent: o.teachingContent,
-      checkQuestion: o.checkQuestion,
-      gradingCriteria: o.gradingCriteria,
-    })),
+    objectives: objectives.map((o) => {
+      const progress = progressByObjectiveId.get(o.id);
+      const status: ObjectiveMasteryStatus = !progress
+        ? "NOT_STARTED"
+        : progress.verdict === "PASS"
+          ? "MASTERED"
+          : "NEEDS_REVIEW";
+      return {
+        id: o.id,
+        title: o.title,
+        teachingContent: o.teachingContent,
+        checkQuestion: o.checkQuestion,
+        gradingCriteria: o.gradingCriteria,
+        status,
+        ...(status === "NEEDS_REVIEW" ? { lastFeedback: progress!.feedback, attempts: progress!.attempts } : {}),
+        ...(status === "MASTERED" ? { attempts: progress!.attempts } : {}),
+      };
+    }),
   };
 }
 

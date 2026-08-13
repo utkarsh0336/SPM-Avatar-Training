@@ -33,6 +33,22 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toMatch(/spoken/i);
   });
 
+  it("defaults to the STANDARD reading-level instruction when readingLevel is omitted", () => {
+    const prompt = buildSystemPrompt({ avatarName: "Nancy", expertise: "HR_LEAVE_POLICY" });
+    expect(prompt).toMatch(/clear, professional language/i);
+  });
+
+  it("uses plain-language instructions for readingLevel SIMPLE", () => {
+    const prompt = buildSystemPrompt({ avatarName: "Nancy", expertise: "HR_LEAVE_POLICY", readingLevel: "SIMPLE" });
+    expect(prompt).toMatch(/plain language/i);
+    expect(prompt).toMatch(/avoid jargon/i);
+  });
+
+  it("uses domain-terminology instructions for readingLevel ADVANCED", () => {
+    const prompt = buildSystemPrompt({ avatarName: "Nancy", expertise: "IT_TECHNOLOGY", readingLevel: "ADVANCED" });
+    expect(prompt).toMatch(/domain terminology/i);
+  });
+
   it("produces a distinct topic title for every expertise value", () => {
     const expertiseValues = [
       "HR_LEAVE_POLICY",
@@ -106,5 +122,46 @@ describe("appendCurriculumContext", () => {
     expect(result).toMatch(/grade_answer/);
     expect(result).toMatch(/record_progress/);
     expect(result).toMatch(/end_module/);
+  });
+
+  it("treats an objective with no status as not yet attempted", () => {
+    const result = appendCurriculumContext("base", [
+      { id: "obj-1", title: "T", teachingContent: "C", checkQuestion: "Q" },
+    ]);
+    expect(result).toMatch(/not yet attempted/i);
+  });
+
+  it("annotates a MASTERED objective and instructs the model not to re-teach it", () => {
+    const result = appendCurriculumContext("base", [
+      { id: "obj-1", title: "Leave basics", teachingContent: "C", checkQuestion: "Q", status: "MASTERED" },
+    ]);
+    expect(result).toMatch(/MASTERED/);
+    expect(result).toMatch(/do not re-teach/i);
+    expect(result).toMatch(/skip objectives already mastered/i);
+  });
+
+  it("annotates a NEEDS_REVIEW objective with its last feedback", () => {
+    const result = appendCurriculumContext("base", [
+      {
+        id: "obj-2",
+        title: "Approval process",
+        teachingContent: "C",
+        checkQuestion: "Q",
+        status: "NEEDS_REVIEW",
+        lastFeedback: "Missed the manager sign-off step.",
+      },
+    ]);
+    expect(result).toMatch(/NEEDS_REVIEW/);
+    expect(result).toMatch(/Missed the manager sign-off step\./);
+    expect(result).toMatch(/explain it a different way/i);
+  });
+
+  it("does not change objective order based on status", () => {
+    const objectives = [
+      { id: "obj-1", title: "First", teachingContent: "C", checkQuestion: "Q", status: "MASTERED" as const },
+      { id: "obj-2", title: "Second", teachingContent: "C", checkQuestion: "Q", status: "NOT_STARTED" as const },
+    ];
+    const result = appendCurriculumContext("base", objectives);
+    expect(result.indexOf("First")).toBeLessThan(result.indexOf("Second"));
   });
 });
