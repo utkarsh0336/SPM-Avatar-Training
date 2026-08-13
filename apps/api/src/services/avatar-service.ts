@@ -53,6 +53,7 @@ function toAvatarRecord(avatar: Avatar): AvatarRecord {
     ageGroup: avatar.ageGroup,
     region: avatar.region,
     preferredLanguage: avatar.preferredLanguage,
+    readingLevel: avatar.readingLevel,
     status: avatar.status,
     simliFaceId: avatar.simliFaceId,
   };

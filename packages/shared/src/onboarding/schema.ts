@@ -13,6 +13,7 @@ import {
   ageGroupSchema,
   avatarRegionSchema,
   avatarLanguageSchema,
+  readingLevelSchema,
   type HairStyleValue,
 } from "../tutor/avatar-config.js";
 
@@ -34,6 +35,7 @@ export {
   ageGroupSchema,
   avatarRegionSchema,
   avatarLanguageSchema,
+  readingLevelSchema,
 };
 export type { HairStyleValue };
 
@@ -90,6 +92,7 @@ export const onboardingDraftSchema = z.object({
   ageGroup: ageGroupSchema.optional(),
   region: avatarRegionSchema.optional(),
   preferredLanguage: avatarLanguageSchema.optional(),
+  readingLevel: readingLevelSchema.optional(),
   lastVisitedStep: z.number().int().min(1).max(7).optional(),
   // Additive preview fields (avatar-builder-customization.md) — deliberately
   // never required by onboardingCompleteRequiredSchema below.
@@ -133,6 +136,7 @@ export const onboardingDraftResponseSchema = z.object({
   ageGroup: ageGroupSchema.nullable(),
   region: avatarRegionSchema.nullable(),
   preferredLanguage: avatarLanguageSchema.nullable(),
+  readingLevel: readingLevelSchema.nullable(),
   status: z.enum(["DRAFT", "ACTIVE"]),
   lastVisitedStep: z.number().int(),
   previewProvider: avatarPreviewProviderSchema,

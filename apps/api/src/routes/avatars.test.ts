@@ -396,6 +396,29 @@ describe("PATCH /v1/avatars/:avatarId", () => {
     expect(response.json().avatar.gender).toBe("MALE");
   });
 
+  it("round-trips readingLevel through PATCH and GET", async () => {
+    const { token, orgId, userId } = await seedOrgWithSessionToken("Avatars Reading Level Org");
+    const avatar = await withAuthContext({ orgId, userId }, (tx) =>
+      tx.avatar.create({ data: { orgId, createdById: userId, name: "Draft", status: "DRAFT" } }),
+    );
+
+    const patchResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/avatars/${avatar.id}`,
+      cookies: { avatrain_session: token },
+      payload: { readingLevel: "SIMPLE" },
+    });
+    expect(patchResponse.statusCode).toBe(200);
+    expect(patchResponse.json().avatar.readingLevel).toBe("SIMPLE");
+
+    const getResponse = await app.inject({
+      method: "GET",
+      url: `/v1/avatars/${avatar.id}`,
+      cookies: { avatrain_session: token },
+    });
+    expect(getResponse.json().avatar.readingLevel).toBe("SIMPLE");
+  });
+
   it("two-org isolation: 404s (not a cross-tenant write) for another org's avatar", async () => {
     const { token } = await seedOrgWithSessionToken("Avatars Patch Isolation Org");
     const otherOrg = await seedOrgWithSessionToken("Avatars Patch Isolation Other Org");

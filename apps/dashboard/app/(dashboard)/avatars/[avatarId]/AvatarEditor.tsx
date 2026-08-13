@@ -26,6 +26,7 @@ import {
   OUTFIT_GRADIENTS,
   OUTFIT_SUBTITLES,
   OUTFIT_TITLES,
+  READING_LEVEL_LABELS,
   SKIN_TONE_OPTIONS,
   SKIN_TONE_SWATCHES,
   STYLE_PREVIEW_PHOTOS,
@@ -38,6 +39,7 @@ import {
   type Gender,
   type HairStyle,
   type Outfit,
+  type ReadingLevel,
   type VoiceTone,
 } from "../../../onboarding/types";
 import styles from "./AvatarEditor.module.css";
@@ -78,6 +80,7 @@ const AVATAR_REGION_OPTIONS: readonly AvatarRegion[] = [
   "APAC",
 ];
 const AVATAR_LANGUAGE_OPTIONS: readonly AvatarLanguage[] = ["ENGLISH", "HINDI"];
+const READING_LEVEL_OPTIONS: readonly ReadingLevel[] = ["SIMPLE", "STANDARD", "ADVANCED"];
 
 interface EditorFormState {
   name: string;
@@ -92,6 +95,7 @@ interface EditorFormState {
   ageGroup: AgeGroup;
   region: AvatarRegion;
   preferredLanguage: AvatarLanguage;
+  readingLevel: ReadingLevel;
 }
 
 const DEFAULTS: EditorFormState = {
@@ -107,6 +111,7 @@ const DEFAULTS: EditorFormState = {
   ageGroup: "MIDDLE_AGED",
   region: "GLOBAL",
   preferredLanguage: "ENGLISH",
+  readingLevel: "STANDARD",
 };
 
 // A DRAFT avatar can have every customization field still null — backfills
@@ -127,6 +132,7 @@ function toFormState(avatar: AvatarRecord): EditorFormState {
     ageGroup: avatar.ageGroup ?? DEFAULTS.ageGroup,
     region: avatar.region ?? DEFAULTS.region,
     preferredLanguage: avatar.preferredLanguage ?? DEFAULTS.preferredLanguage,
+    readingLevel: avatar.readingLevel ?? DEFAULTS.readingLevel,
   };
 }
 
@@ -419,6 +425,16 @@ export function AvatarEditor({ avatarId }: AvatarEditorProps) {
             labels={AVATAR_LANGUAGE_LABELS}
             selected={form.preferredLanguage}
             onSelect={(value) => update("preferredLanguage", value)}
+          />
+        </div>
+
+        <div className={styles.section}>
+          <span className={styles.sectionLabel}>READING LEVEL</span>
+          <PillPicker
+            options={READING_LEVEL_OPTIONS}
+            labels={READING_LEVEL_LABELS}
+            selected={form.readingLevel}
+            onSelect={(value) => update("readingLevel", value)}
           />
         </div>
 

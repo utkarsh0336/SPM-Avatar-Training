@@ -503,7 +503,14 @@ describe("createConversationHandler", () => {
 
   describe("checkpoint/grading tool loop", () => {
     const objectives: SessionCurriculumObjective[] = [
-      { id: "obj-1", title: "Leave basics", teachingContent: "20 days a year.", checkQuestion: "How many days?", gradingCriteria: "Answer must say 20 days." },
+      {
+        id: "obj-1",
+        title: "Leave basics",
+        teachingContent: "20 days a year.",
+        checkQuestion: "How many days?",
+        gradingCriteria: "Answer must say 20 days.",
+        status: "NOT_STARTED",
+      },
     ];
 
     it("does nothing tool-related when session.start omits avatarId, even with a curriculum dep configured", async () => {
@@ -536,9 +543,11 @@ describe("createConversationHandler", () => {
         createSTT: fakeSTT("success"),
         createTTS: fakeTTS("success"),
         getCurriculumForAvatar: fakeCurriculum(objectives),
+        getAvatarById: vi.fn(async () => null),
         ...noRetrieval,
       });
       socket.emitMessage({ ...sessionStartBase, avatarId: "11111111-1111-1111-1111-111111111111" });
+      await vi.waitFor(() => expect(socket.sent).toContainEqual({ type: "session.ready" }));
       socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
 
       await vi.waitFor(() => {
@@ -586,9 +595,11 @@ describe("createConversationHandler", () => {
         createSTT: fakeSTT("success"),
         createTTS: fakeTTS("success"),
         getCurriculumForAvatar: fakeCurriculum(objectives),
+        getAvatarById: vi.fn(async () => null),
         ...noRetrieval,
       });
       socket.emitMessage({ ...sessionStartBase, avatarId: "11111111-1111-1111-1111-111111111111" });
+      await vi.waitFor(() => expect(socket.sent).toContainEqual({ type: "session.ready" }));
       socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
 
       // Round 2 (the continuation after the tool call) is deliberately
@@ -629,10 +640,12 @@ describe("createConversationHandler", () => {
         createSTT: fakeSTT("success", "20 days"),
         createTTS: fakeTTS("success"),
         getCurriculumForAvatar: fakeCurriculum(objectives),
+        getAvatarById: vi.fn(async () => null),
         recordObjectiveProgress,
         ...noRetrieval,
       });
       socket.emitMessage({ ...sessionStartBase, avatarId: "11111111-1111-1111-1111-111111111111" });
+      await vi.waitFor(() => expect(socket.sent).toContainEqual({ type: "session.ready" }));
       socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
 
       await vi.waitFor(() => {
@@ -658,10 +671,12 @@ describe("createConversationHandler", () => {
         createSTT: fakeSTT("success"),
         createTTS: fakeTTS("success"),
         getCurriculumForAvatar: fakeCurriculum(objectives),
+        getAvatarById: vi.fn(async () => null),
         recordObjectiveProgress,
         ...noRetrieval,
       });
       socket.emitMessage({ ...sessionStartBase, avatarId: "11111111-1111-1111-1111-111111111111" });
+      await vi.waitFor(() => expect(socket.sent).toContainEqual({ type: "session.ready" }));
       socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
 
       await vi.waitFor(() => {
@@ -688,10 +703,12 @@ describe("createConversationHandler", () => {
         createSTT: fakeSTT("success", "20 days"),
         createTTS: fakeTTS("success"),
         getCurriculumForAvatar: fakeCurriculum(objectives),
+        getAvatarById: vi.fn(async () => null),
         recordObjectiveProgress,
         ...noRetrieval,
       });
       socket.emitMessage({ ...sessionStartBase, avatarId: "11111111-1111-1111-1111-111111111111" });
+      await vi.waitFor(() => expect(socket.sent).toContainEqual({ type: "session.ready" }));
       socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
 
       await vi.waitFor(() => {
@@ -715,9 +732,11 @@ describe("createConversationHandler", () => {
         createSTT: fakeSTT("success"),
         createTTS: fakeTTS("success"),
         getCurriculumForAvatar: fakeCurriculum(objectives),
+        getAvatarById: vi.fn(async () => null),
         ...noRetrieval,
       });
       socket.emitMessage({ ...sessionStartBase, avatarId: "11111111-1111-1111-1111-111111111111" });
+      await vi.waitFor(() => expect(socket.sent).toContainEqual({ type: "session.ready" }));
       socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
 
       await vi.waitFor(() => {
@@ -738,10 +757,12 @@ describe("createConversationHandler", () => {
         createSTT: fakeSTT("success"),
         createTTS: fakeTTS("success"),
         getCurriculumForAvatar: fakeCurriculum(objectives),
+        getAvatarById: vi.fn(async () => null),
         getRemainingObjectiveTitles,
         ...noRetrieval,
       });
       socket.emitMessage({ ...sessionStartBase, avatarId: "11111111-1111-1111-1111-111111111111" });
+      await vi.waitFor(() => expect(socket.sent).toContainEqual({ type: "session.ready" }));
       socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
 
       await vi.waitFor(() => {
@@ -761,10 +782,12 @@ describe("createConversationHandler", () => {
         createSTT: fakeSTT("success"),
         createTTS: fakeTTS("success"),
         getCurriculumForAvatar: fakeCurriculum(objectives),
+        getAvatarById: vi.fn(async () => null),
         getRemainingObjectiveTitles,
         ...noRetrieval,
       });
       socket.emitMessage({ ...sessionStartBase, avatarId: "11111111-1111-1111-1111-111111111111" });
+      await vi.waitFor(() => expect(socket.sent).toContainEqual({ type: "session.ready" }));
       socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
 
       await vi.waitFor(() => {
@@ -789,10 +812,12 @@ describe("createConversationHandler", () => {
         createSTT: fakeSTT("success", "20 days"),
         createTTS: fakeTTS("success"),
         getCurriculumForAvatar: fakeCurriculum(objectives),
+        getAvatarById: vi.fn(async () => null),
         recordObjectiveProgress,
         ...noRetrieval,
       });
       socket.emitMessage({ ...sessionStartBase, avatarId: "11111111-1111-1111-1111-111111111111" });
+      await vi.waitFor(() => expect(socket.sent).toContainEqual({ type: "session.ready" }));
       socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
 
       await vi.waitFor(() => {
@@ -817,10 +842,12 @@ describe("createConversationHandler", () => {
         createSTT: fakeSTT("success"),
         createTTS: fakeTTS("success"),
         getCurriculumForAvatar: fakeCurriculum(objectives),
+        getAvatarById: vi.fn(async () => null),
         getRemainingObjectiveTitles,
         ...noRetrieval,
       });
       socket.emitMessage({ ...sessionStartBase, avatarId: "11111111-1111-1111-1111-111111111111" });
+      await vi.waitFor(() => expect(socket.sent).toContainEqual({ type: "session.ready" }));
       socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
 
       await vi.waitFor(() => {
@@ -828,6 +855,187 @@ describe("createConversationHandler", () => {
       });
       expect(getRemainingObjectiveTitles).not.toHaveBeenCalled();
       expect(findMessages(socket, "module.completed")).toHaveLength(0);
+    });
+  });
+
+  describe("adaptive personalization (learner-aware curriculum)", () => {
+    it("passes the connecting learner's userId to getCurriculumForAvatar so progress-aware status can be computed", async () => {
+      const socket = new FakeSocket();
+      const getCurriculumForAvatar = fakeCurriculum([]);
+      createConversationHandler(socket as never, claims, {
+        createLLM: fakeLLM("success", ["Hi."]),
+        createSTT: fakeSTT("success"),
+        createTTS: fakeTTS("success"),
+        getCurriculumForAvatar,
+        getAvatarById: vi.fn(async () => null),
+        ...noRetrieval,
+      });
+      socket.emitMessage({ ...sessionStartBase, avatarId: "11111111-1111-1111-1111-111111111111" });
+
+      await vi.waitFor(() => {
+        expect(socket.sent).toContainEqual({ type: "session.ready" });
+      });
+      expect(getCurriculumForAvatar).toHaveBeenCalledWith("org-1", "11111111-1111-1111-1111-111111111111", "user-1");
+    });
+
+    it("folds each objective's mastery status and last feedback into the system prompt sent to the model", async () => {
+      const socket = new FakeSocket();
+      let capturedSystemPrompt = "";
+      const createLLM = vi.fn((_env, opts) => {
+        return {
+          name: "fake-llm",
+          async *chat(_messages: unknown, chatOpts: { systemPrompt: string }) {
+            capturedSystemPrompt = chatOpts.systemPrompt;
+            opts?.onResolved?.("fake-gemini");
+            yield { type: "text", text: "Let's continue. " } satisfies LLMStreamEvent;
+          },
+        } as LLMProvider;
+      });
+      const annotatedObjectives: SessionCurriculumObjective[] = [
+        {
+          id: "obj-1",
+          title: "Leave basics",
+          teachingContent: "20 days a year.",
+          checkQuestion: "How many days?",
+          gradingCriteria: "Answer must say 20 days.",
+          status: "MASTERED",
+        },
+        {
+          id: "obj-2",
+          title: "Approval process",
+          teachingContent: "Manager sign-off required.",
+          checkQuestion: "Who approves leave?",
+          gradingCriteria: "Answer must say manager.",
+          status: "NEEDS_REVIEW",
+          lastFeedback: "Missed the manager sign-off step.",
+        },
+      ];
+      createConversationHandler(socket as never, claims, {
+        createLLM,
+        createSTT: fakeSTT("success"),
+        createTTS: fakeTTS("success"),
+        getCurriculumForAvatar: fakeCurriculum(annotatedObjectives),
+        getAvatarById: vi.fn(async () => null),
+        ...noRetrieval,
+      });
+      socket.emitMessage({ ...sessionStartBase, avatarId: "11111111-1111-1111-1111-111111111111" });
+      await vi.waitFor(() => expect(socket.sent).toContainEqual({ type: "session.ready" }));
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+      expect(capturedSystemPrompt).toMatch(/MASTERED/);
+      expect(capturedSystemPrompt).toMatch(/NEEDS_REVIEW/);
+      expect(capturedSystemPrompt).toContain("Missed the manager sign-off step.");
+    });
+  });
+
+  describe("reading level", () => {
+    it("resolves readingLevel from the avatar record for a non-pinned session and calls getAvatarById exactly once", async () => {
+      const socket = new FakeSocket();
+      const getAvatarById = vi.fn(async () => ({
+        id: "11111111-1111-1111-1111-111111111111",
+        name: "Nancy",
+        style: "REALISTIC" as const,
+        gender: "FEMALE" as const,
+        skinTone: "TONE_2" as const,
+        hairStyle: "MEDIUM" as const,
+        hairColor: "AUBURN" as const,
+        outfit: "BUSINESS_FORMAL" as const,
+        expertise: "HR_LEAVE_POLICY" as const,
+        voice: "WARM" as const,
+        ageGroup: null,
+        region: null,
+        preferredLanguage: null,
+        readingLevel: "SIMPLE" as const,
+        status: "ACTIVE" as const,
+        simliFaceId: null,
+      }));
+      let capturedSystemPrompt = "";
+      const createLLM = vi.fn((_env, opts) => {
+        return {
+          name: "fake-llm",
+          async *chat(_messages: unknown, chatOpts: { systemPrompt: string }) {
+            capturedSystemPrompt = chatOpts.systemPrompt;
+            opts?.onResolved?.("fake-gemini");
+            yield { type: "text", text: "Hi. " } satisfies LLMStreamEvent;
+          },
+        } as LLMProvider;
+      });
+      createConversationHandler(socket as never, claims, {
+        createLLM,
+        createSTT: fakeSTT("success"),
+        createTTS: fakeTTS("success"),
+        getAvatarById,
+        ...noRetrieval,
+      });
+      socket.emitMessage({ ...sessionStartBase, avatarId: "11111111-1111-1111-1111-111111111111" });
+      await vi.waitFor(() => expect(socket.sent).toContainEqual({ type: "session.ready" }));
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+
+      // A second turn must not trigger a second avatar lookup — readingLevel
+      // is resolved once at session.start, not per turn.
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u2", audioBase64: "AAAA", mimeType: "audio/wav" });
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(2);
+      });
+
+      expect(capturedSystemPrompt).toMatch(/plain language/i);
+      expect(getAvatarById).toHaveBeenCalledTimes(1);
+      expect(getAvatarById).toHaveBeenCalledWith("org-1", "11111111-1111-1111-1111-111111111111");
+    });
+
+    it("degrades to STANDARD wording, without stalling session.ready, when the avatar lookup hangs past its timeout", async () => {
+      vi.useFakeTimers();
+      try {
+        const socket = new FakeSocket();
+        const getAvatarById = vi.fn(() => new Promise<never>(() => {})); // never resolves
+        createConversationHandler(socket as never, claims, {
+          createLLM: fakeLLM("success", ["Hi."]),
+          createSTT: fakeSTT("success"),
+          createTTS: fakeTTS("success"),
+          getAvatarById,
+          ...noRetrieval,
+        });
+        socket.emitMessage({ ...sessionStartBase, avatarId: "11111111-1111-1111-1111-111111111111" });
+
+        await vi.advanceTimersByTimeAsync(250);
+        expect(socket.sent).toContainEqual({ type: "session.ready" });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("defaults to STANDARD wording when the avatar has no readingLevel set", async () => {
+      const socket = new FakeSocket();
+      let capturedSystemPrompt = "";
+      const createLLM = vi.fn((_env, opts) => {
+        return {
+          name: "fake-llm",
+          async *chat(_messages: unknown, chatOpts: { systemPrompt: string }) {
+            capturedSystemPrompt = chatOpts.systemPrompt;
+            opts?.onResolved?.("fake-gemini");
+            yield { type: "text", text: "Hi. " } satisfies LLMStreamEvent;
+          },
+        } as LLMProvider;
+      });
+      createConversationHandler(socket as never, claims, {
+        createLLM,
+        createSTT: fakeSTT("success"),
+        createTTS: fakeTTS("success"),
+        ...noRetrieval,
+      });
+      socket.emitMessage(sessionStartBase);
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+
+      expect(capturedSystemPrompt).toMatch(/clear, professional language/i);
     });
   });
 
@@ -848,6 +1056,7 @@ describe("createConversationHandler", () => {
         ageGroup: null,
         region: null,
         preferredLanguage: null,
+        readingLevel: null,
         status: "ACTIVE" as const,
         simliFaceId: null,
       }));
@@ -877,6 +1086,56 @@ describe("createConversationHandler", () => {
       expect(getAvatarById).toHaveBeenCalledWith("org-1", "avatar-1");
     });
 
+    it("resolves readingLevel from the pinned avatar without a second avatar lookup", async () => {
+      const socket = new FakeSocket();
+      const getAvatarById = vi.fn(async () => ({
+        id: "avatar-1",
+        name: "Pinned Persona",
+        style: "REALISTIC" as const,
+        gender: "MALE" as const,
+        skinTone: "TONE_3" as const,
+        hairStyle: "SHORT" as const,
+        hairColor: "BLACK" as const,
+        outfit: "BUSINESS_CASUAL" as const,
+        expertise: "SALES_NEGOTIATION" as const,
+        voice: "DEEP" as const,
+        ageGroup: null,
+        region: null,
+        preferredLanguage: null,
+        readingLevel: "ADVANCED" as const,
+        status: "ACTIVE" as const,
+        simliFaceId: null,
+      }));
+      let capturedSystemPrompt = "";
+      const createLLM = vi.fn((_env, opts) => {
+        return {
+          name: "fake-llm",
+          async *chat(_messages: unknown, chatOpts: { systemPrompt: string }) {
+            capturedSystemPrompt = chatOpts.systemPrompt;
+            opts?.onResolved?.("fake-gemini");
+            yield { type: "text", text: "Hi." } satisfies LLMStreamEvent;
+          },
+        } as LLMProvider;
+      });
+      const embedClaims = { orgId: "org-1", userId: null, pinnedAvatarId: "avatar-1" };
+      createConversationHandler(socket as never, embedClaims, {
+        createLLM,
+        createSTT: fakeSTT("success"),
+        createTTS: fakeTTS("success"),
+        getAvatarById,
+        ...noRetrieval,
+      });
+      socket.emitMessage({ ...sessionStartBase, avatarId: "22222222-2222-2222-2222-222222222222" });
+      await vi.waitFor(() => expect(socket.sent).toContainEqual({ type: "session.ready" }));
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+      expect(capturedSystemPrompt).toMatch(/domain terminology/i);
+      expect(getAvatarById).toHaveBeenCalledTimes(1);
+    });
+
     it("loads the curriculum for the pinned avatar, not whatever avatarId the client sent", async () => {
       const socket = new FakeSocket();
       const getAvatarById = vi.fn(async () => null); // avatar lookup miss doesn't block the session
@@ -896,7 +1155,7 @@ describe("createConversationHandler", () => {
       await vi.waitFor(() => {
         expect(socket.sent).toContainEqual({ type: "session.ready" });
       });
-      expect(getCurriculumForAvatar).toHaveBeenCalledWith("org-1", "avatar-1");
+      expect(getCurriculumForAvatar).toHaveBeenCalledWith("org-1", "avatar-1", null);
     });
   });
 });

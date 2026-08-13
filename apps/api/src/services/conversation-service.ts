@@ -22,7 +22,9 @@ import {
   type LLMMessage,
   type LLMProvider,
   type LLMStreamEvent,
+  type AvatarRecord,
   type ObjectiveProgressVerdict,
+  type ReadingLevel,
   type STTProvider,
   type VoiceTone,
 } from "@avatrain/shared";
@@ -67,6 +69,14 @@ const TOOL_TIMEOUT_MS = 3000;
 // as unbounded and sitting directly ahead of session.ready. Bounded rather
 // than left to however long two sequential Prisma queries happen to take.
 const CURRICULUM_LOAD_TIMEOUT_MS = 500;
+
+// Same reasoning, applied to session.start's avatar-record lookup (persona
+// override for pinned/embed sessions, readingLevel resolution for every
+// avatarId'd session) — a single indexed orgId+id lookup, so a tighter
+// budget than the curriculum call's two queries. See
+// .claude/specs/adaptive-learning-personalization.md; latency-auditor
+// flagged this lookup as unbounded on the non-pinned branch.
+const AVATAR_LOOKUP_TIMEOUT_MS = 200;
 
 const WS_OPEN = 1;
 
@@ -203,6 +213,33 @@ function withCurriculumTimeout(promise: Promise<SessionCurriculum | null>, timeo
       (error: unknown) => {
         clearTimeout(timer);
         console.error("conversation-service: failed to load curriculum for avatar", error);
+        resolve(null);
+      },
+    );
+  });
+}
+
+/**
+ * Same shape as withCurriculumTimeout, applied to session.start's
+ * avatar-record lookup — degrades to "no persona override / no readingLevel
+ * this session" on timeout/failure rather than delaying session.ready
+ * indefinitely. Both callers (pinned and non-pinned branches) treat a null
+ * result as "nothing to override," so degrading to null here is safe.
+ */
+function withAvatarLookupTimeout(promise: Promise<AvatarRecord | null>, timeoutMs: number): Promise<AvatarRecord | null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      console.error(`conversation-service: avatar lookup exceeded ${timeoutMs}ms — starting session without it`);
+      resolve(null);
+    }, timeoutMs);
+    promise.then(
+      (result) => {
+        clearTimeout(timer);
+        resolve(result);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        console.error("conversation-service: failed to load avatar record", error);
         resolve(null);
       },
     );
@@ -649,6 +686,13 @@ Grading criteria: ${objective.gradingCriteria}`;
         let resolvedVoiceTone = message.voiceTone;
         let resolvedGender = message.gender;
         let effectiveAvatarId = message.avatarId;
+        // Trainer policy, not learner preference — resolved server-side only from the Avatar
+        // record, same trust posture as avatarName/expertise/voiceTone/gender below. Unlike those
+        // four (embed-only override), readingLevel is resolved whenever an avatarId is known at
+        // all, including plain dashboard-rehearsal sessions, since it's never meant to be
+        // client-suppliable in any session kind. See
+        // .claude/specs/adaptive-learning-personalization.md.
+        let readingLevel: ReadingLevel | undefined;
 
         // Embed sessions (claims.pinnedAvatarId set by routes/embed.ts's
         // ticket mint) never trust client-supplied persona fields — an
@@ -657,17 +701,31 @@ Grading criteria: ${objective.gradingCriteria}`;
         // getCallerSimliFaceId already applies to simliFaceId: resolved
         // server-side from the org's own data, once per session.start.
         if (claims.pinnedAvatarId) {
+          // Deliberately NOT wrapped in withAvatarLookupTimeout: on timeout that
+          // helper degrades to null, and here "null" falls through to the
+          // client-supplied avatarName/expertise/voiceTone/gender below — which
+          // is exactly what this branch exists to prevent an embed session from
+          // doing. A slow/hung lookup should stall session.ready, not silently
+          // start trusting an anonymous visitor's payload. Pre-existing
+          // unbounded await, unchanged by this diff.
           const pinned = await loadAvatarById(claims.orgId, claims.pinnedAvatarId);
           if (pinned) {
             avatarName = pinned.name ?? avatarName;
             expertise = pinned.expertise ?? expertise;
             resolvedVoiceTone = pinned.voice ?? resolvedVoiceTone;
             resolvedGender = pinned.gender ?? resolvedGender;
+            readingLevel = pinned.readingLevel ?? undefined;
           }
           effectiveAvatarId = claims.pinnedAvatarId;
+        } else if (effectiveAvatarId) {
+          const avatar = await withAvatarLookupTimeout(
+            loadAvatarById(claims.orgId, effectiveAvatarId),
+            AVATAR_LOOKUP_TIMEOUT_MS,
+          );
+          readingLevel = avatar?.readingLevel ?? undefined;
         }
 
-        systemPrompt = buildSystemPrompt({ avatarName, expertise, language });
+        systemPrompt = buildSystemPrompt({ avatarName, expertise, language, readingLevel });
         voiceTone = resolvedVoiceTone;
         gender = resolvedGender;
         llm = createLLM(process.env, {
@@ -679,7 +737,7 @@ Grading criteria: ${objective.gradingCriteria}`;
 
         if (effectiveAvatarId) {
           curriculum = await withCurriculumTimeout(
-            loadCurriculum(claims.orgId, effectiveAvatarId),
+            loadCurriculum(claims.orgId, effectiveAvatarId, claims.userId ?? null),
             CURRICULUM_LOAD_TIMEOUT_MS,
           );
           if (curriculum) systemPrompt = appendCurriculumContext(systemPrompt, curriculum.objectives);

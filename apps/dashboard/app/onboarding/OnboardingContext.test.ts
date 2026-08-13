@@ -16,6 +16,7 @@ const EMPTY_DRAFT: OnboardingDraftResponse = {
   ageGroup: null,
   region: null,
   preferredLanguage: null,
+  readingLevel: null,
   status: "DRAFT",
   lastVisitedStep: 1,
   previewProvider: "NONE",

@@ -5,6 +5,7 @@ import {
   createCurriculum,
   deleteCurriculum,
   getCurriculum,
+  getCurriculumForAvatar,
   listCurriculumProgress,
   replaceObjectives,
 } from "./curriculum-service.js";
@@ -207,6 +208,113 @@ describe("curriculum-service", () => {
       const curriculum = await createCurriculum(orgA.orgId, orgA.userId, { avatarId, title: "X" });
 
       await expect(deleteCurriculum(orgB.orgId, curriculum.id)).rejects.toMatchObject({ statusCode: 404 });
+    });
+  });
+
+  describe("getCurriculumForAvatar", () => {
+    it("returns NOT_STARTED for every objective when the learner has no progress rows", async () => {
+      const { orgId, userId } = await seedOrgAndUser("Adaptive NotStarted Org");
+      const learner = await seedOrgAndUser("Adaptive NotStarted Learner Org");
+      const avatarId = await seedAvatar(orgId, userId);
+      const curriculum = await createCurriculum(orgId, userId, { avatarId, title: "X" });
+      await replaceObjectives(orgId, curriculum.id, [
+        { title: "Obj 1", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+      ]);
+
+      const result = await getCurriculumForAvatar(orgId, avatarId, learner.userId);
+      expect(result?.objectives).toHaveLength(1);
+      expect(result?.objectives[0]).toMatchObject({ status: "NOT_STARTED" });
+      expect(result?.objectives[0]?.lastFeedback).toBeUndefined();
+    });
+
+    it("marks a PASSed objective MASTERED", async () => {
+      const { orgId, userId } = await seedOrgAndUser("Adaptive Mastered Org");
+      const learner = await seedOrgAndUser("Adaptive Mastered Learner Org");
+      const avatarId = await seedAvatar(orgId, userId);
+      const curriculum = await createCurriculum(orgId, userId, { avatarId, title: "X" });
+      const [objective] = await replaceObjectives(orgId, curriculum.id, [
+        { title: "Obj 1", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+      ]);
+      await withAuthContext({ orgId }, (tx) =>
+        tx.objectiveProgress.create({
+          data: { orgId, objectiveId: objective!.id, learnerId: learner.userId, verdict: "PASS", attempts: 1, feedback: "Correct." },
+        }),
+      );
+
+      const result = await getCurriculumForAvatar(orgId, avatarId, learner.userId);
+      expect(result?.objectives[0]).toMatchObject({ status: "MASTERED", attempts: 1 });
+    });
+
+    it("marks a RETRY'd objective NEEDS_REVIEW and carries its last feedback", async () => {
+      const { orgId, userId } = await seedOrgAndUser("Adaptive NeedsReview Org");
+      const learner = await seedOrgAndUser("Adaptive NeedsReview Learner Org");
+      const avatarId = await seedAvatar(orgId, userId);
+      const curriculum = await createCurriculum(orgId, userId, { avatarId, title: "X" });
+      const [objective] = await replaceObjectives(orgId, curriculum.id, [
+        { title: "Obj 1", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+      ]);
+      await withAuthContext({ orgId }, (tx) =>
+        tx.objectiveProgress.create({
+          data: {
+            orgId,
+            objectiveId: objective!.id,
+            learnerId: learner.userId,
+            verdict: "RETRY",
+            attempts: 2,
+            feedback: "Missed the manager sign-off step.",
+          },
+        }),
+      );
+
+      const result = await getCurriculumForAvatar(orgId, avatarId, learner.userId);
+      expect(result?.objectives[0]).toMatchObject({
+        status: "NEEDS_REVIEW",
+        lastFeedback: "Missed the manager sign-off step.",
+        attempts: 2,
+      });
+    });
+
+    it("returns every objective NOT_STARTED when learnerId is null (anonymous/embed sessions)", async () => {
+      const { orgId, userId } = await seedOrgAndUser("Adaptive Anonymous Org");
+      const learner = await seedOrgAndUser("Adaptive Anonymous Learner Org");
+      const avatarId = await seedAvatar(orgId, userId);
+      const curriculum = await createCurriculum(orgId, userId, { avatarId, title: "X" });
+      const [objective] = await replaceObjectives(orgId, curriculum.id, [
+        { title: "Obj 1", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+      ]);
+      // Even though THIS learner passed it, learnerId: null must never see it.
+      await withAuthContext({ orgId }, (tx) =>
+        tx.objectiveProgress.create({
+          data: { orgId, objectiveId: objective!.id, learnerId: learner.userId, verdict: "PASS", attempts: 1, feedback: "Correct." },
+        }),
+      );
+
+      const result = await getCurriculumForAvatar(orgId, avatarId, null);
+      expect(result?.objectives[0]).toMatchObject({ status: "NOT_STARTED" });
+    });
+
+    it("does not leak one org's learner progress into another org's status for the same objective title/order", async () => {
+      const orgA = await seedOrgAndUser("Adaptive Isolation Org A");
+      const orgB = await seedOrgAndUser("Adaptive Isolation Org B");
+      const learner = await seedOrgAndUser("Adaptive Isolation Learner Org");
+      const avatarA = await seedAvatar(orgA.orgId, orgA.userId);
+      const avatarB = await seedAvatar(orgB.orgId, orgB.userId);
+      const curriculumA = await createCurriculum(orgA.orgId, orgA.userId, { avatarId: avatarA, title: "X" });
+      const curriculumB = await createCurriculum(orgB.orgId, orgB.userId, { avatarId: avatarB, title: "X" });
+      const [objectiveA] = await replaceObjectives(orgA.orgId, curriculumA.id, [
+        { title: "Obj 1", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+      ]);
+      await replaceObjectives(orgB.orgId, curriculumB.id, [
+        { title: "Obj 1", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+      ]);
+      await withAuthContext({ orgId: orgA.orgId }, (tx) =>
+        tx.objectiveProgress.create({
+          data: { orgId: orgA.orgId, objectiveId: objectiveA!.id, learnerId: learner.userId, verdict: "PASS", attempts: 1, feedback: "Correct." },
+        }),
+      );
+
+      const resultB = await getCurriculumForAvatar(orgB.orgId, avatarB, learner.userId);
+      expect(resultB?.objectives[0]).toMatchObject({ status: "NOT_STARTED" });
     });
   });
 

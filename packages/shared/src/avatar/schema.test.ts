@@ -31,6 +31,7 @@ describe("avatarRecordSchema", () => {
     ageGroup: "MIDDLE_AGED",
     region: "GLOBAL",
     preferredLanguage: "ENGLISH",
+    readingLevel: "STANDARD",
     status: "ACTIVE",
     simliFaceId: null,
   };
@@ -54,6 +55,7 @@ describe("avatarRecordSchema", () => {
       ageGroup: null,
       region: null,
       preferredLanguage: null,
+      readingLevel: null,
       status: "DRAFT",
     };
     expect(avatarRecordSchema.safeParse(draft).success).toBe(true);

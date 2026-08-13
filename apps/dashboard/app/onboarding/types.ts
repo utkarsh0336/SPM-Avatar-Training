@@ -31,6 +31,9 @@ export type VoiceTone = "DEEP" | "NEUTRAL" | "WARM";
 export type AgeGroup = "YOUNG_ADULT" | "MIDDLE_AGED" | "SENIOR";
 export type AvatarRegion = "GLOBAL" | "INDIA" | "NORTH_AMERICA" | "EUROPE" | "MIDDLE_EAST" | "APAC";
 export type AvatarLanguage = "ENGLISH" | "HINDI";
+// Unlike AgeGroup/AvatarRegion/AvatarLanguage above (metadata only), this one is actually
+// consumed by buildSystemPrompt — see prisma/schema.prisma's ReadingLevel doc comment.
+export type ReadingLevel = "SIMPLE" | "STANDARD" | "ADVANCED";
 
 // Additive — see .claude/specs/avatar-builder-customization.md. NONE is the
 // only value the default wizard flow ever writes; READY_PLAYER_ME is only
@@ -50,6 +53,7 @@ export interface OnboardingState {
   ageGroup: AgeGroup;
   region: AvatarRegion;
   preferredLanguage: AvatarLanguage;
+  readingLevel: ReadingLevel;
   previewProvider: AvatarPreviewProvider;
   externalAvatarId: string | null;
   avatarModelUrl: string | null;
@@ -74,6 +78,7 @@ export const INITIAL_ONBOARDING_STATE: OnboardingState = {
   ageGroup: "MIDDLE_AGED",
   region: "GLOBAL",
   preferredLanguage: "ENGLISH",
+  readingLevel: "STANDARD",
   previewProvider: "NONE",
   externalAvatarId: null,
   avatarModelUrl: null,
@@ -202,6 +207,12 @@ export const AVATAR_REGION_LABELS: Record<AvatarRegion, string> = {
 export const AVATAR_LANGUAGE_LABELS: Record<AvatarLanguage, string> = {
   ENGLISH: "English",
   HINDI: "Hindi",
+};
+
+export const READING_LEVEL_LABELS: Record<ReadingLevel, string> = {
+  SIMPLE: "Simple / Plain Language",
+  STANDARD: "Standard",
+  ADVANCED: "Advanced / Technical",
 };
 
 // Order matters — rendered left-to-right in that order in the picker.
