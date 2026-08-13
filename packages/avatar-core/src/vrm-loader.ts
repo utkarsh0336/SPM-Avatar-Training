@@ -62,13 +62,16 @@ export async function loadVrmScene(options: LoadVrmSceneOptions): Promise<VrmSce
   const width = options.container.clientWidth || DEFAULT_WIDTH;
   const height = options.container.clientHeight || DEFAULT_HEIGHT;
   const canvas = options.createCanvas?.() ?? document.createElement("canvas");
-  // CSS-driven fill, same convention mock-avatar-provider.ts/
-  // simli-avatar-provider.ts use for their <video> elements — overrides
-  // WebGLRenderer.setSize's own default of setting a fixed pixel-value
-  // style, so the canvas keeps covering its container across CSS layout
-  // changes even though the internal drawing-buffer resolution (set once,
-  // below) doesn't itself follow a later container resize without an
-  // explicit resize() call.
+  // Same convention mock-avatar-provider.ts/simli-avatar-provider.ts use
+  // for their <video> elements. Note renderer.setSize() below (default
+  // updateStyle=true) immediately overwrites style.width/height with a
+  // fixed px value matching container size at this instant — these two
+  // lines only matter until that call. Neither the CSS box nor the
+  // internal drawing-buffer resolution nor the camera aspect track later
+  // container-size changes (side panel toggle, fullscreen, window resize)
+  // on their own; the consumer must call the returned handle's resize()
+  // when the container's size actually changes (see vrm-avatar-provider.ts's
+  // ResizeObserver wiring).
   canvas.style.width = "100%";
   canvas.style.height = "100%";
   canvas.style.objectFit = "cover";
@@ -82,9 +85,30 @@ export async function loadVrmScene(options: LoadVrmSceneOptions): Promise<VrmSce
   scene.add(new THREE.DirectionalLight(0xffffff, 1.2).translateOnAxis(new THREE.Vector3(1, 1.5, 1), 1));
   scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 
-  const camera = new THREE.PerspectiveCamera(30, width / height, 0.1, 20);
-  camera.position.set(0, 1.4, 1.6);
-  camera.lookAt(0, 1.35, 0);
+  // Bust-frame the camera from the loaded model's own bounding box rather
+  // than a fixed head-height guess — replica-resolver.ts's gender/style/
+  // outfit combos don't all share one height, and a fixed camera position
+  // cropped the head on taller models. Falls back to a plausible bust
+  // framing when the model reports no geometry (e.g. this file's own
+  // tests, which pass a bare THREE.Group() with no meshes).
+  const FOV_DEGREES = 32;
+  const HEADROOM_RATIO = 1.25; // vertical padding beyond the raw head-to-chest span
+  const BUST_SPAN_RATIO = 0.42; // fraction of standing height framed, chest-up
+  const bounds = new THREE.Box3().setFromObject(vrm.scene);
+  let frameCenterY = 1.35;
+  let frameHeight = 0.7;
+  if (!bounds.isEmpty()) {
+    const modelHeight = bounds.max.y - bounds.min.y;
+    const headTop = bounds.max.y;
+    const bustBottom = headTop - modelHeight * BUST_SPAN_RATIO;
+    frameCenterY = (headTop + bustBottom) / 2;
+    frameHeight = (headTop - bustBottom) * HEADROOM_RATIO;
+  }
+  const distance = frameHeight / 2 / Math.tan(THREE.MathUtils.degToRad(FOV_DEGREES) / 2);
+
+  const camera = new THREE.PerspectiveCamera(FOV_DEGREES, width / height, 0.1, 20);
+  camera.position.set(0, frameCenterY, distance);
+  camera.lookAt(0, frameCenterY, 0);
 
   options.container.appendChild(canvas);
 
