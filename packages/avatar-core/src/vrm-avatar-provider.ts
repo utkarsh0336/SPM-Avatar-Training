@@ -21,6 +21,16 @@ export interface VrmAvatarProviderOptions {
   requestAnimationFrame?: (callback: () => void) => number;
   cancelAnimationFrame?: (handle: number) => void;
   /**
+   * Injectable for tests; defaults to the real ResizeObserver (guarded —
+   * a no-op stub where it doesn't exist, e.g. SSR). Keeps the VRM canvas's
+   * drawing-buffer resolution and camera aspect in sync with the
+   * container's actual on-screen size, which changes whenever the
+   * session's side panel is hidden/shown or fullscreen is toggled (see
+   * VideoChatSession.tsx/ControlBar.tsx) — without this, the renderer
+   * stays pinned to whatever size the container was at mount time.
+   */
+  createResizeObserver?: (callback: () => void) => { observe(target: Element): void; disconnect(): void };
+  /**
    * Used if the VRM model (and its placeholder) both fail to load, or WebGL
    * is unavailable — defaults to createMockAvatarProvider(). The caller
    * never sees a rejected start(): a broken/missing 3D asset degrades to
@@ -69,6 +79,12 @@ export function createVrmAvatarProvider(options: VrmAvatarProviderOptions = {}):
   const raf = (callback: () => void): number =>
     (options.requestAnimationFrame ?? globalThis.requestAnimationFrame)(callback);
   const caf = (handle: number): void => (options.cancelAnimationFrame ?? globalThis.cancelAnimationFrame)?.(handle);
+  const createResizeObserver =
+    options.createResizeObserver ??
+    ((callback: () => void) =>
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(callback)
+        : { observe(): void {}, disconnect(): void {} });
 
   let usingFallback = false;
   let sceneHandle: VrmSceneHandle | null = null;
@@ -77,7 +93,16 @@ export function createVrmAvatarProvider(options: VrmAvatarProviderOptions = {}):
   let sourceNode: { disconnect(): void } | null = null;
   let amplitudeLoop: AudioAmplitudeLoopHandle | null = null;
   let renderRafHandle: number | null = null;
+  let resizeObserver: { observe(target: Element): void; disconnect(): void } | null = null;
   let mounted = false;
+  // Guards startVrm()'s in-flight loadScene() racing a stop() call — e.g.
+  // React effect cleanup (StrictMode's double-invoke, or a real prop
+  // change) firing while the model is still loading. Without this, stop()
+  // on a not-yet-mounted provider is a no-op (nothing to dispose yet), so
+  // the load finishes anyway and appends a second, orphaned canvas nothing
+  // will ever remove — same failure mode vrm-avatar-preview-renderer.ts's
+  // loadToken guards against.
+  let loadToken = 0;
 
   function runRenderLoop(): void {
     const tick = (): void => {
@@ -102,6 +127,7 @@ export function createVrmAvatarProvider(options: VrmAvatarProviderOptions = {}):
   }
 
   async function startVrm(config: AvatarProviderStartConfig): Promise<void> {
+    const myToken = ++loadToken;
     const primaryUrl = vrmModelPath(config.replicaId);
     let handle: VrmSceneHandle;
     try {
@@ -109,6 +135,13 @@ export function createVrmAvatarProvider(options: VrmAvatarProviderOptions = {}):
     } catch (primaryError) {
       console.warn(`[vrm-avatar-provider] failed to load "${primaryUrl}", trying the placeholder model:`, primaryError);
       handle = await loadScene({ modelUrl: placeholderVrmModelPath(), container: config.container });
+    }
+
+    if (myToken !== loadToken) {
+      // stop() ran while the model was still loading — discard this
+      // instance instead of mounting a canvas nothing will ever dispose.
+      handle.dispose();
+      return;
     }
 
     applyMaterialTints(handle.vrm, {
@@ -123,6 +156,12 @@ export function createVrmAvatarProvider(options: VrmAvatarProviderOptions = {}):
     config.container.appendChild(audioElement);
     mounted = true;
     runRenderLoop();
+
+    resizeObserver = createResizeObserver(() => {
+      const { clientWidth, clientHeight } = config.container;
+      if (clientWidth > 0 && clientHeight > 0) sceneHandle?.resize(clientWidth, clientHeight);
+    });
+    resizeObserver.observe(config.container);
   }
 
   return {
@@ -179,10 +218,13 @@ export function createVrmAvatarProvider(options: VrmAvatarProviderOptions = {}):
         usingFallback = false;
         return;
       }
+      loadToken++; // invalidate any in-flight load
       stopAmplitudeLoop();
       audioContext?.close();
       audioContext = null;
       stopRenderLoop();
+      resizeObserver?.disconnect();
+      resizeObserver = null;
       sceneHandle?.dispose();
       sceneHandle = null;
       expressionDriver = null;

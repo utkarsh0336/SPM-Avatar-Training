@@ -146,6 +146,17 @@ export function useConversationSession({
       const persona = resolvePersona(record);
       const replicaId = resolveReplicaId({ style: persona.style, gender: persona.gender, outfit: persona.outfit });
 
+      // The effect's cleanup below can fire while the persona fetch above is
+      // still in flight (React StrictMode's dev-only double-invoke, or a
+      // real dependency change) — without this check, a stale invocation
+      // still creates and starts its own avatarProvider after the "current"
+      // one has already been torn down, mounting a second VRM canvas/audio
+      // element into the same container that nothing ever disposes (the
+      // outer avatarProvider variable this closure's cleanup calls stop()
+      // on is still null at that point, since it isn't assigned until
+      // right below).
+      if (cancelled) return;
+
       avatarProvider = createAvatarProviderFromEnv({
         // Literal process.env.NEXT_PUBLIC_* access, required so Next.js can
         // statically inline it into the client bundle — see

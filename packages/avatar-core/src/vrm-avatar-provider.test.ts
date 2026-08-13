@@ -202,4 +202,28 @@ describe("createVrmAvatarProvider", () => {
     const provider = createVrmAvatarProvider({ createAudioElement: createFakeAudioElement });
     expect(() => provider.stop()).not.toThrow();
   });
+
+  it("stop() while the model is still loading discards it once loaded, instead of mounting an orphaned canvas", async () => {
+    const sceneHandle = createFakeSceneHandle();
+    let resolveLoad!: (handle: VrmSceneHandle) => void;
+    const loadScene = vi.fn(() => new Promise<VrmSceneHandle>((resolve) => (resolveLoad = resolve)));
+    const raf = createFakeRaf();
+    const container = createFakeContainer();
+
+    const provider = createVrmAvatarProvider({
+      loadScene,
+      createAudioElement: createFakeAudioElement,
+      requestAnimationFrame: raf.raf,
+      cancelAnimationFrame: raf.caf,
+    });
+
+    const startPromise = provider.start({ replicaId: "r1", container });
+    provider.stop(); // fires before loadScene() resolves — e.g. a React effect cleanup racing the async load
+    resolveLoad(sceneHandle);
+    await startPromise;
+
+    expect(sceneHandle.dispose).toHaveBeenCalled();
+    expect(container.appendChild).not.toHaveBeenCalled();
+    expect(raf.raf).not.toHaveBeenCalled();
+  });
 });
