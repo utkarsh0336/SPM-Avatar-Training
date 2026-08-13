@@ -50,6 +50,9 @@ function toAvatarRecord(avatar: Avatar): AvatarRecord {
     outfit: avatar.outfit,
     expertise: avatar.expertise,
     voice: avatar.voice,
+    ageGroup: avatar.ageGroup,
+    region: avatar.region,
+    preferredLanguage: avatar.preferredLanguage,
     status: avatar.status,
     simliFaceId: avatar.simliFaceId,
   };

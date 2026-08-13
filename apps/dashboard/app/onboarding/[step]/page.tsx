@@ -4,6 +4,7 @@ import { GenderStep } from "../steps/GenderStep";
 import { AppearanceStep } from "../steps/AppearanceStep";
 import { OutfitStep } from "../steps/OutfitStep";
 import { NameExpertiseStep } from "../steps/NameExpertiseStep";
+import { PersonaDetailsStep } from "../steps/PersonaDetailsStep";
 import { VoiceReviewStep } from "../steps/VoiceReviewStep";
 
 export default async function OnboardingStepPage({
@@ -25,6 +26,8 @@ export default async function OnboardingStepPage({
     case "5":
       return <NameExpertiseStep />;
     case "6":
+      return <PersonaDetailsStep />;
+    case "7":
       return <VoiceReviewStep />;
     default:
       notFound();

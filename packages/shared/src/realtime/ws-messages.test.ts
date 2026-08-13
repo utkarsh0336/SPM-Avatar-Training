@@ -171,6 +171,41 @@ describe("serverMessageSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  it("accepts an avatar transcript message with an emotion", () => {
+    const result = serverMessageSchema.safeParse({
+      type: "transcript",
+      role: "avatar",
+      text: "Great job, that's exactly right!",
+      utteranceId: "u1",
+      final: true,
+      emotion: "happy",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts a transcript message with emotion omitted (pre-emotion clients)", () => {
+    const result = serverMessageSchema.safeParse({
+      type: "transcript",
+      role: "user",
+      text: "What's the leave policy?",
+      utteranceId: "u1",
+      final: true,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an unknown emotion value", () => {
+    const result = serverMessageSchema.safeParse({
+      type: "transcript",
+      role: "avatar",
+      text: "Great job!",
+      utteranceId: "u1",
+      final: true,
+      emotion: "furious",
+    });
+    expect(result.success).toBe(false);
+  });
+
   it("rejects a negative sentenceIndex", () => {
     const result = serverMessageSchema.safeParse({
       type: "tts.chunk",

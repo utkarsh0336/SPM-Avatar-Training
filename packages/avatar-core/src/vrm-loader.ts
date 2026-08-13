@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin, type VRM } from "@pixiv/three-vrm";
+import { applyRestPose } from "./vrm-rest-pose.js";
 
 export interface VrmSceneHandle {
   readonly vrm: VRM;
@@ -58,6 +59,10 @@ export async function loadVrmScene(options: LoadVrmSceneOptions): Promise<VrmSce
   // don't surface it under this project's NodeNext module resolution; the
   // rotation itself is a one-line fix, not worth fighting the types over.)
   if (vrm.meta.metaVersion === "0") vrm.scene.rotateY(Math.PI);
+
+  // Before the bounding-box/camera-framing math below, so the bust-framing
+  // reflects the actual rest pose rather than a T-pose's much wider bounds.
+  applyRestPose(vrm);
 
   const width = options.container.clientWidth || DEFAULT_WIDTH;
   const height = options.container.clientHeight || DEFAULT_HEIGHT;

@@ -9,6 +9,7 @@ import {
   createTurnLatencyTracker,
   CURRICULUM_TOOLS,
   SentenceChunker,
+  classifyEmotion,
   clientMessageSchema,
   resolveVoiceGender,
   resolveWhisperLanguageCode,
@@ -604,6 +605,13 @@ Grading criteria: ${objective.gradingCriteria}`;
     }
 
     messages.push({ role: "assistant", content: fullReply });
+    // Computed once from the already-assembled reply text — no extra model
+    // call, no added turn latency. See tutor/emotion.ts. Always set
+    // (including "neutral"), unlike `sources` below — the client needs an
+    // explicit "neutral" to fade a PREVIOUS turn's expression back out; an
+    // omitted field would otherwise leave that expression stuck on-screen
+    // through every subsequent neutral reply.
+    const emotion = classifyEmotion(fullReply);
     send({
       type: "transcript",
       role: "avatar",
@@ -613,6 +621,7 @@ Grading criteria: ${objective.gradingCriteria}`;
       // Omitted (not []) when ungrounded — matches transcriptMessageSchema's
       // documented contract for a Priority-3 reply.
       ...(sources.length > 0 ? { sources } : {}),
+      emotion,
     });
     send({ type: "turn.ended", utteranceId });
     currentUtteranceId = null;

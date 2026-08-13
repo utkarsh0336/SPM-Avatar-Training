@@ -28,6 +28,9 @@ describe("avatarRecordSchema", () => {
     outfit: "BUSINESS_FORMAL",
     expertise: "HR_LEAVE_POLICY",
     voice: "NEUTRAL",
+    ageGroup: "MIDDLE_AGED",
+    region: "GLOBAL",
+    preferredLanguage: "ENGLISH",
     status: "ACTIVE",
     simliFaceId: null,
   };
@@ -48,6 +51,9 @@ describe("avatarRecordSchema", () => {
       outfit: null,
       expertise: null,
       voice: null,
+      ageGroup: null,
+      region: null,
+      preferredLanguage: null,
       status: "DRAFT",
     };
     expect(avatarRecordSchema.safeParse(draft).success).toBe(true);

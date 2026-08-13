@@ -4,6 +4,7 @@ import {
   type ClientMessage,
   type ServerMessage,
   type SessionStartMessage,
+  type TranscriptMessage,
 } from "@avatrain/shared/ws";
 import { base64ToArrayBuffer, blobToBase64 } from "./base64-audio.js";
 import { encodeBlobAsWav } from "./audio-blob-to-wav.js";
@@ -64,6 +65,12 @@ export interface ConversationModuleCompletedEvent {
 export interface ConversationAvatarSink {
   speak(audioTrack: MediaStreamTrack, subtitleText: string): void;
   interrupt(): void;
+  /**
+   * Optional — only the VRM avatar provider implements this today (Mock has
+   * no face by design, Simli's face is vendor-driven). Called for a
+   * role:"avatar" transcript that carries an emotion; never for role:"user".
+   */
+  setEmotion?(emotion: NonNullable<TranscriptMessage["emotion"]>): void;
 }
 
 export type SessionStartConfig = Omit<SessionStartMessage, "type">;
@@ -335,6 +342,9 @@ export async function connectConversationSession(
           text: parsed.text,
           final: parsed.final,
         });
+        if (parsed.role === "avatar" && parsed.emotion) {
+          options.avatar.setEmotion?.(parsed.emotion);
+        }
         break;
       case "turn.started":
         currentUtteranceId = parsed.utteranceId;

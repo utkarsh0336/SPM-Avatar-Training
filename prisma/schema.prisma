@@ -73,6 +73,38 @@ enum VoiceTone {
   WARM
 }
 
+/// Additive avatar-configuration attribute — see SOW §3.1 "various age groups".
+/// Metadata only: never fed into replica-resolver.ts's model selection (same
+/// convention as Expertise/VoiceTone below).
+enum AgeGroup {
+  YOUNG_ADULT
+  MIDDLE_AGED
+  SENIOR
+}
+
+/// Additive avatar-configuration attribute — see SOW §3.1 "regional ...
+/// avatars". Distinct from Organization.dataRegion (data residency, not
+/// avatar appearance/audience). Metadata only, same convention as AgeGroup.
+enum AvatarRegion {
+  GLOBAL
+  INDIA
+  NORTH_AMERICA
+  EUROPE
+  MIDDLE_EAST
+  APAC
+}
+
+/// Additive avatar-configuration attribute — see SOW §3.1 "... language-
+/// specific avatars". Deliberately its own enum rather than reusing
+/// tutor/avatar-config.ts's languageSchema ("English"/"Hindi", used only in
+/// the ephemeral WS session.start message) — SCREAMING_CASE values match
+/// every other avatar enum here, keeping avatar-service.ts's/onboarding-
+/// service.ts's generic patch passthrough free of a value-casing mapping.
+enum AvatarLanguage {
+  ENGLISH
+  HINDI
+}
+
 enum AvatarStatus {
   DRAFT
   ACTIVE
@@ -261,6 +293,12 @@ model Avatar {
   outfit      Outfit?
   expertise   Expertise?
   voice       VoiceTone?
+  // Additive — see AgeGroup/AvatarRegion/AvatarLanguage doc comments above.
+  // Metadata only, never completion-required (assertAvatarComplete doesn't
+  // reference these) and never fed into replica-resolver.ts.
+  ageGroup          AgeGroup?       @map("age_group")
+  region            AvatarRegion?
+  preferredLanguage AvatarLanguage? @map("preferred_language")
 
   status          AvatarStatus @default(DRAFT)
   lastVisitedStep Int          @default(1) @map("last_visited_step")

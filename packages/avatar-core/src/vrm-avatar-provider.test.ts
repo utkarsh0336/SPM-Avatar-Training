@@ -203,6 +203,45 @@ describe("createVrmAvatarProvider", () => {
     expect(() => provider.stop()).not.toThrow();
   });
 
+  it("setEmotion() crossfades the corresponding VRM expression preset in over successive render-loop ticks", async () => {
+    const vrm = createFakeVrm();
+    const sceneHandle = createFakeSceneHandle(vrm);
+    const loadScene = vi.fn().mockResolvedValue(sceneHandle);
+    const raf = createFakeRaf();
+    const provider = createVrmAvatarProvider({
+      loadScene,
+      createAudioElement: createFakeAudioElement,
+      requestAnimationFrame: raf.raf,
+      cancelAnimationFrame: raf.caf,
+    });
+
+    await provider.start({ replicaId: "r1", container: createFakeContainer() });
+    provider.setEmotion?.("happy");
+
+    // Drive the render loop (which ticks the emotion driver) a few times —
+    // each tick re-schedules itself via raf(tick), so re-invoking the most
+    // recently captured callback advances the loop.
+    for (let i = 0; i < 5; i++) {
+      const calls = raf.raf.mock.calls;
+      const latestTick = calls[calls.length - 1]![0] as () => void;
+      latestTick();
+    }
+
+    const setValue = vrm.expressionManager!.setValue as ReturnType<typeof vi.fn>;
+    const happyCalls = setValue.mock.calls.filter(([name]) => name === "happy");
+    expect(happyCalls.length).toBeGreaterThan(0);
+    expect(happyCalls[happyCalls.length - 1]![1] as number).toBeGreaterThan(0);
+  });
+
+  it("setEmotion() is a no-op once the Mock fallback is active", async () => {
+    const loadScene = vi.fn().mockRejectedValue(new Error("no WebGL"));
+    const fallback = createFakeMockFallback();
+    const provider = createVrmAvatarProvider({ loadScene, fallbackProvider: fallback, createAudioElement: createFakeAudioElement });
+
+    await provider.start({ replicaId: "r1", container: createFakeContainer() });
+    expect(() => provider.setEmotion?.("happy")).not.toThrow();
+  });
+
   it("stop() while the model is still loading discards it once loaded, instead of mounting an orphaned canvas", async () => {
     const sceneHandle = createFakeSceneHandle();
     let resolveLoad!: (handle: VrmSceneHandle) => void;

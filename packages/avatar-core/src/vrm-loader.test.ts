@@ -51,6 +51,22 @@ describe("loadVrmScene", () => {
     expect(handle.vrm).toBe(vrm);
   });
 
+  it("applies a rest pose to the loaded VRM before framing the camera (fixes the T-pose fullscreen bug)", async () => {
+    const getNormalizedBoneNode = vi.fn(() => ({ rotation: { set: vi.fn(), x: 0, y: 0, z: 0 } }));
+    const vrm = createFakeVrm({ humanoid: { getNormalizedBoneNode } as unknown as VRM["humanoid"] });
+
+    await loadVrmScene({
+      modelUrl: "/avatars/vrm/test.vrm",
+      container: createFakeContainer(),
+      loadGltf: async () => ({ userData: { vrm } }) as unknown as GLTF,
+      createCanvas: createFakeCanvas,
+      createRenderer: createFakeRenderer,
+    });
+
+    expect(getNormalizedBoneNode).toHaveBeenCalledWith("leftUpperArm");
+    expect(getNormalizedBoneNode).toHaveBeenCalledWith("rightUpperArm");
+  });
+
   it("throws a clear error when the loaded GLTF has no VRM extension", async () => {
     await expect(
       loadVrmScene({

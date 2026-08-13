@@ -30,6 +30,18 @@ export const expertiseSchema = z.enum([
   "MARKETING_BRANDING",
 ]);
 export const voiceToneSchema = z.enum(["DEEP", "NEUTRAL", "WARM"]);
+/** SOW §3.1 "various age groups" — metadata only, see prisma/schema.prisma's AgeGroup doc comment. */
+export const ageGroupSchema = z.enum(["YOUNG_ADULT", "MIDDLE_AGED", "SENIOR"]);
+/** SOW §3.1 "regional ... avatars" — metadata only, see prisma/schema.prisma's AvatarRegion doc comment. */
+export const avatarRegionSchema = z.enum(["GLOBAL", "INDIA", "NORTH_AMERICA", "EUROPE", "MIDDLE_EAST", "APAC"]);
+/**
+ * SOW §3.1 "... language-specific avatars" — an Avatar's own metadata field,
+ * deliberately distinct from `languageSchema` below (English/Hindi, used
+ * only in the ephemeral WS session.start message). SCREAMING_CASE matches
+ * every other avatar enum in this file, so avatar-service.ts's/onboarding-
+ * service.ts's generic patch passthrough needs no value-casing mapping.
+ */
+export const avatarLanguageSchema = z.enum(["ENGLISH", "HINDI"]);
 /**
  * The two languages actually wired end-to-end (LLM reply language, TTS voice,
  * STT hint) — see providers/tts-voice-map.ts's resolveHindiVoice doc comment
@@ -94,6 +106,9 @@ export type Gender = z.infer<typeof genderSchema>;
 export type Outfit = z.infer<typeof outfitSchema>;
 export type Expertise = z.infer<typeof expertiseSchema>;
 export type VoiceTone = z.infer<typeof voiceToneSchema>;
+export type AgeGroup = z.infer<typeof ageGroupSchema>;
+export type AvatarRegion = z.infer<typeof avatarRegionSchema>;
+export type AvatarLanguage = z.infer<typeof avatarLanguageSchema>;
 export type Language = z.infer<typeof languageSchema>;
 export type HairStyleValue = z.infer<typeof hairStyleSchema>;
 

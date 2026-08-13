@@ -74,6 +74,9 @@ export function mergeDraftIntoState(prev: OnboardingState, draft: OnboardingDraf
     name: draft.name ?? prev.name,
     expertise: draft.expertise ?? prev.expertise,
     voice: draft.voice ?? prev.voice,
+    ageGroup: draft.ageGroup ?? prev.ageGroup,
+    region: draft.region ?? prev.region,
+    preferredLanguage: draft.preferredLanguage ?? prev.preferredLanguage,
     previewProvider: draft.previewProvider,
     externalAvatarId: draft.externalAvatarId,
     avatarModelUrl: draft.avatarModelUrl,
@@ -95,6 +98,9 @@ export function buildPatchPayload(state: OnboardingState): OnboardingDraftInput 
     outfit: state.outfit,
     expertise: state.expertise,
     voice: state.voice,
+    ageGroup: state.ageGroup,
+    region: state.region,
+    preferredLanguage: state.preferredLanguage,
   };
   if (state.style) payload.style = state.style;
   if (state.name.trim().length >= 2) payload.name = state.name;

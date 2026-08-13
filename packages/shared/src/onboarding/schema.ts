@@ -10,6 +10,9 @@ import {
   skinToneSchema,
   HAIR_COLOR_TOKENS,
   hairColorSchema,
+  ageGroupSchema,
+  avatarRegionSchema,
+  avatarLanguageSchema,
   type HairStyleValue,
 } from "../tutor/avatar-config.js";
 
@@ -28,6 +31,9 @@ export {
   skinToneSchema,
   HAIR_COLOR_TOKENS,
   hairColorSchema,
+  ageGroupSchema,
+  avatarRegionSchema,
+  avatarLanguageSchema,
 };
 export type { HairStyleValue };
 
@@ -79,7 +85,12 @@ export const onboardingDraftSchema = z.object({
   outfit: outfitSchema.optional(),
   expertise: expertiseSchema.optional(),
   voice: voiceToneSchema.optional(),
-  lastVisitedStep: z.number().int().min(1).max(6).optional(),
+  // Additive, never completion-required — see prisma/schema.prisma's
+  // AgeGroup/AvatarRegion/AvatarLanguage doc comments.
+  ageGroup: ageGroupSchema.optional(),
+  region: avatarRegionSchema.optional(),
+  preferredLanguage: avatarLanguageSchema.optional(),
+  lastVisitedStep: z.number().int().min(1).max(7).optional(),
   // Additive preview fields (avatar-builder-customization.md) — deliberately
   // never required by onboardingCompleteRequiredSchema below.
   previewProvider: avatarPreviewProviderSchema.optional(),
@@ -119,6 +130,9 @@ export const onboardingDraftResponseSchema = z.object({
   outfit: outfitSchema.nullable(),
   expertise: expertiseSchema.nullable(),
   voice: voiceToneSchema.nullable(),
+  ageGroup: ageGroupSchema.nullable(),
+  region: avatarRegionSchema.nullable(),
+  preferredLanguage: avatarLanguageSchema.nullable(),
   status: z.enum(["DRAFT", "ACTIVE"]),
   lastVisitedStep: z.number().int(),
   previewProvider: avatarPreviewProviderSchema,
