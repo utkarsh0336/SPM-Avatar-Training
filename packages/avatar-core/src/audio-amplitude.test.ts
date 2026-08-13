@@ -1,10 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
-import { startAudioAmplitudeLoop } from "./audio-amplitude.js";
+import { startAudioAmplitudeLoop, startAudioSpectrumLoop } from "./audio-amplitude.js";
 
 function createFakeAnalyser(byteValue: number) {
   return {
     frequencyBinCount: 4,
     getByteTimeDomainData: vi.fn((arr: Uint8Array) => arr.fill(byteValue)),
+  } as unknown as AnalyserNode;
+}
+
+function createFakeSpectrumAnalyser(timeValue: number, freqBytes: number[]) {
+  return {
+    frequencyBinCount: freqBytes.length,
+    getByteTimeDomainData: vi.fn((arr: Uint8Array) => arr.fill(timeValue)),
+    getByteFrequencyData: vi.fn((arr: Uint8Array) => arr.set(freqBytes)),
   } as unknown as AnalyserNode;
 }
 
@@ -88,5 +96,52 @@ describe("startAudioAmplitudeLoop", () => {
     const callsBefore = raf.raf.mock.calls.length;
     raf.tick(); // no-op: caf already removed the pending callback
     expect(raf.raf.mock.calls.length).toBe(callsBefore);
+  });
+});
+
+describe("startAudioSpectrumLoop", () => {
+  it("reports all-zero bands for silence", () => {
+    const analyser = createFakeSpectrumAnalyser(128, [0, 0, 0, 0]);
+    const raf = createFakeRaf();
+    const onSpectrumChange = vi.fn();
+
+    startAudioSpectrumLoop(analyser, onSpectrumChange, { requestAnimationFrame: raf.raf, cancelAnimationFrame: raf.caf });
+    raf.tick();
+
+    expect(onSpectrumChange).toHaveBeenLastCalledWith({ low: 0, mid: 0, high: 0, amplitude: 0 });
+  });
+
+  it("buckets frequency-domain bytes into low/mid/high bands (frequencyBinCount=4 -> bins 0/1/2)", () => {
+    const analyser = createFakeSpectrumAnalyser(128, [255, 0, 0, 0]);
+    const raf = createFakeRaf();
+    const onSpectrumChange = vi.fn();
+
+    startAudioSpectrumLoop(analyser, onSpectrumChange, { requestAnimationFrame: raf.raf, cancelAnimationFrame: raf.caf });
+    raf.tick();
+
+    expect(onSpectrumChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ low: 1, mid: 0, high: 0 }),
+    );
+  });
+
+  it("keeps scheduling itself until stop() is called, and stop() reports all-zero bands", () => {
+    const analyser = createFakeSpectrumAnalyser(255, [255, 255, 255, 255]);
+    const raf = createFakeRaf();
+    const onSpectrumChange = vi.fn();
+    const handle = startAudioSpectrumLoop(analyser, onSpectrumChange, {
+      requestAnimationFrame: raf.raf,
+      cancelAnimationFrame: raf.caf,
+    });
+
+    raf.tick();
+    expect(raf.raf).toHaveBeenCalledTimes(2); // initial schedule + 1 re-schedule from tick()
+
+    handle.stop();
+    expect(raf.caf).toHaveBeenCalled();
+    expect(onSpectrumChange).toHaveBeenLastCalledWith({ low: 0, mid: 0, high: 0, amplitude: 0 });
+
+    onSpectrumChange.mockClear();
+    handle.stop();
+    expect(onSpectrumChange).not.toHaveBeenCalled();
   });
 });

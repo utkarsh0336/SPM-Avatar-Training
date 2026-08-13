@@ -90,7 +90,7 @@ export function VoiceReviewStep() {
       )}
 
       <WizardNav
-        onBack={() => router.push("/onboarding/5")}
+        onBack={() => router.push("/onboarding/6")}
         onContinue={handleContinue}
         continueDisabled={pending}
         continueLabel={pending ? "Creating Avatar…" : "Create Avatar & Start Session"}

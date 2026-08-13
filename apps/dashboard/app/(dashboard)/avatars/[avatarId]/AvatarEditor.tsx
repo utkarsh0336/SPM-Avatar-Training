@@ -13,6 +13,9 @@ import { PillPicker } from "../../../onboarding/PillPicker";
 import { RowOptionCard } from "../../../onboarding/RowOptionCard";
 import { CameraIcon, CubeIcon, PaletteIcon, BriefcaseIcon, CoffeeIcon, GraduationCapIcon, LaptopIcon, LayersIcon, type IconComponent } from "../../../onboarding/icons";
 import {
+  AGE_GROUP_LABELS,
+  AVATAR_LANGUAGE_LABELS,
+  AVATAR_REGION_LABELS,
   EXPERTISE_LABELS,
   GENDER_GRADIENTS,
   GENDER_LABELS,
@@ -27,6 +30,9 @@ import {
   SKIN_TONE_SWATCHES,
   STYLE_PREVIEW_PHOTOS,
   VOICE_LABELS,
+  type AgeGroup,
+  type AvatarLanguage,
+  type AvatarRegion,
   type AvatarStyle,
   type Expertise,
   type Gender,
@@ -62,6 +68,16 @@ const EXPERTISE_OPTIONS: readonly Expertise[] = [
   "MARKETING_BRANDING",
 ];
 const VOICE_OPTIONS: readonly VoiceTone[] = ["DEEP", "NEUTRAL", "WARM"];
+const AGE_GROUP_OPTIONS: readonly AgeGroup[] = ["YOUNG_ADULT", "MIDDLE_AGED", "SENIOR"];
+const AVATAR_REGION_OPTIONS: readonly AvatarRegion[] = [
+  "GLOBAL",
+  "INDIA",
+  "NORTH_AMERICA",
+  "EUROPE",
+  "MIDDLE_EAST",
+  "APAC",
+];
+const AVATAR_LANGUAGE_OPTIONS: readonly AvatarLanguage[] = ["ENGLISH", "HINDI"];
 
 interface EditorFormState {
   name: string;
@@ -73,6 +89,9 @@ interface EditorFormState {
   outfit: Outfit;
   expertise: Expertise;
   voice: VoiceTone;
+  ageGroup: AgeGroup;
+  region: AvatarRegion;
+  preferredLanguage: AvatarLanguage;
 }
 
 const DEFAULTS: EditorFormState = {
@@ -85,6 +104,9 @@ const DEFAULTS: EditorFormState = {
   outfit: "BUSINESS_FORMAL",
   expertise: "HR_LEAVE_POLICY",
   voice: "NEUTRAL",
+  ageGroup: "MIDDLE_AGED",
+  region: "GLOBAL",
+  preferredLanguage: "ENGLISH",
 };
 
 // A DRAFT avatar can have every customization field still null — backfills
@@ -102,6 +124,9 @@ function toFormState(avatar: AvatarRecord): EditorFormState {
     outfit: avatar.outfit ?? DEFAULTS.outfit,
     expertise: avatar.expertise ?? DEFAULTS.expertise,
     voice: avatar.voice ?? DEFAULTS.voice,
+    ageGroup: avatar.ageGroup ?? DEFAULTS.ageGroup,
+    region: avatar.region ?? DEFAULTS.region,
+    preferredLanguage: avatar.preferredLanguage ?? DEFAULTS.preferredLanguage,
   };
 }
 
@@ -365,6 +390,36 @@ export function AvatarEditor({ avatarId }: AvatarEditorProps) {
         <div className={styles.section}>
           <span className={styles.sectionLabel}>VOICE</span>
           <PillPicker options={VOICE_OPTIONS} labels={VOICE_LABELS} selected={form.voice} onSelect={(value) => update("voice", value)} />
+        </div>
+
+        <div className={styles.section}>
+          <span className={styles.sectionLabel}>AGE GROUP</span>
+          <PillPicker
+            options={AGE_GROUP_OPTIONS}
+            labels={AGE_GROUP_LABELS}
+            selected={form.ageGroup}
+            onSelect={(value) => update("ageGroup", value)}
+          />
+        </div>
+
+        <div className={styles.section}>
+          <span className={styles.sectionLabel}>REGION</span>
+          <PillPicker
+            options={AVATAR_REGION_OPTIONS}
+            labels={AVATAR_REGION_LABELS}
+            selected={form.region}
+            onSelect={(value) => update("region", value)}
+          />
+        </div>
+
+        <div className={styles.section}>
+          <span className={styles.sectionLabel}>PREFERRED LANGUAGE</span>
+          <PillPicker
+            options={AVATAR_LANGUAGE_OPTIONS}
+            labels={AVATAR_LANGUAGE_LABELS}
+            selected={form.preferredLanguage}
+            onSelect={(value) => update("preferredLanguage", value)}
+          />
         </div>
 
         <div className={styles.actions}>

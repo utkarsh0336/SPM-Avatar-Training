@@ -13,6 +13,9 @@ import {
   onboardingHandoffSchema,
   outfitSchema,
   voiceToneSchema,
+  ageGroupSchema,
+  avatarRegionSchema,
+  avatarLanguageSchema,
 } from "./avatar-config.js";
 
 // Hardcoded snapshot of apps/dashboard/app/onboarding/types.ts's literal
@@ -44,6 +47,9 @@ const WIZARD_VOICE_TONES = ["DEEP", "NEUTRAL", "WARM"];
 const WIZARD_HAIR_STYLES = ["SHORT", "MEDIUM", "LONG", "CURLY", "WAVY", "BALD"];
 const WIZARD_SKIN_TONES = ["TONE_1", "TONE_2", "TONE_3", "TONE_4", "TONE_5", "TONE_6"];
 const WIZARD_HAIR_COLORS = ["BLACK", "AUBURN", "COPPER", "BLONDE", "PLATINUM", "RED", "PURPLE", "BLUE"];
+const WIZARD_AGE_GROUPS = ["YOUNG_ADULT", "MIDDLE_AGED", "SENIOR"];
+const WIZARD_AVATAR_REGIONS = ["GLOBAL", "INDIA", "NORTH_AMERICA", "EUROPE", "MIDDLE_EAST", "APAC"];
+const WIZARD_AVATAR_LANGUAGES = ["ENGLISH", "HINDI"];
 
 describe("avatar-config drift guard", () => {
   it("avatarStyleSchema matches the wizard's AvatarStyle union", () => {
@@ -76,6 +82,18 @@ describe("avatar-config drift guard", () => {
 
   it("HAIR_COLOR_TOKENS matches the wizard's HAIR_COLOR_OPTIONS", () => {
     expect(HAIR_COLOR_TOKENS).toEqual(WIZARD_HAIR_COLORS);
+  });
+
+  it("ageGroupSchema matches the wizard's AgeGroup union", () => {
+    expect(ageGroupSchema.options).toEqual(WIZARD_AGE_GROUPS);
+  });
+
+  it("avatarRegionSchema matches the wizard's AvatarRegion union", () => {
+    expect(avatarRegionSchema.options).toEqual(WIZARD_AVATAR_REGIONS);
+  });
+
+  it("avatarLanguageSchema matches the wizard's AvatarLanguage union", () => {
+    expect(avatarLanguageSchema.options).toEqual(WIZARD_AVATAR_LANGUAGES);
   });
 });
 

@@ -96,7 +96,11 @@ function createFakeRaf() {
   return { raf, tick };
 }
 
-function createFakeAvatar(): ConversationAvatarSink & { speakCalls: string[]; interrupt: ReturnType<typeof vi.fn> } {
+function createFakeAvatar(): ConversationAvatarSink & {
+  speakCalls: string[];
+  interrupt: ReturnType<typeof vi.fn>;
+  setEmotion: ReturnType<typeof vi.fn>;
+} {
   const speakCalls: string[] = [];
   return {
     speakCalls,
@@ -104,6 +108,7 @@ function createFakeAvatar(): ConversationAvatarSink & { speakCalls: string[]; in
       speakCalls.push(text);
     },
     interrupt: vi.fn(),
+    setEmotion: vi.fn(),
   };
 }
 
@@ -216,6 +221,27 @@ describe("connectConversationSession", () => {
       text: "hello",
       final: true,
     });
+  });
+
+  it("drives the avatar's emotion from an avatar transcript that carries one", async () => {
+    const { connectPromise, ws, avatar } = setupHarness();
+    await connectPromise;
+    ws.emitMessage({ type: "transcript", role: "avatar", text: "Great job!", utteranceId: "u1", final: true, emotion: "happy" });
+    expect(avatar.setEmotion).toHaveBeenCalledWith("happy");
+  });
+
+  it("does not call setEmotion for a transcript with no emotion field", async () => {
+    const { connectPromise, ws, avatar } = setupHarness();
+    await connectPromise;
+    ws.emitMessage({ type: "transcript", role: "avatar", text: "hello", utteranceId: "u1", final: true });
+    expect(avatar.setEmotion).not.toHaveBeenCalled();
+  });
+
+  it("does not call setEmotion for a user transcript", async () => {
+    const { connectPromise, ws, avatar } = setupHarness();
+    await connectPromise;
+    ws.emitMessage({ type: "transcript", role: "user", text: "hi", utteranceId: "u1", final: true });
+    expect(avatar.setEmotion).not.toHaveBeenCalled();
   });
 
   it("plays tts.chunk messages through the avatar in order, sequentially", async () => {

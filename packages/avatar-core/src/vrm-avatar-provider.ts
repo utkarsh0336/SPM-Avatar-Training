@@ -1,9 +1,11 @@
-import type { AvatarProvider, AvatarProviderStartConfig } from "./index.js";
+import type { AvatarEmotion, AvatarProvider, AvatarProviderStartConfig } from "./index.js";
 import { loadVrmScene, type VrmSceneHandle, type LoadVrmSceneOptions } from "./vrm-loader.js";
 import { applyMaterialTints } from "./vrm-material-tint.js";
 import { createVrmExpressionDriver, type VrmExpressionDriver } from "./vrm-expression-driver.js";
+import { createVrmIdleAnimator, type VrmIdleAnimator } from "./vrm-idle-animator.js";
+import { createVrmEmotionDriver, type VrmEmotionDriver } from "./vrm-emotion-driver.js";
 import { vrmModelPath, placeholderVrmModelPath } from "./vrm-model-path.js";
-import { startAudioAmplitudeLoop, type AudioAmplitudeLoopHandle } from "./audio-amplitude.js";
+import { startAudioSpectrumLoop, type AudioSpectrumLoopHandle } from "./audio-amplitude.js";
 import { createMockAvatarProvider } from "./mock-avatar-provider.js";
 
 export interface VrmAvatarProviderOptions {
@@ -89,9 +91,11 @@ export function createVrmAvatarProvider(options: VrmAvatarProviderOptions = {}):
   let usingFallback = false;
   let sceneHandle: VrmSceneHandle | null = null;
   let expressionDriver: VrmExpressionDriver | null = null;
+  let idleAnimator: VrmIdleAnimator | null = null;
+  let emotionDriver: VrmEmotionDriver | null = null;
   let audioContext: AudioContext | null = null;
   let sourceNode: { disconnect(): void } | null = null;
-  let amplitudeLoop: AudioAmplitudeLoopHandle | null = null;
+  let amplitudeLoop: AudioSpectrumLoopHandle | null = null;
   let renderRafHandle: number | null = null;
   let resizeObserver: { observe(target: Element): void; disconnect(): void } | null = null;
   let mounted = false;
@@ -107,6 +111,8 @@ export function createVrmAvatarProvider(options: VrmAvatarProviderOptions = {}):
   function runRenderLoop(): void {
     const tick = (): void => {
       sceneHandle?.renderFrame();
+      idleAnimator?.tick();
+      emotionDriver?.tick();
       renderRafHandle = raf(tick);
     };
     renderRafHandle = raf(tick);
@@ -153,6 +159,8 @@ export function createVrmAvatarProvider(options: VrmAvatarProviderOptions = {}):
 
     sceneHandle = handle;
     expressionDriver = createVrmExpressionDriver(handle.vrm);
+    idleAnimator = createVrmIdleAnimator(handle.vrm);
+    emotionDriver = createVrmEmotionDriver(handle.vrm);
     config.container.appendChild(audioElement);
     mounted = true;
     runRenderLoop();
@@ -191,11 +199,11 @@ export function createVrmAvatarProvider(options: VrmAvatarProviderOptions = {}):
       sourceNode = newSource;
 
       amplitudeLoop?.stop();
-      amplitudeLoop = startAudioAmplitudeLoop(
+      amplitudeLoop = startAudioSpectrumLoop(
         analyser,
-        (amplitude) => {
-          expressionDriver?.setAmplitude(amplitude);
-          options.onAmplitudeChange?.(amplitude);
+        (bands) => {
+          expressionDriver?.setSpectrum(bands);
+          options.onAmplitudeChange?.(bands.amplitude);
         },
         { requestAnimationFrame: options.requestAnimationFrame, cancelAnimationFrame: options.cancelAnimationFrame },
       );
@@ -209,7 +217,13 @@ export function createVrmAvatarProvider(options: VrmAvatarProviderOptions = {}):
       audioElement.pause();
       stopAmplitudeLoop();
       expressionDriver?.reset();
+      emotionDriver?.reset();
       options.onSubtitleChange?.("");
+    },
+
+    setEmotion(emotion: AvatarEmotion): void {
+      if (usingFallback) return; // Mock has no face; nothing to drive
+      emotionDriver?.setEmotion(emotion);
     },
 
     stop(): void {
@@ -228,6 +242,10 @@ export function createVrmAvatarProvider(options: VrmAvatarProviderOptions = {}):
       sceneHandle?.dispose();
       sceneHandle = null;
       expressionDriver = null;
+      idleAnimator?.reset();
+      idleAnimator = null;
+      emotionDriver?.reset();
+      emotionDriver = null;
       if (mounted) audioElement.remove();
       mounted = false;
     },

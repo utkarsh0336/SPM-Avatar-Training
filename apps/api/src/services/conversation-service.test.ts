@@ -222,6 +222,28 @@ describe("createConversationHandler", () => {
     // Ungrounded (fakeRetrieveContext defaults to []) — no sources attached.
     const avatarTranscript = findMessages(socket, "transcript").find((m) => m.role === "avatar");
     expect(avatarTranscript?.sources).toBeUndefined();
+    // Plain informational reply — classifyEmotion reads it as neutral, and
+    // (unlike sources) emotion is always set, never omitted, for role:"avatar".
+    expect(avatarTranscript?.emotion).toBe("neutral");
+  });
+
+  it("attaches the classified emotion to an avatar transcript, even when it's neutral", async () => {
+    const socket = new FakeSocket();
+    createConversationHandler(socket as never, claims, {
+      createLLM: fakeLLM("success", ["Great job, that's exactly right!"]),
+      createSTT: fakeSTT("success", "did I get it right?"),
+      createTTS: fakeTTS("success"),
+      ...noRetrieval,
+    });
+    socket.emitMessage(sessionStartBase);
+    socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+    await vi.waitFor(() => {
+      expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+    });
+
+    const avatarTranscript = findMessages(socket, "transcript").find((m) => m.role === "avatar");
+    expect(avatarTranscript?.emotion).toBe("happy");
   });
 
   it("grounds the reply and attaches source attribution when retrieval finds relevant chunks", async () => {
@@ -823,6 +845,9 @@ describe("createConversationHandler", () => {
         outfit: "BUSINESS_CASUAL" as const,
         expertise: "SALES_NEGOTIATION" as const,
         voice: "DEEP" as const,
+        ageGroup: null,
+        region: null,
+        preferredLanguage: null,
         status: "ACTIVE" as const,
         simliFaceId: null,
       }));

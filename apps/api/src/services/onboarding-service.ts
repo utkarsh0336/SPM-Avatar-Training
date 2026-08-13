@@ -14,6 +14,9 @@ export interface OnboardingDraftResult {
   outfit: Avatar["outfit"];
   expertise: Avatar["expertise"];
   voice: Avatar["voice"];
+  ageGroup: Avatar["ageGroup"];
+  region: Avatar["region"];
+  preferredLanguage: Avatar["preferredLanguage"];
   status: Avatar["status"];
   lastVisitedStep: number;
   previewProvider: Avatar["previewProvider"];
@@ -35,6 +38,9 @@ function toDraftResult(avatar: Avatar): OnboardingDraftResult {
     outfit: avatar.outfit,
     expertise: avatar.expertise,
     voice: avatar.voice,
+    ageGroup: avatar.ageGroup,
+    region: avatar.region,
+    preferredLanguage: avatar.preferredLanguage,
     status: avatar.status,
     lastVisitedStep: avatar.lastVisitedStep,
     previewProvider: avatar.previewProvider,

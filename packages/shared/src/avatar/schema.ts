@@ -8,6 +8,9 @@ import {
   hairStyleSchema,
   skinToneSchema,
   hairColorSchema,
+  ageGroupSchema,
+  avatarRegionSchema,
+  avatarLanguageSchema,
 } from "../tutor/avatar-config.js";
 
 export const avatarIdParamSchema = z.object({ avatarId: z.string().uuid() });
@@ -33,6 +36,9 @@ export const avatarRecordSchema = z.object({
   outfit: outfitSchema.nullable(),
   expertise: expertiseSchema.nullable(),
   voice: voiceToneSchema.nullable(),
+  ageGroup: ageGroupSchema.nullable(),
+  region: avatarRegionSchema.nullable(),
+  preferredLanguage: avatarLanguageSchema.nullable(),
   // ARCHIVED added for multi-persona management's soft-delete — see
   // prisma/schema.prisma's AvatarStatus.ARCHIVED doc comment.
   status: z.enum(["DRAFT", "ACTIVE", "ARCHIVED"]),

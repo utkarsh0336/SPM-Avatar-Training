@@ -3,6 +3,9 @@
 import styles from "./AvatarSummaryPanel.module.css";
 import { useOnboarding } from "./OnboardingContext";
 import {
+  AGE_GROUP_LABELS,
+  AVATAR_LANGUAGE_LABELS,
+  AVATAR_REGION_LABELS,
   AVATAR_STYLE_LABELS,
   EXPERTISE_LABELS,
   GENDER_LABELS,
@@ -48,6 +51,18 @@ export function AvatarSummaryPanel() {
       <div className={styles.row}>
         <span className={styles.label}>Voice</span>
         <span className={styles.value}>{state.voice.toLowerCase()}</span>
+      </div>
+      <div className={styles.row}>
+        <span className={styles.label}>Age Group</span>
+        <span className={styles.value}>{AGE_GROUP_LABELS[state.ageGroup]}</span>
+      </div>
+      <div className={styles.row}>
+        <span className={styles.label}>Region</span>
+        <span className={styles.value}>{AVATAR_REGION_LABELS[state.region]}</span>
+      </div>
+      <div className={styles.row}>
+        <span className={styles.label}>Language</span>
+        <span className={styles.value}>{AVATAR_LANGUAGE_LABELS[state.preferredLanguage]}</span>
       </div>
     </div>
   );

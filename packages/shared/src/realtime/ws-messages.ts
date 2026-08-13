@@ -8,6 +8,7 @@ import {
   voiceToneSchema,
 } from "../tutor/avatar-config.js";
 import { knowledgeSourceSchema } from "../knowledge/schema.js";
+import { emotionSchema } from "../tutor/emotion.js";
 
 /**
  * WebSocket protocol for GET /v1/conversations/:trainingSessionId/ws (see
@@ -111,6 +112,13 @@ export const transcriptMessageSchema = z.object({
   // pre-knowledge-management clients still validate this message unchanged.
   // See .claude/specs/knowledge-management.md's Realtime Changes.
   sources: z.array(knowledgeSourceSchema).optional(),
+  // Emotion-aware avatar expression (SOW §3.1) — computed once server-side
+  // from the fully assembled reply text (tutor/emotion.ts's
+  // classifyEmotion). Always set for role:"avatar" (including "neutral" —
+  // the client needs an explicit neutral to fade a previous turn's
+  // expression back out), never set for role:"user". Schema-optional only
+  // so pre-emotion clients/fixtures still validate this message unchanged.
+  emotion: emotionSchema.optional(),
 });
 export type TranscriptMessage = z.infer<typeof transcriptMessageSchema>;
 

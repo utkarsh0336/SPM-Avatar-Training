@@ -1,6 +1,6 @@
 import { SKIN_TONE_HEX, HAIR_COLOR_HEX } from "@avatrain/shared/tutor";
 
-export const TOTAL_STEPS = 6;
+export const TOTAL_STEPS = 7;
 
 export type AvatarStyle = "REALISTIC" | "ANIMATED" | "STYLIZED_3D";
 
@@ -28,6 +28,9 @@ export type Expertise =
   | "IT_TECHNOLOGY"
   | "MARKETING_BRANDING";
 export type VoiceTone = "DEEP" | "NEUTRAL" | "WARM";
+export type AgeGroup = "YOUNG_ADULT" | "MIDDLE_AGED" | "SENIOR";
+export type AvatarRegion = "GLOBAL" | "INDIA" | "NORTH_AMERICA" | "EUROPE" | "MIDDLE_EAST" | "APAC";
+export type AvatarLanguage = "ENGLISH" | "HINDI";
 
 // Additive — see .claude/specs/avatar-builder-customization.md. NONE is the
 // only value the default wizard flow ever writes; READY_PLAYER_ME is only
@@ -44,6 +47,9 @@ export interface OnboardingState {
   name: string;
   expertise: Expertise;
   voice: VoiceTone;
+  ageGroup: AgeGroup;
+  region: AvatarRegion;
+  preferredLanguage: AvatarLanguage;
   previewProvider: AvatarPreviewProvider;
   externalAvatarId: string | null;
   avatarModelUrl: string | null;
@@ -65,6 +71,9 @@ export const INITIAL_ONBOARDING_STATE: OnboardingState = {
   name: "",
   expertise: "HR_LEAVE_POLICY",
   voice: "NEUTRAL",
+  ageGroup: "MIDDLE_AGED",
+  region: "GLOBAL",
+  preferredLanguage: "ENGLISH",
   previewProvider: "NONE",
   externalAvatarId: null,
   avatarModelUrl: null,
@@ -173,6 +182,26 @@ export const VOICE_SUBTITLES: Record<VoiceTone, string> = {
   DEEP: "Bold, authoritative",
   NEUTRAL: "Clear, professional",
   WARM: "Friendly, approachable",
+};
+
+export const AGE_GROUP_LABELS: Record<AgeGroup, string> = {
+  YOUNG_ADULT: "Young Adult",
+  MIDDLE_AGED: "Middle-Aged",
+  SENIOR: "Senior",
+};
+
+export const AVATAR_REGION_LABELS: Record<AvatarRegion, string> = {
+  GLOBAL: "Global",
+  INDIA: "India",
+  NORTH_AMERICA: "North America",
+  EUROPE: "Europe",
+  MIDDLE_EAST: "Middle East",
+  APAC: "Asia-Pacific",
+};
+
+export const AVATAR_LANGUAGE_LABELS: Record<AvatarLanguage, string> = {
+  ENGLISH: "English",
+  HINDI: "Hindi",
 };
 
 // Order matters — rendered left-to-right in that order in the picker.
