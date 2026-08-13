@@ -7,26 +7,30 @@ import styles from "./AvatarPreviewPanel.module.css";
 import { GENDER_PHOTOS } from "./types";
 
 /**
- * Renders the caller's real, live, lip-synced Simli avatar — the exact same
- * face a real training session uses (POST /v1/conversations/simli-session
- * resolves it server-side from the authenticated Avatar record) — when
- * NEXT_PUBLIC_AVATAR_PROVIDER=simli is configured.
+ * Renders the caller's real, live, talking avatar — the exact same
+ * provider a real training session uses, resolved via
+ * NEXT_PUBLIC_AVATAR_PROVIDER (default "vrm": the free, open-source,
+ * lip-synced VRM renderer; opt-in "simli": paid photoreal video, face
+ * resolved server-side from the authenticated Avatar record by
+ * POST /v1/conversations/simli-session; opt-in "mock": idle-loop video).
+ * See avatar-provider-factory.ts's doc comment for the full provider
+ * selection story.
  *
- * Does NOT own the WebRTC connection itself — OnboardingContext's
- * liveAvatar does, because this component's parent,
- * /onboarding/[step]/layout.tsx, remounts on every step change (its own
- * path includes the [step] dynamic segment), which would otherwise
- * reconnect Simli on every Continue/Back click. Instead, this component
- * just re-parents the one persistent, already-connected video/audio DOM
- * node into its own wrapper on every mount — appendChild() on an
- * already-attached node relocates it without interrupting the live stream.
- * See OnboardingContext.tsx's LiveAvatarHandle doc comment.
+ * Does NOT own the connection itself — OnboardingContext's liveAvatar does,
+ * because this component's parent, /onboarding/[step]/layout.tsx, remounts
+ * on every step change (its own path includes the [step] dynamic segment),
+ * which would otherwise reconnect/rebuild the avatar on every Continue/Back
+ * click. Instead, this component just re-parents the one persistent,
+ * already-connected DOM node (Simli <video>, VRM <canvas>, or Mock <video>)
+ * into its own wrapper on every mount — appendChild() on an already-attached
+ * node relocates it without interrupting the live stream/render loop. See
+ * OnboardingContext.tsx's LiveAvatarHandle doc comment.
  *
  * Falls back to a real static photo of the selected gender's Simli face
  * (GENDER_PHOTOS, captured from a live session — see types.ts's doc
- * comment) when Simli isn't configured, is still connecting, or failed to
- * connect — the wizard must never be blocked by this, and the fallback
- * should still look like the real avatar rather than a generic placeholder.
+ * comment) while still connecting or if the connection failed — the wizard
+ * must never be blocked by this, and the fallback should still look like a
+ * real avatar rather than a generic placeholder.
  */
 export function AvatarPreviewPanel() {
   const { state, liveAvatar } = useOnboarding();

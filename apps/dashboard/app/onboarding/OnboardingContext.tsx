@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
-import { createAvatarProviderFromEnv } from "@avatrain/avatar-core";
+import { createAvatarProviderFromEnv, resolveReplicaId, SKIN_TONE_HEX, HAIR_COLOR_HEX } from "@avatrain/avatar-core";
 // Sub-path import — see api-client.ts's comment on why the root
 // "@avatrain/shared" barrel must never be imported from client code.
 import type { OnboardingDraftInput, OnboardingDraftResponse } from "@avatrain/shared/onboarding";
@@ -22,15 +22,18 @@ export type LiveAvatarStatus = "idle" | "connecting" | "connected" | "error";
 
 export interface LiveAvatarHandle {
   /**
-   * A single persistent DOM node the live Simli video/audio elements are
-   * mounted into once — owned here, at the stable outer /onboarding/layout.tsx
-   * level, and moved (not recreated) into whichever step's AvatarPreviewPanel
-   * currently wants to display it. See AvatarPreviewPanel.tsx's doc comment
-   * for why: /onboarding/[step]/layout.tsx remounts on every step change
-   * (its own path includes the [step] dynamic segment), so anything created
-   * inside it — including a WebRTC connection — would otherwise reconnect on
-   * every Continue/Back click. Moving an already-attached DOM node via
-   * appendChild() relocates it without tearing down its live video stream.
+   * A single persistent DOM node the live avatar's video/canvas/audio
+   * elements are mounted into once (a Simli <video>, a VRM <canvas>, or a
+   * Mock <video>, depending on NEXT_PUBLIC_AVATAR_PROVIDER) — owned here, at
+   * the stable outer /onboarding/layout.tsx level, and moved (not recreated)
+   * into whichever step's AvatarPreviewPanel currently wants to display it.
+   * See AvatarPreviewPanel.tsx's doc comment for why:
+   * /onboarding/[step]/layout.tsx remounts on every step change (its own
+   * path includes the [step] dynamic segment), so anything created inside
+   * it — including a WebRTC connection or a Three.js scene — would
+   * otherwise reconnect/rebuild on every Continue/Back click. Moving an
+   * already-attached DOM node via appendChild() relocates it without
+   * tearing down its live stream/render loop.
    */
   containerElement: HTMLDivElement;
   status: LiveAvatarStatus;
@@ -41,7 +44,7 @@ interface OnboardingContextValue {
   update: (patch: Partial<OnboardingState>) => void;
   /** Sends any pending debounced autosave immediately. See VoiceReviewStep.tsx. */
   flush: () => Promise<void>;
-  /** null when NEXT_PUBLIC_AVATAR_PROVIDER isn't "simli" — see AvatarPreviewPanel.tsx. */
+  /** null until hydration resolves and the connection effect below has created its container — see AvatarPreviewPanel.tsx. Populated for every NEXT_PUBLIC_AVATAR_PROVIDER value (default "vrm", opt-in "simli"/"mock"). */
   liveAvatar: LiveAvatarHandle | null;
 }
 
@@ -117,12 +120,6 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   const pendingPatchRef = useRef<OnboardingDraftInput | null>(null);
   const router = useRouter();
 
-  // Literal process.env.NEXT_PUBLIC_* access — required so Next.js can
-  // statically inline it into the client bundle, same reasoning as
-  // useConversationSession.ts's identical pattern. Read here (not gated
-  // behind typeof document) since it's a build-time-inlined constant,
-  // identical on server and client — safe to use in the first render.
-  const simliEnabled = process.env.NEXT_PUBLIC_AVATAR_PROVIDER === "simli";
   const [liveAvatarStatus, setLiveAvatarStatus] = useState<LiveAvatarStatus>("idle");
   // Populated only inside the effect below, never during render — creating
   // it inline in the render body (gated on `typeof document`) previously
@@ -156,10 +153,19 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   // Connects once hydration resolves (never before — connecting with
   // INITIAL_ONBOARDING_STATE's client-default gender first, then
   // reconnecting again once the real server-known gender loads, would waste
-  // a Simli session and flash the wrong face) and RECONNECTS whenever gender
-  // changes — an explicit user decision to make the builder's live avatar
-  // show the correct real face per gender (SIMLI_FACE_ID_FEMALE/MALE/
-  // NEUTRAL), not just one fixed face for the whole visit.
+  // a Simli session and flash the wrong face) and RECONNECTS whenever
+  // style/gender/outfit change — together these pick which real face/model
+  // loads for every provider: Simli resolves its face server-side from
+  // gender alone (SIMLI_FACE_ID_FEMALE/MALE/NEUTRAL; it never reads the
+  // replicaId this effect passes), while the default VRM provider resolves
+  // one of a small curated set of replicas from all three
+  // (resolveReplicaId() in packages/avatar-core/src/replica-resolver.ts).
+  // skinTone/hairColor deliberately do NOT trigger a reconnect here — VRM
+  // applies them as a material tint at connect time (so they're still
+  // correct on the initial connect and on any style/gender/outfit-triggered
+  // reconnect), but a full reconnect on every color-swatch click would
+  // flicker for no benefit; LivePreviewPanel's lightweight preview renderer
+  // already gives instant feedback for those two fields specifically.
   //
   // Persists gender via its OWN targeted PATCH {gender} before minting,
   // rather than the generic flush()/pendingPatchRef machinery the debounced
@@ -172,18 +178,21 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   // POST /v1/conversations/simli-session's getCallerSimliFaceId read the
   // Avatar row before the real PATCH landed. A patch scoped to just
   // {gender}, awaited directly in this effect, has no dependency on the
-  // other effect's timing.
+  // other effect's timing. Unconditional even when this run was triggered
+  // by a style/outfit change (not gender) — it's a cheap idempotent no-op
+  // in that case, and keeping one reconnect path simple beats special-casing
+  // which field changed.
   //
   // Reuses the same persistent container DOM node across reconnects
   // (created once, never recreated) — see LiveAvatarHandle's doc comment
   // for why AvatarPreviewPanel depends on that node's identity staying
-  // stable across [step] layout remounts. Safe even if a fast second gender
-  // change fires before the first reconnect finishes: SimliAvatarProvider's
-  // own internal `stopped` guard (see
+  // stable across [step] layout remounts. Safe even if a fast second
+  // reconnect-triggering change fires before the first reconnect finishes:
+  // SimliAvatarProvider's own internal `stopped` guard (see
   // packages/avatar-core/src/simli-avatar-provider.ts) makes a stale
   // provider's start() no-op instead of touching a torn-down container.
   useEffect(() => {
-    if (!simliEnabled || !hydrated) return;
+    if (!hydrated) return;
 
     if (!liveAvatarContainerRef.current) {
       const el = document.createElement("div");
@@ -197,9 +206,22 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     setLiveAvatarStatus("connecting");
 
+    // "REALISTIC" fallback matches useConversationSession.ts's own
+    // DEFAULT_PERSONA.style — covers the window before Step 1 sets a real
+    // style. resolveReplicaId is pure and never throws (nearest-match
+    // fallback chain down to the registry default), and is ignored by Simli
+    // (gender-only face selection) and harmless for Mock.
+    const replicaId = resolveReplicaId({
+      style: state.style ?? "REALISTIC",
+      gender: state.gender,
+      outfit: state.outfit,
+    });
+
     const provider = createAvatarProviderFromEnv({
       env: { NEXT_PUBLIC_AVATAR_PROVIDER: process.env.NEXT_PUBLIC_AVATAR_PROVIDER },
       getSimliSessionCredentials: mintSimliSession,
+      skinToneHex: SKIN_TONE_HEX[state.skinTone] ?? null,
+      hairColorHex: HAIR_COLOR_HEX[state.hairColor] ?? null,
     });
 
     void patchOnboardingDraft({ gender: state.gender })
@@ -208,7 +230,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       })
       .then(() =>
         provider
-          .start({ replicaId: "avatar-builder-preview", container })
+          .start({ replicaId, container })
           .then(() => {
             if (!cancelled) setLiveAvatarStatus("connected");
           })
@@ -222,7 +244,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       provider.stop();
     };
-  }, [simliEnabled, hydrated, state.gender]);
+  }, [hydrated, state.style, state.gender, state.outfit]);
 
   // Hydrate once on mount — the server draft becomes the source of truth
   // across reloads/devices; this component's state is a working copy for
