@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createEchogardenTTSProvider } from "./tts-echogarden.js";
 
 async function collect(iterable: AsyncIterable<Uint8Array>): Promise<Uint8Array[]> {
@@ -67,5 +67,48 @@ describe("createEchogardenTTSProvider", () => {
     const chunks = await collect(provider.synthesize("hello", "v", { signal: controller.signal }));
     expect(chunks).toEqual([]);
     expect(called).toBe(false);
+  });
+
+  it("serializes concurrent calls into synthesizeImpl across separate provider instances — onnxruntime-node's native session creation segfaults if two overlap, and conversation-service.ts constructs a fresh provider per sentence", async () => {
+    let activeCalls = 0;
+    let maxConcurrentCalls = 0;
+    const synthesizeImpl = (async () => {
+      activeCalls += 1;
+      maxConcurrentCalls = Math.max(maxConcurrentCalls, activeCalls);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      activeCalls -= 1;
+      return { audio: new Uint8Array([1]), timeline: [], language: "en" };
+    }) as never;
+
+    const providerA = createEchogardenTTSProvider({ synthesizeImpl });
+    const providerB = createEchogardenTTSProvider({ synthesizeImpl });
+    const providerC = createEchogardenTTSProvider({ synthesizeImpl });
+
+    await Promise.all([
+      collect(providerA.synthesize("a", "v", { signal: new AbortController().signal })),
+      collect(providerB.synthesize("b", "v", { signal: new AbortController().signal })),
+      collect(providerC.synthesize("c", "v", { signal: new AbortController().signal })),
+    ]);
+
+    expect(maxConcurrentCalls).toBe(1);
+  });
+
+  it("keeps serializing later calls after an earlier queued call throws", async () => {
+    const synthesizeImpl = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("first call fails"))
+      .mockResolvedValueOnce({ audio: new Uint8Array([9]), timeline: [], language: "en" }) as never;
+
+    const providerA = createEchogardenTTSProvider({ synthesizeImpl });
+    const providerB = createEchogardenTTSProvider({ synthesizeImpl });
+
+    const [resultA, resultB] = await Promise.allSettled([
+      collect(providerA.synthesize("a", "v", { signal: new AbortController().signal })),
+      collect(providerB.synthesize("b", "v", { signal: new AbortController().signal })),
+    ]);
+
+    expect(resultA.status).toBe("rejected");
+    expect(resultB.status).toBe("fulfilled");
+    expect(resultB.status === "fulfilled" && resultB.value).toEqual([new Uint8Array([9])]);
   });
 });

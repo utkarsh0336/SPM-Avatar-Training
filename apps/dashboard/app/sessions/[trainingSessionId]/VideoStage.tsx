@@ -10,10 +10,11 @@ interface VideoStageProps {
   session: MockTrainingSession;
 }
 
-// The Mock avatar provider (packages/avatar-core) mounts into
-// avatarContainerRef — Phase 1 per .claude/specs/ai-avatar.md §5: a looping
-// idle clip, no lip-sync. 80% of the product experience is the
-// conversation, not the mouth.
+// The active avatar provider (packages/avatar-core, resolved by
+// NEXT_PUBLIC_AVATAR_PROVIDER — default "vrm", a real amplitude-driven
+// lip-synced 3D model; see avatar-provider-factory.ts) mounts into
+// avatarContainerRef. 80% of the product experience is the conversation,
+// not the mouth, but the mouth does move.
 export function VideoStage({ session }: VideoStageProps) {
   const { status, captionText, amplitude, avatarContainerRef } = useConversationSessionContext();
   const isLive = status === "listening" || status === "thinking" || status === "speaking";

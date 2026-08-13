@@ -25,6 +25,31 @@ export interface EchogardenTTSOptions {
  * process); once warm in-process, synthesis is ~50-80ms. See warmUp() below
  * — apps/api calls it once at boot so a live user turn never pays this.
  */
+// onnxruntime-node's native InferenceSession creation is not safe to call
+// concurrently — echogarden's "vits" engine loads a fresh native ONNX
+// session on every synthesize() call (no session reuse/caching across
+// calls), and two overlapping loads reliably segfault the whole process
+// (confirmed live via a macOS crash report: SIGSEGV in
+// InferenceSessionWrap::LoadModel). This is a real risk, not a theoretical
+// one: conversation-service.ts's enqueueSentence() deliberately fires TTS
+// synthesis for every sentence concurrently (a latency optimization, not a
+// bug) as each sentence boundary streams in from the LLM, and constructs a
+// FRESH provider per sentence — so the lock has to be process-wide (module
+// scope), not per-provider-instance, or sibling sentences' providers
+// wouldn't share it. Only the native call itself is serialized; sentence
+// chunking, LLM streaming, and the msedge-tts failover candidate are
+// unaffected and stay fully concurrent.
+let synthesisQueue: Promise<void> = Promise.resolve();
+
+function runSerialized<T>(fn: () => Promise<T>): Promise<T> {
+  const result = synthesisQueue.then(fn, fn);
+  synthesisQueue = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
+}
+
 export function createEchogardenTTSProvider(options?: EchogardenTTSOptions): TTSProvider {
   const synthesizeImpl = options?.synthesizeImpl ?? synthesize;
 
@@ -36,12 +61,14 @@ export function createEchogardenTTSProvider(options?: EchogardenTTSOptions): TTS
 
       let result: Awaited<ReturnType<typeof synthesize>>;
       try {
-        result = await synthesizeImpl(text, {
-          engine: "vits",
-          voice,
-          voiceGender: opts.voiceGender,
-          outputAudioFormat: { codec: "wav" },
-        });
+        result = await runSerialized(() =>
+          synthesizeImpl(text, {
+            engine: "vits",
+            voice,
+            voiceGender: opts.voiceGender,
+            outputAudioFormat: { codec: "wav" },
+          }),
+        );
       } catch (error) {
         throw new ProviderError(
           "other",
@@ -75,5 +102,7 @@ export function createEchogardenTTSProvider(options?: EchogardenTTSOptions): TTS
  * the cost instead; it does not fail server startup.
  */
 export async function warmUpEchogarden(voice: string): Promise<void> {
-  await synthesize("Warming up.", { engine: "vits", voice, outputAudioFormat: { codec: "wav" } });
+  await runSerialized(() =>
+    synthesize("Warming up.", { engine: "vits", voice, outputAudioFormat: { codec: "wav" } }),
+  );
 }
