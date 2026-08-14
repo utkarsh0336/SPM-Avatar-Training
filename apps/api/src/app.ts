@@ -10,6 +10,7 @@ import { registerOnboardingRoutes } from "./routes/onboarding.js";
 import { registerOrgRoutes } from "./routes/org.js";
 import { registerKnowledgeRoutes } from "./routes/knowledge.js";
 import { registerCurriculumRoutes } from "./routes/curriculum.js";
+import { registerChecklistRoutes } from "./routes/checklist.js";
 import { registerAvatarRoutes } from "./routes/avatars.js";
 import { registerApplicationRoutes } from "./routes/applications.js";
 import { registerEmbedRoutes } from "./routes/embed.js";
@@ -39,6 +40,7 @@ export function buildApp() {
   registerOrgRoutes(app);
   registerKnowledgeRoutes(app);
   registerCurriculumRoutes(app);
+  registerChecklistRoutes(app);
   registerAvatarRoutes(app);
   registerApplicationRoutes(app);
   registerEmbedRoutes(app);
