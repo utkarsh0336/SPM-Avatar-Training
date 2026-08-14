@@ -221,7 +221,7 @@ export async function invite(
       // would leave an orphaned PENDING user with no membership and a
       // permanently unusable invite token (acceptInvite requires one).
       await setAuthContext(tx, { orgId });
-      await tx.membership.create({ data: { orgId, userId, role: "MEMBER" } });
+      await tx.membership.create({ data: { orgId, userId, role: input.role } });
     });
   } catch (err) {
     if (isUniqueConstraintError(err)) throw conflict("email_taken");

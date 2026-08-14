@@ -1,0 +1,117 @@
+.inviteCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px;
+  border-radius: 16px;
+  background: var(--vc-panel-bg);
+  border: 1px solid var(--vc-border-soft);
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--vc-text-secondary);
+}
+
+.inviteRow {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.textInput {
+  flex: 1;
+  min-width: 200px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--vc-border);
+  background: var(--vc-chip-bg);
+  color: var(--vc-text-primary);
+  font-size: 13px;
+}
+
+.select {
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--vc-border);
+  background: var(--vc-chip-bg);
+  color: var(--vc-text-primary);
+  font-size: 13px;
+}
+
+.newButton {
+  padding: 9px 16px;
+  border-radius: 10px;
+  border: none;
+  background: var(--vc-accent-violet);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.newButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.error {
+  font-size: 13px;
+  color: var(--vc-red);
+}
+
+.inviteUrl {
+  font-size: 12.5px;
+  color: var(--vc-text-secondary);
+  word-break: break-all;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--vc-panel-bg);
+  border: 1px solid var(--vc-border-soft);
+}
+
+.email {
+  font-size: 13.5px;
+  color: var(--vc-text-primary);
+}
+
+.ownerBadge,
+.memberBadge,
+.partnerBadge {
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.ownerBadge {
+  background: rgba(139, 92, 246, 0.14);
+  color: var(--vc-accent-violet);
+}
+
+.memberBadge {
+  background: rgba(148, 163, 184, 0.14);
+  color: #94a3b8;
+}
+
+.partnerBadge {
+  background: rgba(74, 222, 128, 0.14);
+  color: #4ade80;
+}

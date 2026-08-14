@@ -312,6 +312,37 @@ describe("auth routes", () => {
       expect(memberInviteAttempt.statusCode).toBe(403);
     });
 
+    it("invites a PARTNER when role is specified, and rejects role: OWNER", async () => {
+      const { ownerToken } = await setupOwner();
+      const partnerEmail = uniqueEmail("partner");
+
+      const rejectedOwnerRole = await app.inject({
+        method: "POST",
+        url: "/v1/auth/invite",
+        cookies: { avatrain_session: ownerToken },
+        payload: { email: partnerEmail, role: "OWNER" },
+      });
+      expect(rejectedOwnerRole.statusCode).toBe(400);
+
+      const partnerInvite = await app.inject({
+        method: "POST",
+        url: "/v1/auth/invite",
+        cookies: { avatrain_session: ownerToken },
+        payload: { email: partnerEmail, role: "PARTNER" },
+      });
+      expect(partnerInvite.statusCode).toBe(201);
+      const inviteToken = new URL(partnerInvite.json().inviteUrl, "http://localhost").searchParams.get("token");
+
+      const acceptResponse = await app.inject({
+        method: "POST",
+        url: "/v1/auth/accept-invite",
+        payload: { token: inviteToken, password: "partnerPassword123" },
+      });
+      expect(acceptResponse.statusCode).toBe(200);
+      expect(acceptResponse.json()).toMatchObject({ role: "PARTNER" });
+      createdUserIds.push(acceptResponse.json().user.id);
+    });
+
     it("rejects an invalid accept-invite token", async () => {
       const response = await app.inject({
         method: "POST",

@@ -58,6 +58,31 @@ async function seedOrgWithSessionToken(orgName: string, role: Role = "OWNER"): P
   return { token, userId, orgId };
 }
 
+/**
+ * Adds a second user to an EXISTING org — seedOrgWithSessionToken always
+ * creates a brand-new org, so it can't be reused to seed "a partner
+ * teammate in the same org as the owner" (two calls with similar names
+ * still create two distinct orgs). Mirrors avatars.test.ts's own
+ * seedTeammateSessionToken.
+ */
+async function seedTeammateSessionToken(orgId: string, role: Role = "MEMBER"): Promise<SeededOrg> {
+  const userId = randomUUID();
+  const token = generateOpaqueToken();
+  const tokenHash = sha256Hex(token);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.user.create({ data: { id: userId, email: uniqueEmail("teammate"), passwordHash: "seeded" } });
+    await setAuthContext(tx, { userId, orgId });
+    await tx.membership.create({ data: { orgId, userId, role } });
+    await tx.session.create({
+      data: { orgId, userId, tokenHash, expiresAt: new Date(Date.now() + 60 * 60 * 1000) },
+    });
+  });
+
+  createdUserIds.push(userId);
+  return { token, userId, orgId };
+}
+
 async function seedAvatar(orgId: string, userId: string): Promise<string> {
   const avatar = await withAuthContext({ orgId, userId }, (tx) =>
     tx.avatar.create({ data: { orgId, createdById: userId, name: "Test Avatar" } }),
@@ -417,6 +442,142 @@ describe("curriculum routes", () => {
         cookies: { avatrain_session: orgB.token },
       });
       expect(response.statusCode).toBe(404);
+    });
+  });
+
+  describe("PARTNER role visibility", () => {
+    async function seedCurriculum(
+      orgId: string,
+      userId: string,
+      ownerToken: string,
+      programType?: string,
+    ): Promise<string> {
+      const avatarId = await seedAvatar(orgId, userId);
+      const create = await app.inject({
+        method: "POST",
+        url: "/v1/curricula",
+        cookies: { avatrain_session: ownerToken },
+        payload: { avatarId, title: "X", ...(programType ? { programType } : {}) },
+      });
+      return create.json().id as string;
+    }
+
+    it("403s a PARTNER caller on every write route", async () => {
+      const owner = await seedOrgWithSessionToken("Partner Write Org");
+      const partner = await seedTeammateSessionToken(owner.orgId, "PARTNER");
+      const curriculumId = await seedCurriculum(owner.orgId, owner.userId, owner.token, "PARTNER_ENABLEMENT");
+
+      const postResponse = await app.inject({
+        method: "POST",
+        url: "/v1/curricula",
+        cookies: { avatrain_session: partner.token },
+        payload: { avatarId: randomUUID(), title: "X" },
+      });
+      expect(postResponse.statusCode).toBe(403);
+
+      const patchResponse = await app.inject({
+        method: "PATCH",
+        url: `/v1/curricula/${curriculumId}`,
+        cookies: { avatrain_session: partner.token },
+        payload: { title: "Hijacked" },
+      });
+      expect(patchResponse.statusCode).toBe(403);
+
+      const putResponse = await app.inject({
+        method: "PUT",
+        url: `/v1/curricula/${curriculumId}/objectives`,
+        cookies: { avatrain_session: partner.token },
+        payload: { objectives: [{ title: "X", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" }] },
+      });
+      expect(putResponse.statusCode).toBe(403);
+
+      const deleteResponse = await app.inject({
+        method: "DELETE",
+        url: `/v1/curricula/${curriculumId}`,
+        cookies: { avatrain_session: partner.token },
+      });
+      expect(deleteResponse.statusCode).toBe(403);
+    });
+
+    it("GET /v1/curricula returns only PARTNER_ENABLEMENT curricula from the caller's own org", async () => {
+      const owner = await seedOrgWithSessionToken("Partner List Org");
+      const partner = await seedTeammateSessionToken(owner.orgId, "PARTNER");
+      await seedCurriculum(owner.orgId, owner.userId, owner.token, "EMPLOYEE_ONBOARDING");
+      await seedCurriculum(owner.orgId, owner.userId, owner.token, "COMPLIANCE_TRAINING");
+      const partnerCurriculumId = await seedCurriculum(owner.orgId, owner.userId, owner.token, "PARTNER_ENABLEMENT");
+
+      const ownerListResponse = await app.inject({
+        method: "GET",
+        url: "/v1/curricula",
+        cookies: { avatrain_session: owner.token },
+      });
+      expect(ownerListResponse.json().curricula).toHaveLength(3);
+
+      const partnerListResponse = await app.inject({
+        method: "GET",
+        url: "/v1/curricula",
+        cookies: { avatrain_session: partner.token },
+      });
+      expect(partnerListResponse.statusCode).toBe(200);
+      expect(partnerListResponse.json().curricula).toEqual([
+        expect.objectContaining({ id: partnerCurriculumId, programType: "PARTNER_ENABLEMENT" }),
+      ]);
+    });
+
+    it("GET /v1/curricula/:curriculumId 404s a PARTNER for a non-PARTNER_ENABLEMENT curriculum in their own org", async () => {
+      const owner = await seedOrgWithSessionToken("Partner Get Org");
+      const partner = await seedTeammateSessionToken(owner.orgId, "PARTNER");
+      const curriculumId = await seedCurriculum(owner.orgId, owner.userId, owner.token, "EMPLOYEE_ONBOARDING");
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/v1/curricula/${curriculumId}`,
+        cookies: { avatrain_session: partner.token },
+      });
+      expect(response.statusCode).toBe(404);
+
+      const ownerResponse = await app.inject({
+        method: "GET",
+        url: `/v1/curricula/${curriculumId}`,
+        cookies: { avatrain_session: owner.token },
+      });
+      expect(ownerResponse.statusCode).toBe(200);
+    });
+
+    it("GET /v1/curricula/:curriculumId 200s a PARTNER for a PARTNER_ENABLEMENT curriculum in their own org", async () => {
+      const owner = await seedOrgWithSessionToken("Partner Get Visible Org");
+      const partner = await seedTeammateSessionToken(owner.orgId, "PARTNER");
+      const curriculumId = await seedCurriculum(owner.orgId, owner.userId, owner.token, "PARTNER_ENABLEMENT");
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/v1/curricula/${curriculumId}`,
+        cookies: { avatrain_session: partner.token },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ id: curriculumId, programType: "PARTNER_ENABLEMENT" });
+    });
+
+    it("two-org isolation: a PARTNER in org A never sees org B's PARTNER_ENABLEMENT curricula", async () => {
+      const ownerA = await seedOrgWithSessionToken("Partner Isolation Org A");
+      const partnerA = await seedTeammateSessionToken(ownerA.orgId, "PARTNER");
+      const curriculumIdA = await seedCurriculum(ownerA.orgId, ownerA.userId, ownerA.token, "PARTNER_ENABLEMENT");
+      const ownerB = await seedOrgWithSessionToken("Partner Isolation Org B");
+      const curriculumIdB = await seedCurriculum(ownerB.orgId, ownerB.userId, ownerB.token, "PARTNER_ENABLEMENT");
+
+      const listResponse = await app.inject({
+        method: "GET",
+        url: "/v1/curricula",
+        cookies: { avatrain_session: partnerA.token },
+      });
+      expect(listResponse.json().curricula).toEqual([expect.objectContaining({ id: curriculumIdA })]);
+
+      const getResponse = await app.inject({
+        method: "GET",
+        url: `/v1/curricula/${curriculumIdB}`,
+        cookies: { avatrain_session: partnerA.token },
+      });
+      expect(getResponse.statusCode).toBe(404);
     });
   });
 });

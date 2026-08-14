@@ -10,6 +10,7 @@ import {
   getChecklist,
   getCurriculum,
   listActiveAvatars,
+  listCurricula,
   listCurriculumProgress,
   replaceChecklistItems,
   replaceCurriculumObjectives,
@@ -20,6 +21,7 @@ import type {
   ChecklistItemInput,
   ChecklistResult,
   CurriculumResult,
+  CurriculumSummary,
   ObjectiveInput,
   ObjectiveProgressEntry,
   ProgramType,
@@ -69,6 +71,22 @@ function humanizeError(err: unknown): string {
   return "Something went wrong. Please try again.";
 }
 
+export interface CurriculumEditorProps {
+  role: "OWNER" | "PARTNER";
+}
+
+/**
+ * Dispatches on role rather than branching inside one component — a PARTNER
+ * must never even attempt OwnerCurriculumEditor's OWNER-only
+ * GET /v1/avatars call as a side effect of a shared component's hooks
+ * running unconditionally. Each branch is its own component with its own
+ * hooks, so React's rules-of-hooks are respected per-component. See
+ * .claude/specs/partner-role.md's UI Changes.
+ */
+export function CurriculumEditor({ role }: CurriculumEditorProps) {
+  return role === "PARTNER" ? <PartnerCurriculumView /> : <OwnerCurriculumEditor />;
+}
+
 /**
  * Stateful orchestrator, mirroring KnowledgeBase.tsx's shape: owns
  * fetch/save state, delegates rendering to ObjectiveList/ProgressTable. No
@@ -76,7 +94,7 @@ function humanizeError(err: unknown): string {
  * unlike Knowledge Base's async-ingestion-status screen. See
  * .claude/specs/interactive-assessment.md's UI Changes.
  */
-export function CurriculumEditor() {
+function OwnerCurriculumEditor() {
   const [avatars, setAvatars] = useState<AvatarSummary[]>([]);
   const [avatarsLoaded, setAvatarsLoaded] = useState(false);
   const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(null);
@@ -421,6 +439,96 @@ export function CurriculumEditor() {
               </button>
             </>
           )}
+
+          <ProgressTable progress={progress} />
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Read-only counterpart to OwnerCurriculumEditor — a PARTNER can browse and
+ * inspect progress on the curricula shared with them (already narrowed to
+ * PARTNER_ENABLEMENT server-side by listCurricula/getCurriculum, see
+ * .claude/specs/partner-role.md), but every authoring control (create,
+ * program-type edit, objective add/edit/reorder/remove, delete) is simply
+ * absent from this component rather than present-but-disabled.
+ */
+function PartnerCurriculumView() {
+  const [curricula, setCurricula] = useState<CurriculumSummary[]>([]);
+  const [curriculaLoaded, setCurriculaLoaded] = useState(false);
+  const [selectedCurriculumId, setSelectedCurriculumId] = useState<string | null>(null);
+  const [curriculum, setCurriculum] = useState<CurriculumResult | null>(null);
+  const [progress, setProgress] = useState<ObjectiveProgressEntry[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void listCurricula().then((result) => {
+      setCurricula(result.curricula);
+      setCurriculaLoaded(true);
+      if (result.curricula.length > 0) setSelectedCurriculumId((current) => current ?? result.curricula[0]!.id);
+    });
+  }, []);
+
+  useEffect(() => {
+    setError(null);
+    if (!selectedCurriculumId) {
+      setCurriculum(null);
+      setProgress([]);
+      return;
+    }
+    void Promise.all([getCurriculum(selectedCurriculumId), listCurriculumProgress(selectedCurriculumId)])
+      .then(([loadedCurriculum, loadedProgress]) => {
+        setCurriculum(loadedCurriculum);
+        setProgress(loadedProgress.progress);
+      })
+      .catch((err: unknown) => setError(humanizeError(err)));
+  }, [selectedCurriculumId]);
+
+  if (!curriculaLoaded) return null;
+
+  if (curricula.length === 0) {
+    return <p className={styles.empty}>No partner-enablement curricula have been shared with you yet.</p>;
+  }
+
+  return (
+    <div className={styles.body}>
+      <div className={styles.avatarPicker}>
+        {curricula.map((entry) => (
+          <button
+            key={entry.id}
+            type="button"
+            className={entry.id === selectedCurriculumId ? styles.avatarChipActive : styles.avatarChip}
+            onClick={() => setSelectedCurriculumId(entry.id)}
+          >
+            {entry.avatarName}
+            <span className={styles.avatarChipHint}>{entry.title}</span>
+          </button>
+        ))}
+      </div>
+
+      {error && <p className={styles.error}>{error}</p>}
+
+      {curriculum && (
+        <>
+          <div className={styles.curriculumHeader}>
+            <h2 className={styles.curriculumTitle}>{curriculum.title}</h2>
+            <span className={styles.avatarChipHint}>{programTypeLabel(curriculum.programType)}</span>
+          </div>
+
+          <div className={styles.objectiveList}>
+            {curriculum.objectives.length === 0 && <p className={styles.empty}>No objectives yet.</p>}
+            {curriculum.objectives.map((objective) => (
+              <div key={objective.id} className={styles.objectiveRow}>
+                <span className={styles.curriculumTitle}>{objective.title}</span>
+                <p className={styles.createLabel}>{objective.teachingContent}</p>
+                <p className={styles.createLabel}>
+                  <strong>Check:</strong> {objective.checkQuestion}
+                </p>
+              </div>
+            ))}
+          </div>
 
           <ProgressTable progress={progress} />
         </>
