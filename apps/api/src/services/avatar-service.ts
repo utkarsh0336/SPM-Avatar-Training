@@ -28,6 +28,7 @@ export async function listActiveAvatars(orgId: string): Promise<AvatarSummary[]>
       id: avatar.id,
       name: avatar.name ?? "Untitled Avatar",
       curriculumId: avatar.curriculum?.id ?? null,
+      programType: avatar.curriculum?.programType ?? null,
     }));
   });
 }

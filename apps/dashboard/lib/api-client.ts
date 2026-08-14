@@ -49,6 +49,7 @@ import {
   type ObjectiveInput,
   type ReplaceChecklistItemsResponse,
   type ReplaceCurriculumObjectivesResponse,
+  type UpdateCurriculumRequest,
 } from "@avatrain/shared/curriculum";
 import {
   listMyAvatarsResponseSchema,
@@ -453,6 +454,12 @@ export async function createCurriculum(input: CreateCurriculumRequest): Promise<
 /** GET /v1/curricula/:id — curriculum + ordered objectives. */
 export async function getCurriculum(curriculumId: string): Promise<CurriculumResult> {
   const result = await apiFetch<unknown>(`/curricula/${curriculumId}`, { method: "GET" });
+  return curriculumSchema.parse(result);
+}
+
+/** PATCH /v1/curricula/:id — OWNER only. Partial update: title and/or programType. */
+export async function updateCurriculum(curriculumId: string, patch: UpdateCurriculumRequest): Promise<CurriculumResult> {
+  const result = await apiFetch<unknown>(`/curricula/${curriculumId}`, { method: "PATCH", body: JSON.stringify(patch) });
   return curriculumSchema.parse(result);
 }
 

@@ -148,6 +148,18 @@ enum ObjectiveProgressVerdict {
   RETRY
 }
 
+/// Owned by .claude/specs/training-catalog.md — the content-taxonomy/
+/// audience-targeting layer interactive-assessment.md's Scope decisions
+/// explicitly deferred ("audience/program-type tagging... deferred to a
+/// follow-up Training Catalog spec"). One value per Curriculum, not per
+/// Objective — see that spec's Scope decisions.
+enum ProgramType {
+  EMPLOYEE_ONBOARDING
+  COMPLIANCE_TRAINING
+  CUSTOMER_EDUCATION
+  PARTNER_ENABLEMENT
+}
+
 /// Tenant root. Not itself org-scoped — everything else hangs off org_id.
 model Organization {
   id                 String       @id @default(uuid()) @db.Uuid
@@ -442,6 +454,10 @@ model Curriculum {
   avatarId    String   @unique @map("avatar_id") @db.Uuid
   createdById String   @map("created_by_id") @db.Uuid
   title       String
+  // Additive, nullable — see .claude/specs/training-catalog.md. null means
+  // "uncategorized", the same state every curriculum created before this
+  // field existed is in; never backfilled.
+  programType ProgramType? @map("program_type")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -451,6 +467,7 @@ model Curriculum {
   checklist    InductionChecklist?
 
   @@index([orgId])
+  @@index([orgId, programType])
   @@map("curricula")
 }
 

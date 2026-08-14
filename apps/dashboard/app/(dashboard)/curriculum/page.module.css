@@ -162,6 +162,17 @@
   gap: 12px;
 }
 
+.programTypeSelect {
+  width: auto;
+  flex-shrink: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--vc-border);
+  background: var(--vc-input-bg, transparent);
+  color: var(--vc-text-primary);
+  font-size: 13px;
+}
+
 .curriculumTitle {
   font-size: 18px;
   font-weight: 700;

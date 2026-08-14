@@ -3,6 +3,7 @@ import {
   createCurriculumRequestSchema,
   curriculumIdParamSchema,
   replaceCurriculumObjectivesRequestSchema,
+  updateCurriculumRequestSchema,
 } from "@avatrain/shared";
 import { requireRole } from "../plugins/auth.js";
 import * as curriculumService from "../services/curriculum-service.js";
@@ -30,6 +31,13 @@ export function registerCurriculumRoutes(app: FastifyInstance): void {
   app.get("/v1/curricula/:curriculumId", gate, async (request, reply) => {
     const { curriculumId } = curriculumIdParamSchema.parse(request.params);
     const result = await curriculumService.getCurriculum(request.authContext!.orgId, curriculumId);
+    reply.status(200).send(result);
+  });
+
+  app.patch("/v1/curricula/:curriculumId", gate, async (request, reply) => {
+    const { curriculumId } = curriculumIdParamSchema.parse(request.params);
+    const patch = updateCurriculumRequestSchema.parse(request.body);
+    const result = await curriculumService.updateCurriculum(request.authContext!.orgId, curriculumId, patch);
     reply.status(200).send(result);
   });
 

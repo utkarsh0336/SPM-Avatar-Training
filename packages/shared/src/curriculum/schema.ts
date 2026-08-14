@@ -7,6 +7,17 @@ import { z } from "zod";
 export const objectiveProgressVerdictSchema = z.enum(["PASS", "RETRY"]);
 export type ObjectiveProgressVerdict = z.infer<typeof objectiveProgressVerdictSchema>;
 
+// Mirrors prisma/schema.prisma's ProgramType enum, same redefinition
+// convention as objectiveProgressVerdictSchema above. See
+// .claude/specs/training-catalog.md.
+export const programTypeSchema = z.enum([
+  "EMPLOYEE_ONBOARDING",
+  "COMPLIANCE_TRAINING",
+  "CUSTOMER_EDUCATION",
+  "PARTNER_ENABLEMENT",
+]);
+export type ProgramType = z.infer<typeof programTypeSchema>;
+
 export const objectiveSchema = z.object({
   id: z.string().uuid(),
   order: z.number().int().nonnegative(),
@@ -42,6 +53,9 @@ export const curriculumSchema = z.object({
   id: z.string().uuid(),
   avatarId: z.string().uuid(),
   title: z.string(),
+  // Nullable, not optional — "uncategorized" is a real, displayable state
+  // (see .claude/specs/training-catalog.md), not an absent field.
+  programType: programTypeSchema.nullable(),
   objectives: z.array(objectiveSchema),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -51,6 +65,7 @@ export type CurriculumResult = z.infer<typeof curriculumSchema>;
 export const createCurriculumRequestSchema = z.object({
   avatarId: z.string().uuid(),
   title: z.string().min(1),
+  programType: programTypeSchema.optional(),
 });
 export type CreateCurriculumRequest = z.infer<typeof createCurriculumRequestSchema>;
 
@@ -58,6 +73,7 @@ export const createCurriculumResponseSchema = z.object({
   id: z.string().uuid(),
   avatarId: z.string().uuid(),
   title: z.string(),
+  programType: programTypeSchema.nullable(),
 });
 export type CreateCurriculumResponse = z.infer<typeof createCurriculumResponseSchema>;
 
@@ -65,6 +81,16 @@ export const curriculumIdParamSchema = z.object({
   curriculumId: z.string().uuid(),
 });
 export type CurriculumIdParam = z.infer<typeof curriculumIdParamSchema>;
+
+// PATCH /v1/curricula/:curriculumId body. An explicit `null` for
+// programType clears it back to "uncategorized"; an omitted field leaves it
+// untouched — same convention as ../knowledge/schema.ts's
+// updateKnowledgeDocumentSchema.
+export const updateCurriculumRequestSchema = z.object({
+  title: z.string().min(1).optional(),
+  programType: programTypeSchema.nullable().optional(),
+});
+export type UpdateCurriculumRequest = z.infer<typeof updateCurriculumRequestSchema>;
 
 export const replaceCurriculumObjectivesRequestSchema = z.object({
   objectives: z.array(objectiveInputSchema).min(1),
@@ -105,6 +131,8 @@ export const avatarSummarySchema = z.object({
   name: z.string(),
   /** Null if this avatar has no Curriculum yet — lets the picker route to create vs. edit. */
   curriculumId: z.string().uuid().nullable(),
+  /** Mirrors the attached Curriculum's programType; null if no Curriculum yet or uncategorized. */
+  programType: programTypeSchema.nullable(),
 });
 export type AvatarSummary = z.infer<typeof avatarSummarySchema>;
 
