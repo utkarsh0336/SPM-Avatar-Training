@@ -198,3 +198,39 @@ export const listCurriculaResponseSchema = z.object({
   curricula: z.array(curriculumSummarySchema),
 });
 export type ListCurriculaResponse = z.infer<typeof listCurriculaResponseSchema>;
+
+/**
+ * GET /v1/avatars/recommended — see .claude/specs/personalized-recommendation-engine.md.
+ * NEEDS_REVIEW: caller RETRY'd at least one objective. IN_PROGRESS: attempted, no RETRY
+ * outstanding, not all PASSed. NOT_STARTED: has a Curriculum, zero ObjectiveProgress rows for
+ * this caller. COMPLETED: every objective PASSed. NO_CURRICULUM: avatar has no Curriculum at
+ * all — nothing to rank, sorts last.
+ */
+export const avatarRecommendationTierSchema = z.enum([
+  "NEEDS_REVIEW",
+  "IN_PROGRESS",
+  "NOT_STARTED",
+  "COMPLETED",
+  "NO_CURRICULUM",
+]);
+export type AvatarRecommendationTier = z.infer<typeof avatarRecommendationTierSchema>;
+
+// Superset of avatarSummarySchema's shape — same id/name/curriculumId/programType fields, plus
+// the calling learner's own recommendation signal. A separate schema, not an extension of
+// avatarSummarySchema, since GET /v1/avatars (avatarSummarySchema's route) is unaffected by this
+// spec and must not gain fields it doesn't return.
+export const recommendedAvatarSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  curriculumId: z.string().uuid().nullable(),
+  programType: programTypeSchema.nullable(),
+  recommendationTier: avatarRecommendationTierSchema,
+  objectiveCount: z.number().int().nonnegative(),
+  completedObjectiveCount: z.number().int().nonnegative(),
+});
+export type RecommendedAvatar = z.infer<typeof recommendedAvatarSchema>;
+
+export const listRecommendedAvatarsResponseSchema = z.object({
+  avatars: z.array(recommendedAvatarSchema),
+});
+export type ListRecommendedAvatarsResponse = z.infer<typeof listRecommendedAvatarsResponseSchema>;

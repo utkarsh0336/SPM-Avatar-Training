@@ -1,5 +1,13 @@
-import { withOrg, type AvatarSummary, type AvatarRecord, type OnboardingDraftInput } from "@avatrain/shared";
-import type { Avatar } from "@prisma/client";
+import {
+  withOrg,
+  type AvatarSummary,
+  type AvatarRecord,
+  type AvatarRecommendationTier,
+  type OnboardingDraftInput,
+  type RecommendedAvatar,
+  type Role,
+} from "@avatrain/shared";
+import type { Avatar, ObjectiveProgress } from "@prisma/client";
 import { conflict, notFound } from "../lib/http-errors.js";
 import { assertAvatarComplete, withRecomputedSimliFaceId } from "../lib/avatar-persona.js";
 import { resolveSimliFaceId } from "../lib/simli.js";
@@ -30,6 +38,87 @@ export async function listActiveAvatars(orgId: string): Promise<AvatarSummary[]>
       curriculumId: avatar.curriculum?.id ?? null,
       programType: avatar.curriculum?.programType ?? null,
     }));
+  });
+}
+
+const RECOMMENDATION_TIER_RANK: Record<AvatarRecommendationTier, number> = {
+  NEEDS_REVIEW: 0,
+  IN_PROGRESS: 1,
+  NOT_STARTED: 2,
+  COMPLETED: 3,
+  NO_CURRICULUM: 4,
+};
+
+type ProgressedObjective = { progress: Array<Pick<ObjectiveProgress, "verdict">> };
+
+// No division anywhere here (only count comparisons), so there is no zero-denominator case to
+// guard against — see .claude/specs/personalized-recommendation-engine.md's Database Changes.
+function deriveRecommendationTier(objectives: ProgressedObjective[]): {
+  tier: AvatarRecommendationTier;
+  completedObjectiveCount: number;
+} {
+  const passedCount = objectives.filter((objective) => objective.progress[0]?.verdict === "PASS").length;
+  const retryCount = objectives.filter((objective) => objective.progress[0]?.verdict === "RETRY").length;
+  const attemptedCount = objectives.filter((objective) => objective.progress.length > 0).length;
+
+  if (retryCount > 0) return { tier: "NEEDS_REVIEW", completedObjectiveCount: passedCount };
+  if (attemptedCount === 0) return { tier: "NOT_STARTED", completedObjectiveCount: passedCount };
+  if (passedCount === objectives.length) return { tier: "COMPLETED", completedObjectiveCount: passedCount };
+  return { tier: "IN_PROGRESS", completedObjectiveCount: passedCount };
+}
+
+/**
+ * GET /v1/avatars/recommended — see .claude/specs/personalized-recommendation-engine.md. Every
+ * ACTIVE avatar in the org, PARTNER narrowed to avatars whose curriculum is PARTNER_ENABLEMENT
+ * (same rule curriculum-service.ts's listCurricula applies), each annotated with the CALLING
+ * learner's own ObjectiveProgress history and stable-sorted by recommendation tier — "continue"
+ * before "new" before "done" — same MASTERY_TIER-style stable sort as
+ * .claude/specs/adaptive-learning-paths.md's getCurriculumForAvatar. learnerId is always the
+ * caller's own authContext.userId (see routes/avatars.ts) — never accepted as a parameter from
+ * elsewhere, so a caller can only ever see their own recommendations.
+ */
+export async function getRecommendedAvatars(orgId: string, learnerId: string, role: Role): Promise<RecommendedAvatar[]> {
+  return withOrg(orgId, async (tx) => {
+    const avatars = await tx.avatar.findMany({
+      where: {
+        orgId,
+        status: "ACTIVE",
+        ...(role === "PARTNER" ? { curriculum: { programType: "PARTNER_ENABLEMENT" } } : {}),
+      },
+      include: {
+        curriculum: {
+          include: { objectives: { include: { progress: { where: { learnerId } } } } },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return avatars
+      .map((avatar): RecommendedAvatar => {
+        const name = avatar.name ?? "Untitled Avatar";
+        if (!avatar.curriculum) {
+          return {
+            id: avatar.id,
+            name,
+            curriculumId: null,
+            programType: null,
+            recommendationTier: "NO_CURRICULUM",
+            objectiveCount: 0,
+            completedObjectiveCount: 0,
+          };
+        }
+        const { tier, completedObjectiveCount } = deriveRecommendationTier(avatar.curriculum.objectives);
+        return {
+          id: avatar.id,
+          name,
+          curriculumId: avatar.curriculum.id,
+          programType: avatar.curriculum.programType,
+          recommendationTier: tier,
+          objectiveCount: avatar.curriculum.objectives.length,
+          completedObjectiveCount,
+        };
+      })
+      .sort((a, b) => RECOMMENDATION_TIER_RANK[a.recommendationTier] - RECOMMENDATION_TIER_RANK[b.recommendationTier]);
   });
 }
 

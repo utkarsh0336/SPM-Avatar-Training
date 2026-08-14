@@ -2,10 +2,21 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { AvatarRecord } from "@avatrain/shared/avatar";
+import type { AvatarRecommendationTier, RecommendedAvatar } from "@avatrain/shared/curriculum";
 import styles from "./NewSessionModal.module.css";
 import { useSessions } from "./SessionsContext";
-import { getMyAvatars } from "../../lib/api-client";
+import { getRecommendedAvatars } from "../../lib/api-client";
+
+// Suffix appended to each Persona <option>'s label — mirrors the existing " (draft)" suffix
+// convention below. NOT_STARTED and NO_CURRICULUM stay unmarked: NOT_STARTED is the unmarked
+// default framing for "nothing to report yet", and NO_CURRICULUM (a Q&A-only persona with no
+// objectives) has no progress to summarize at all. See
+// .claude/specs/personalized-recommendation-engine.md.
+const TIER_LABEL: Partial<Record<AvatarRecommendationTier, string>> = {
+  NEEDS_REVIEW: " — Needs review",
+  IN_PROGRESS: " — Continue",
+  COMPLETED: " — Completed",
+};
 
 // Not shown in the reference screenshot — some flow state has to select which
 // avatar/topic to talk to before a session can start. See
@@ -27,20 +38,22 @@ export function NewSessionModal({ onClose }: NewSessionModalProps) {
   const { addSession } = useSessions();
   const [title, setTitle] = useState("");
   const [topic, setTopic] = useState<string>(TOPIC_OPTIONS[0] ?? "HR & Leave Policy");
-  const [myAvatars, setMyAvatars] = useState<AvatarRecord[]>([]);
+  const [avatars, setAvatars] = useState<RecommendedAvatar[]>([]);
   const [avatarId, setAvatarId] = useState<string>("");
 
-  // Only fetched to decide whether the picker below is even worth showing —
-  // an org with a single avatar (the common case pre-multi-persona) sees no
-  // behavior change at all, matching this feature's own design intent.
+  // Ranked for the calling learner (see getRecommendedAvatars) — the picker below defaults to the
+  // top-ranked (most personally relevant) avatar, not just the first one returned. Only fetched to
+  // decide whether the picker is even worth showing — an org with a single avatar visible to this
+  // caller (the common case pre-multi-persona) sees no behavior change at all, matching this
+  // feature's own original design intent. Every avatar returned is already ACTIVE-filtered
+  // server-side.
   useEffect(() => {
     let cancelled = false;
-    getMyAvatars()
+    getRecommendedAvatars()
       .then((result) => {
         if (cancelled) return;
-        setMyAvatars(result.avatars);
-        const active = result.avatars.find((avatar) => avatar.status === "ACTIVE");
-        setAvatarId(active?.id ?? result.avatars[0]?.id ?? "");
+        setAvatars(result.avatars);
+        setAvatarId(result.avatars[0]?.id ?? "");
       })
       .catch(() => {
         // No hard failure — the picker just stays hidden and
@@ -90,14 +103,14 @@ export function NewSessionModal({ onClose }: NewSessionModalProps) {
           </select>
         </label>
 
-        {myAvatars.length > 1 && (
+        {avatars.length > 1 && (
           <label className={styles.field}>
             <span className={styles.label}>Persona</span>
             <select className={styles.select} value={avatarId} onChange={(event) => setAvatarId(event.target.value)}>
-              {myAvatars.map((avatar) => (
+              {avatars.map((avatar) => (
                 <option key={avatar.id} value={avatar.id}>
-                  {avatar.name || "Untitled Avatar"}
-                  {avatar.status === "DRAFT" ? " (draft)" : ""}
+                  {avatar.name}
+                  {TIER_LABEL[avatar.recommendationTier] ?? ""}
                 </option>
               ))}
             </select>

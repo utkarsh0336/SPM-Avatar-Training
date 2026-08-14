@@ -9,9 +9,13 @@ import * as avatarService from "../services/avatar-service.js";
  * the Curriculum admin page's avatar picker; see
  * .claude/specs/interactive-assessment.md.
  *
- * GET /v1/avatars/mine and GET /v1/avatars/:avatarId are any-authenticated-
- * user reads (no requireRole) — they feed a live session's persona
- * resolution (useConversationSession.ts), not an admin surface.
+ * GET /v1/avatars/mine, GET /v1/avatars/recommended, and GET
+ * /v1/avatars/:avatarId are any-authenticated-user reads (no requireRole) —
+ * they feed a live session's persona resolution (useConversationSession.ts,
+ * NewSessionModal.tsx), not an admin surface. /recommended is the first of
+ * these a MEMBER can use to discover the org's whole avatar catalog (/mine
+ * is scoped to createdById, /all and the bare /avatars are OWNER-only) —
+ * see .claude/specs/personalized-recommendation-engine.md.
  *
  * GET /v1/avatars/all, POST /v1/avatars, PATCH .../:avatarId, and the
  * publish/archive actions are OWNER-only, matching this file's existing
@@ -38,6 +42,12 @@ export function registerAvatarRoutes(app: FastifyInstance): void {
 
   app.get("/v1/avatars/all", { preHandler: [app.authenticate, requireRole("OWNER")] }, async (request, reply) => {
     const avatars = await avatarService.listOrgAvatars(request.authContext!.orgId);
+    reply.status(200).send({ avatars });
+  });
+
+  app.get("/v1/avatars/recommended", { preHandler: app.authenticate }, async (request, reply) => {
+    const { orgId, userId, role } = request.authContext!;
+    const avatars = await avatarService.getRecommendedAvatars(orgId, userId, role);
     reply.status(200).send({ avatars });
   });
 
