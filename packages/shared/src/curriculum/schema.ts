@@ -1,11 +1,9 @@
 import { z } from "zod";
+import { scenarioStepResultSchema } from "./scenario-schema.js";
+import { objectiveProgressVerdictSchema } from "./verdict-schema.js";
 
-// Mirrors prisma/schema.prisma's ObjectiveProgressVerdict enum — redefined
-// here rather than imported from @prisma/client so packages/shared stays
-// browser-bundleable (same reasoning as ../knowledge/schema.ts's
-// knowledgeDocumentStatusSchema).
-export const objectiveProgressVerdictSchema = z.enum(["PASS", "RETRY"]);
-export type ObjectiveProgressVerdict = z.infer<typeof objectiveProgressVerdictSchema>;
+// objectiveProgressVerdictSchema/ObjectiveProgressVerdict now live in verdict-schema.js (barrel
+// re-exports it) — pulled out of this file so it and scenario-schema.js don't import each other.
 
 // Mirrors prisma/schema.prisma's ProgramType enum, same redefinition
 // convention as objectiveProgressVerdictSchema above. See
@@ -25,6 +23,9 @@ export const objectiveSchema = z.object({
   teachingContent: z.string(),
   checkQuestion: z.string(),
   gradingCriteria: z.string(),
+  // Empty = no branching scenario, the flat checkQuestion/gradingCriteria path above applies.
+  // See .claude/specs/branching-scenario-questions.md.
+  scenarioSteps: z.array(scenarioStepResultSchema),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

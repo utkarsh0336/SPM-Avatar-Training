@@ -168,28 +168,30 @@ enum ProgramType {
 
 /// Tenant root. Not itself org-scoped — everything else hangs off org_id.
 model Organization {
-  id                 String       @id @default(uuid()) @db.Uuid
-  name               String
-  dataRegion         DataRegion   @default(US) @map("data_region")
+  id                String     @id @default(uuid()) @db.Uuid
+  name              String
+  dataRegion        DataRegion @default(US) @map("data_region")
   // Additive branding fields — see .claude/specs/tenant-branding.md. All
   // nullable: an org that never sets them renders with the product's
   // existing hardcoded defaults, never breaks.
-  logoUrl            String?      @map("logo_url")
-  primaryColorHex    String?      @map("primary_color_hex")
-  secondaryColorHex  String?      @map("secondary_color_hex")
-  createdAt          DateTime     @default(now()) @map("created_at")
+  logoUrl           String?    @map("logo_url")
+  primaryColorHex   String?    @map("primary_color_hex")
+  secondaryColorHex String?    @map("secondary_color_hex")
+  createdAt         DateTime   @default(now()) @map("created_at")
 
-  applications        Application[]
-  memberships         Membership[]
-  sessions            Session[]
-  avatars             Avatar[]
-  knowledgeDocuments  KnowledgeDocument[]
-  knowledgeChunks     KnowledgeChunk[]
-  curricula           Curriculum[]
-  objectives          Objective[]
-  objectiveProgresses ObjectiveProgress[]
-  inductionChecklists InductionChecklist[]
-  checklistItems      ChecklistItem[]
+  applications            Application[]
+  memberships             Membership[]
+  sessions                Session[]
+  avatars                 Avatar[]
+  knowledgeDocuments      KnowledgeDocument[]
+  knowledgeChunks         KnowledgeChunk[]
+  curricula               Curriculum[]
+  objectives              Objective[]
+  objectiveProgresses     ObjectiveProgress[]
+  scenarioSteps           ScenarioStep[]
+  scenarioBranches        ScenarioBranch[]
+  inductionChecklists     InductionChecklist[]
+  checklistItems          ChecklistItem[]
   checklistItemProgresses ChecklistItemProgress[]
 
   @@map("organizations")
@@ -230,22 +232,22 @@ model Application {
 /// itself (credentials aren't tenant business data). Exempt from RLS; see
 /// scripts/verify-rls.mjs EXEMPT_TABLES.
 model User {
-  id                     String     @id @default(uuid()) @db.Uuid
-  email                  String     @unique
-  passwordHash           String?    @map("password_hash")
-  status                 UserStatus @default(ACTIVE)
-  inviteTokenHash        String?    @unique @map("invite_token_hash")
-  inviteTokenExpiresAt   DateTime?  @map("invite_token_expires_at")
+  id                    String     @id @default(uuid()) @db.Uuid
+  email                 String     @unique
+  passwordHash          String?    @map("password_hash")
+  status                UserStatus @default(ACTIVE)
+  inviteTokenHash       String?    @unique @map("invite_token_hash")
+  inviteTokenExpiresAt  DateTime?  @map("invite_token_expires_at")
   // Owned by Authentication, consumed by the (separately specced) onboarding
   // wizard gate — see .claude/specs/onboarding.md "Depends On".
-  onboardingCompletedAt  DateTime?  @map("onboarding_completed_at")
-  createdAt              DateTime   @default(now()) @map("created_at")
-  updatedAt              DateTime   @updatedAt @map("updated_at")
+  onboardingCompletedAt DateTime?  @map("onboarding_completed_at")
+  createdAt             DateTime   @default(now()) @map("created_at")
+  updatedAt             DateTime   @updatedAt @map("updated_at")
 
-  memberships         Membership[]
-  sessions            Session[]
-  oauthAccounts       OAuthAccount[]
-  objectiveProgresses ObjectiveProgress[]
+  memberships             Membership[]
+  sessions                Session[]
+  oauthAccounts           OAuthAccount[]
+  objectiveProgresses     ObjectiveProgress[]
   checklistItemProgresses ChecklistItemProgress[]
 
   @@map("users")
@@ -309,22 +311,22 @@ model Session {
 /// Owned by .claude/specs/onboarding.md (core fields) and additively extended
 /// by .claude/specs/avatar-builder-customization.md (preview fields).
 model Avatar {
-  id          String        @id @default(uuid()) @db.Uuid
-  orgId       String        @map("org_id") @db.Uuid
-  createdById String        @map("created_by_id") @db.Uuid
+  id          String @id @default(uuid()) @db.Uuid
+  orgId       String @map("org_id") @db.Uuid
+  createdById String @map("created_by_id") @db.Uuid
 
-  name        String?
-  style       AvatarStyle?
-  gender      AvatarGender?
+  name              String?
+  style             AvatarStyle?
+  gender            AvatarGender?
   // Plain String + application-layer allowlist (SKIN_TONE_TOKENS /
   // HAIR_COLOR_TOKENS in packages/shared), not a Postgres enum — lets the
   // palette change without a migration. See onboarding.md's Database Changes.
-  skinTone    String?       @map("skin_tone")
-  hairStyle   HairStyle?    @map("hair_style")
-  hairColor   String?       @map("hair_color")
-  outfit      Outfit?
-  expertise   Expertise?
-  voice       VoiceTone?
+  skinTone          String?         @map("skin_tone")
+  hairStyle         HairStyle?      @map("hair_style")
+  hairColor         String?         @map("hair_color")
+  outfit            Outfit?
+  expertise         Expertise?
+  voice             VoiceTone?
   // Additive — see AgeGroup/AvatarRegion/AvatarLanguage doc comments above.
   // Metadata only, never completion-required (assertAvatarComplete doesn't
   // reference these) and never fed into replica-resolver.ts.
@@ -364,7 +366,7 @@ model Avatar {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  organization Organization @relation(fields: [orgId], references: [id])
+  organization Organization  @relation(fields: [orgId], references: [id])
   curriculum   Curriculum?
   applications Application[]
 
@@ -380,41 +382,41 @@ model Avatar {
 /// file itself lives outside Postgres (see apps/api's DocumentStorage
 /// adapter), addressed here only by storageKey.
 model KnowledgeDocument {
-  id               String                  @id @default(uuid()) @db.Uuid
-  orgId            String                  @map("org_id") @db.Uuid
-  uploadedById     String                  @map("uploaded_by_id") @db.Uuid
+  id           String @id @default(uuid()) @db.Uuid
+  orgId        String @map("org_id") @db.Uuid
+  uploadedById String @map("uploaded_by_id") @db.Uuid
 
   title            String
-  originalFilename String                  @map("original_filename")
-  mimeType         String                  @map("mime_type")
-  fileSizeBytes    Int                     @map("file_size_bytes")
-  storageKey       String                  @map("storage_key")
+  originalFilename String @map("original_filename")
+  mimeType         String @map("mime_type")
+  fileSizeBytes    Int    @map("file_size_bytes")
+  storageKey       String @map("storage_key")
 
-  status           KnowledgeDocumentStatus @default(PENDING)
-  errorMessage     String?                 @map("error_message")
-  chunkCount       Int                     @default(0) @map("chunk_count")
+  status       KnowledgeDocumentStatus @default(PENDING)
+  errorMessage String?                 @map("error_message")
+  chunkCount   Int                     @default(0) @map("chunk_count")
 
-  category         String?                 @db.VarChar(100)
-  tags             String[]                @default([])
+  category String?  @db.VarChar(100)
+  tags     String[] @default([])
 
   // Version control (.claude/specs/knowledge-document-lifecycle.md): rows
   // sharing lineageId are versions of "the same document". isLatest flips
   // only on ingestion success (see knowledge-service.ts's
   // setLatestVersion()), never at upload time, so grounding never goes dark
   // mid-processing or on a failed re-upload.
-  lineageId        String                  @default(uuid()) @map("lineage_id") @db.Uuid
-  version          Int                     @default(1)
-  isLatest         Boolean                 @default(true) @map("is_latest")
+  lineageId String  @default(uuid()) @map("lineage_id") @db.Uuid
+  version   Int     @default(1)
+  isLatest  Boolean @default(true) @map("is_latest")
 
-  createdAt        DateTime                @default(now()) @map("created_at")
-  updatedAt        DateTime                @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   organization Organization     @relation(fields: [orgId], references: [id])
   chunks       KnowledgeChunk[]
 
+  @@unique([lineageId, version])
   @@index([orgId])
   @@index([orgId, category])
-  @@unique([lineageId, version])
   @@map("knowledge_documents")
 }
 
@@ -430,9 +432,9 @@ model KnowledgeDocument {
 /// dimension (Xenova/all-MiniLM-L6-v2) — switching embedding providers to a
 /// different dimension requires a migration and a full re-embed.
 model KnowledgeChunk {
-  id         String   @id @default(uuid()) @db.Uuid
-  orgId      String   @map("org_id") @db.Uuid
-  documentId String   @map("document_id") @db.Uuid
+  id         String @id @default(uuid()) @db.Uuid
+  orgId      String @map("org_id") @db.Uuid
+  documentId String @map("document_id") @db.Uuid
 
   chunkIndex Int                        @map("chunk_index")
   content    String
@@ -455,20 +457,20 @@ model KnowledgeChunk {
 /// Multi-curriculum-per-avatar and avatar-agnostic curricula are deferred — see the spec's
 /// "Scope decisions".
 model Curriculum {
-  id          String   @id @default(uuid()) @db.Uuid
-  orgId       String   @map("org_id") @db.Uuid
-  avatarId    String   @unique @map("avatar_id") @db.Uuid
-  createdById String   @map("created_by_id") @db.Uuid
+  id          String       @id @default(uuid()) @db.Uuid
+  orgId       String       @map("org_id") @db.Uuid
+  avatarId    String       @unique @map("avatar_id") @db.Uuid
+  createdById String       @map("created_by_id") @db.Uuid
   title       String
   // Additive, nullable — see .claude/specs/training-catalog.md. null means
   // "uncategorized", the same state every curriculum created before this
   // field existed is in; never backfilled.
   programType ProgramType? @map("program_type")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
 
-  organization Organization @relation(fields: [orgId], references: [id])
-  avatar       Avatar       @relation(fields: [avatarId], references: [id])
+  organization Organization        @relation(fields: [orgId], references: [id])
+  avatar       Avatar              @relation(fields: [avatarId], references: [id])
   objectives   Objective[]
   checklist    InductionChecklist?
 
@@ -493,9 +495,10 @@ model Objective {
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
-  organization Organization        @relation(fields: [orgId], references: [id])
-  curriculum   Curriculum          @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
-  progress     ObjectiveProgress[]
+  organization  Organization        @relation(fields: [orgId], references: [id])
+  curriculum    Curriculum          @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
+  progress      ObjectiveProgress[]
+  scenarioSteps ScenarioStep[]
 
   @@unique([curriculumId, order])
   @@index([orgId])
@@ -531,6 +534,57 @@ model ObjectiveProgress {
 }
 
 /// Tenant-scoped. org_id + RLS policy required — see .claude/rules/tenancy.md. Owned by
+/// .claude/specs/branching-scenario-questions.md. Optional, ordered branching step attached to an
+/// Objective. When an Objective has zero ScenarioSteps it behaves exactly as
+/// interactive-assessment.md defined (flat checkQuestion/gradingCriteria) — those fields stay
+/// required and untouched either way; this is additive, not a replacement.
+model ScenarioStep {
+  id          String   @id @default(uuid()) @db.Uuid
+  orgId       String   @map("org_id") @db.Uuid
+  objectiveId String   @map("objective_id") @db.Uuid
+  order       Int
+  prompt      String
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  organization     Organization     @relation(fields: [orgId], references: [id])
+  objective        Objective        @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+  branchesFromHere ScenarioBranch[] @relation("BranchFromStep")
+  branchesToHere   ScenarioBranch[] @relation("BranchToStep")
+
+  @@unique([objectiveId, order])
+  @@index([orgId])
+  @@index([objectiveId])
+  @@map("scenario_steps")
+}
+
+/// Tenant-scoped. org_id + RLS policy required — see .claude/rules/tenancy.md. Owned by
+/// .claude/specs/branching-scenario-questions.md. One branch out of a ScenarioStep.
+/// matchCriteria is judged the same way Objective.gradingCriteria is — an LLM judge call, never
+/// the model self-reporting which branch matched. Exactly one of (nextStepId, outcome) is set:
+/// nextStepId continues the scenario; outcome (reusing ObjectiveProgressVerdict — no new parallel
+/// enum) terminates it and feeds record_progress exactly like grade_answer's verdict does today.
+model ScenarioBranch {
+  id            String                    @id @default(uuid()) @db.Uuid
+  orgId         String                    @map("org_id") @db.Uuid
+  fromStepId    String                    @map("from_step_id") @db.Uuid
+  order         Int
+  matchCriteria String                    @map("match_criteria")
+  nextStepId    String?                   @map("next_step_id") @db.Uuid
+  outcome       ObjectiveProgressVerdict?
+  createdAt     DateTime                  @default(now()) @map("created_at")
+
+  organization Organization  @relation(fields: [orgId], references: [id])
+  fromStep     ScenarioStep  @relation("BranchFromStep", fields: [fromStepId], references: [id], onDelete: Cascade)
+  nextStep     ScenarioStep? @relation("BranchToStep", fields: [nextStepId], references: [id])
+
+  @@unique([fromStepId, order])
+  @@index([orgId])
+  @@index([fromStepId])
+  @@map("scenario_branches")
+}
+
+/// Tenant-scoped. org_id + RLS policy required — see .claude/rules/tenancy.md. Owned by
 /// .claude/specs/induction-checklist.md. One optional checklist per Curriculum (nullable 1:1,
 /// mirroring Curriculum's own 1:1-per-Avatar shape) — a structured, non-conversational set of
 /// tasks a learner checks off directly, distinct from Objective's AI-graded checkpoints. Not the
@@ -544,8 +598,8 @@ model InductionChecklist {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  organization Organization @relation(fields: [orgId], references: [id])
-  curriculum   Curriculum   @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
+  organization Organization    @relation(fields: [orgId], references: [id])
+  curriculum   Curriculum      @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
   items        ChecklistItem[]
 
   @@index([orgId])
@@ -565,8 +619,8 @@ model ChecklistItem {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  organization Organization         @relation(fields: [orgId], references: [id])
-  checklist    InductionChecklist   @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  organization Organization            @relation(fields: [orgId], references: [id])
+  checklist    InductionChecklist      @relation(fields: [checklistId], references: [id], onDelete: Cascade)
   progress     ChecklistItemProgress[]
 
   @@unique([checklistId, order])

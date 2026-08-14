@@ -11,6 +11,7 @@ import { registerOrgRoutes } from "./routes/org.js";
 import { registerKnowledgeRoutes } from "./routes/knowledge.js";
 import { registerCurriculumRoutes } from "./routes/curriculum.js";
 import { registerChecklistRoutes } from "./routes/checklist.js";
+import { registerScenarioRoutes } from "./routes/scenario.js";
 import { registerAvatarRoutes } from "./routes/avatars.js";
 import { registerApplicationRoutes } from "./routes/applications.js";
 import { registerEmbedRoutes } from "./routes/embed.js";
@@ -41,6 +42,7 @@ export function buildApp() {
   registerKnowledgeRoutes(app);
   registerCurriculumRoutes(app);
   registerChecklistRoutes(app);
+  registerScenarioRoutes(app);
   registerAvatarRoutes(app);
   registerApplicationRoutes(app);
   registerEmbedRoutes(app);

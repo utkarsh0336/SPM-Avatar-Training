@@ -1,4 +1,5 @@
 import type { Expertise, Language, ReadingLevel } from "./avatar-config.js";
+import type { ScenarioStepResult } from "../curriculum/scenario-schema.js";
 
 // Display copy only (used to phrase the prompt text) — not type-critical if
 // this drifts slightly from apps/dashboard's EXPERTISE_LABELS, unlike
@@ -125,6 +126,13 @@ export interface CurriculumContextObjective {
   status?: ObjectiveMasteryStatus;
   /** The learner's own last grade_answer feedback — only meaningful when status is NEEDS_REVIEW. */
   lastFeedback?: string;
+  /**
+   * Non-empty when this objective uses a branching scenario instead of a flat checkQuestion —
+   * see .claude/specs/branching-scenario-questions.md. Only the FIRST step is shown here (it's
+   * the only one knowable upfront); later steps are branch-dependent and surface only via
+   * advance_scenario's tool result at runtime.
+   */
+  scenarioSteps?: ScenarioStepResult[];
 }
 
 const STATUS_ANNOTATION: Record<ObjectiveMasteryStatus, (lastFeedback?: string) => string> = {
@@ -155,7 +163,11 @@ export function appendCurriculumContext(systemPrompt: string, objectives: Curric
     .map((objective, index) => {
       const status = objective.status ?? "NOT_STARTED";
       const annotation = STATUS_ANNOTATION[status](objective.lastFeedback);
-      return `${index + 1}. [id: ${objective.id}] ${objective.title} (${annotation})\n   Teach: ${objective.teachingContent}\n   Check question: ${objective.checkQuestion}`;
+      const firstScenarioStep = objective.scenarioSteps?.[0];
+      const questionLine = firstScenarioStep
+        ? `   Scenario opening line: ${firstScenarioStep.prompt}`
+        : `   Check question: ${objective.checkQuestion}`;
+      return `${index + 1}. [id: ${objective.id}] ${objective.title} (${annotation})\n   Teach: ${objective.teachingContent}\n${questionLine}`;
     })
     .join("\n");
 
@@ -166,10 +178,11 @@ with this learner's own progress:
 
 ${objectiveList}
 
-Teach each objective's material, then ask its check question to verify understanding, using these tools as you go:
-- Skip objectives already MASTERED — do not re-teach them from scratch, and do not call start_checkpoint/grade_answer/record_progress for them again.
-- Call start_checkpoint with the objective's id right before asking its check question.
-- Call grade_answer with the objective's id immediately after the learner answers.
-- If grade_answer returns PASS, call record_progress with the objective's id, then move on to the next objective. If it returns RETRY, briefly explain what was missing and let the learner try again — do not call record_progress until they pass.
+Teach each objective's material, then check understanding, using these tools as you go:
+- Skip objectives already MASTERED — do not re-teach them from scratch, and do not call start_checkpoint/grade_answer/advance_scenario/record_progress for them again.
+- Call start_checkpoint with the objective's id right before checking it.
+- For an objective with a "Check question" line: ask that question, then call grade_answer with the objective's id immediately after the learner answers.
+- For an objective with a "Scenario opening line" instead: present that line, then after each answer call advance_scenario (not grade_answer) with the objective's id — its result is either the next line to present (call advance_scenario again after the learner's next answer) or a final verdict, handled exactly like grade_answer's below.
+- If grade_answer or advance_scenario returns PASS, call record_progress with the objective's id, then move on to the next objective. If it returns RETRY, briefly explain what was missing and let the learner try again — do not call record_progress until they pass.
 - Once every objective has been recorded as passed, call end_module to confirm the session is complete.`;
 }
