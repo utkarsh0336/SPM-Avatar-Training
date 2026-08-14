@@ -27,8 +27,15 @@ export const loginSchema = z.object({
 });
 export type LoginInput = z.infer<typeof loginSchema>;
 
+// Capped at MEMBER/PARTNER — never OWNER, preserving the existing invariant
+// that org ownership is only ever created by signup/Google self-serve, never
+// granted via invite. See .claude/specs/partner-role.md.
+export const inviteRoleSchema = z.enum(["MEMBER", "PARTNER"]);
+export type InviteRole = z.infer<typeof inviteRoleSchema>;
+
 export const inviteSchema = z.object({
   email: emailSchema,
+  role: inviteRoleSchema.default("MEMBER"),
 });
 export type InviteInput = z.infer<typeof inviteSchema>;
 
@@ -44,7 +51,7 @@ export const googleCallbackSchema = z.object({
 });
 export type GoogleCallbackInput = z.infer<typeof googleCallbackSchema>;
 
-export const roleSchema = z.enum(["OWNER", "MEMBER"]);
+export const roleSchema = z.enum(["OWNER", "MEMBER", "PARTNER"]);
 
 export const userResponseSchema = z.object({
   id: z.string().uuid(),

@@ -57,3 +57,18 @@ export function requireRole(role: Role) {
     }
   };
 }
+
+/**
+ * Sibling to requireRole, not a replacement — every existing single-role
+ * callsite keeps using requireRole unchanged. Added for PARTNER
+ * (.claude/specs/partner-role.md), which shares some routes with OWNER but
+ * never all of them; per-role visibility narrowing beyond "is one of these
+ * roles" happens in the route handler / service layer, not here.
+ */
+export function requireAnyRole(roles: Role[]) {
+  return async function requireAnyRoleHandler(request: FastifyRequest): Promise<void> {
+    if (!request.authContext || !roles.includes(request.authContext.role)) {
+      throw forbidden("forbidden");
+    }
+  };
+}

@@ -12,9 +12,15 @@ enum DataRegion {
   EU
 }
 
+/// PARTNER added by .claude/specs/partner-role.md — read-only, scoped to
+/// Curriculum.programType === PARTNER_ENABLEMENT (training-catalog.md).
+/// requireRole(role) stays an exact-match single-role check; see
+/// apps/api/src/plugins/auth.ts's requireAnyRole for the "one of several"
+/// case this role introduces.
 enum Role {
   OWNER
   MEMBER
+  PARTNER
 }
 
 enum UserStatus {

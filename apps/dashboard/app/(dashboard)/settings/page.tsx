@@ -42,6 +42,17 @@ export default async function SettingsPage() {
           Manage Embeds
         </Link>
       </div>
+
+      <div className={styles.form}>
+        <span className={styles.label}>MEMBERS</span>
+        <p className={styles.subtitle}>
+          Invite teammates as a Member, or an external partner/distributor as a read-only Partner scoped to your
+          partner-enablement curricula.
+        </p>
+        <Link href="/settings/members" className={styles.submit}>
+          Manage Members
+        </Link>
+      </div>
     </div>
   );
 }

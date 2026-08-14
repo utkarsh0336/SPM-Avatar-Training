@@ -9,10 +9,26 @@ import {
   type ObjectiveProgressEntry,
   type ObjectiveProgressVerdict,
   type ObjectiveResult,
+  type Role,
   type UpdateCurriculumRequest,
 } from "@avatrain/shared";
 import type { Curriculum, Objective } from "@prisma/client";
 import { badRequest, conflict, notFound } from "../lib/http-errors.js";
+
+/**
+ * A PARTNER may only reach a curriculum tagged PARTNER_ENABLEMENT
+ * (.claude/specs/training-catalog.md) — everything else is invisible to
+ * them, not merely forbidden: throwing notFound rather than a 403 for a
+ * curriculum that DOES exist in their own org prevents a PARTNER from
+ * distinguishing "exists but not mine" from "doesn't exist" by probing ids,
+ * mirroring .claude/rules/tenancy.md's "return zero rows" isolation
+ * convention. OWNER is unrestricted. See .claude/specs/partner-role.md.
+ */
+function assertVisibleTo(role: Role, curriculum: Curriculum): void {
+  if (role === "PARTNER" && curriculum.programType !== "PARTNER_ENABLEMENT") {
+    throw notFound("curriculum_not_found");
+  }
+}
 
 function toObjectiveResult(objective: Objective): ObjectiveResult {
   return {
@@ -71,12 +87,56 @@ export async function createCurriculum(
   }
 }
 
-export async function getCurriculum(orgId: string, curriculumId: string): Promise<CurriculumResult> {
+export async function getCurriculum(orgId: string, curriculumId: string, role: Role): Promise<CurriculumResult> {
   const curriculum = await withOrg(orgId, (tx) => tx.curriculum.findFirst({ where: { id: curriculumId, orgId } }));
   if (!curriculum) throw notFound("curriculum_not_found");
+  assertVisibleTo(role, curriculum);
 
   const objectives = await withOrg(orgId, (tx) => tx.objective.findMany({ where: { curriculumId, orgId } }));
   return toCurriculumResult(curriculum, objectives);
+}
+
+export interface CurriculumSummary {
+  id: string;
+  avatarId: string;
+  avatarName: string;
+  title: string;
+  programType: CurriculumResult["programType"];
+  objectiveCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * GET /v1/curricula — org-wide listing, new for
+ * .claude/specs/partner-role.md (no such endpoint existed before it; access
+ * used to be by id or by avatarId only). OWNER sees every curriculum in the
+ * org; PARTNER sees only PARTNER_ENABLEMENT ones — filtered here, in the
+ * service layer, never by a client-supplied query param, same
+ * "server re-checks entitlement" principle .claude/rules/tenancy.md states
+ * for record_progress/grade_answer.
+ */
+export async function listCurricula(orgId: string, role: Role): Promise<CurriculumSummary[]> {
+  return withOrg(orgId, async (tx) => {
+    const curricula = await tx.curriculum.findMany({
+      where: {
+        orgId,
+        ...(role === "PARTNER" ? { programType: "PARTNER_ENABLEMENT" } : {}),
+      },
+      include: { avatar: true, objectives: true },
+      orderBy: { createdAt: "desc" },
+    });
+    return curricula.map((curriculum) => ({
+      id: curriculum.id,
+      avatarId: curriculum.avatarId,
+      avatarName: curriculum.avatar.name ?? "Untitled Avatar",
+      title: curriculum.title,
+      programType: curriculum.programType,
+      objectiveCount: curriculum.objectives.length,
+      createdAt: curriculum.createdAt.toISOString(),
+      updatedAt: curriculum.updatedAt.toISOString(),
+    }));
+  });
 }
 
 /**
@@ -310,9 +370,14 @@ export async function getRemainingObjectiveTitles(
   return objectives.filter((o) => !o.progress.some((p) => p.verdict === "PASS")).map((o) => o.title);
 }
 
-export async function listCurriculumProgress(orgId: string, curriculumId: string): Promise<ObjectiveProgressEntry[]> {
+export async function listCurriculumProgress(
+  orgId: string,
+  curriculumId: string,
+  role: Role,
+): Promise<ObjectiveProgressEntry[]> {
   const curriculum = await withOrg(orgId, (tx) => tx.curriculum.findFirst({ where: { id: curriculumId, orgId } }));
   if (!curriculum) throw notFound("curriculum_not_found");
+  assertVisibleTo(role, curriculum);
 
   const rows = await withOrg(orgId, (tx) =>
     tx.objectiveProgress.findMany({

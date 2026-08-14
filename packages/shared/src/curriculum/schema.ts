@@ -140,3 +140,26 @@ export const listAvatarsResponseSchema = z.object({
   avatars: z.array(avatarSummarySchema),
 });
 export type ListAvatarsResponse = z.infer<typeof listAvatarsResponseSchema>;
+
+/**
+ * GET /v1/curricula — org-wide listing added by
+ * .claude/specs/partner-role.md. OWNER sees every curriculum; PARTNER sees
+ * only PARTNER_ENABLEMENT ones (filtered server-side, see
+ * curriculum-service.ts's listCurricula).
+ */
+export const curriculumSummarySchema = z.object({
+  id: z.string().uuid(),
+  avatarId: z.string().uuid(),
+  avatarName: z.string(),
+  title: z.string(),
+  programType: programTypeSchema.nullable(),
+  objectiveCount: z.number().int().nonnegative(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type CurriculumSummary = z.infer<typeof curriculumSummarySchema>;
+
+export const listCurriculaResponseSchema = z.object({
+  curricula: z.array(curriculumSummarySchema),
+});
+export type ListCurriculaResponse = z.infer<typeof listCurriculaResponseSchema>;

@@ -31,12 +31,14 @@ import {
   createCurriculumResponseSchema,
   curriculumSchema,
   listAvatarsResponseSchema,
+  listCurriculaResponseSchema,
   listCurriculumProgressResponseSchema,
   replaceCurriculumObjectivesResponseSchema,
   type CreateCurriculumRequest,
   type CreateCurriculumResponse,
   type CurriculumResult,
   type ListAvatarsResponse,
+  type ListCurriculaResponse,
   type ListCurriculumProgressResponse,
   type ObjectiveInput,
   type ReplaceCurriculumObjectivesResponse,
@@ -71,7 +73,7 @@ export interface AuthOrg {
   secondaryColorHex: string | null;
 }
 
-export type AuthRole = "OWNER" | "MEMBER";
+export type AuthRole = "OWNER" | "MEMBER" | "PARTNER";
 
 export interface AuthResult {
   user: AuthUser;
@@ -483,4 +485,43 @@ export async function deleteCurriculum(curriculumId: string): Promise<void> {
 export async function listCurriculumProgress(curriculumId: string): Promise<ListCurriculumProgressResponse> {
   const result = await apiFetch<unknown>(`/curricula/${curriculumId}/progress`, { method: "GET" });
   return listCurriculumProgressResponseSchema.parse(result);
+}
+
+/**
+ * GET /v1/curricula — OWNER or PARTNER. See .claude/specs/partner-role.md.
+ * OWNER gets every curriculum in the org; PARTNER gets only
+ * PARTNER_ENABLEMENT-tagged ones (filtered server-side).
+ */
+export async function listCurricula(): Promise<ListCurriculaResponse> {
+  const result = await apiFetch<unknown>("/curricula", { method: "GET" });
+  return listCurriculaResponseSchema.parse(result);
+}
+
+export interface MemberResult {
+  userId: string;
+  email: string;
+  role: AuthRole;
+  joinedAt: string;
+}
+
+export interface MembersResult {
+  members: MemberResult[];
+}
+
+/** GET /v1/auth/members — OWNER only. See .claude/specs/authentication.md. */
+export async function listMembers(): Promise<MembersResult> {
+  return apiFetch<MembersResult>("/auth/members", { method: "GET" });
+}
+
+export interface InviteResult {
+  inviteUrl: string;
+}
+
+/**
+ * POST /v1/auth/invite — OWNER only. role is capped at MEMBER/PARTNER
+ * server-side (never OWNER) — see .claude/specs/partner-role.md. No email
+ * delivery in v1 — the returned inviteUrl is relayed out of band.
+ */
+export async function inviteMember(email: string, role: "MEMBER" | "PARTNER"): Promise<InviteResult> {
+  return apiFetch<InviteResult>("/auth/invite", { method: "POST", body: JSON.stringify({ email, role }) });
 }

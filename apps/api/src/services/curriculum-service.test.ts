@@ -95,7 +95,7 @@ describe("curriculum-service", () => {
       const avatarId = await seedAvatar(orgA.orgId, orgA.userId);
       const curriculum = await createCurriculum(orgA.orgId, orgA.userId, { avatarId, title: "X" });
 
-      await expect(getCurriculum(orgB.orgId, curriculum.id)).rejects.toMatchObject({ statusCode: 404 });
+      await expect(getCurriculum(orgB.orgId, curriculum.id, "OWNER")).rejects.toMatchObject({ statusCode: 404 });
     });
   });
 
@@ -198,7 +198,7 @@ describe("curriculum-service", () => {
 
       await deleteCurriculum(orgId, curriculum.id);
 
-      await expect(getCurriculum(orgId, curriculum.id)).rejects.toMatchObject({ statusCode: 404 });
+      await expect(getCurriculum(orgId, curriculum.id, "OWNER")).rejects.toMatchObject({ statusCode: 404 });
     });
 
     it("404s for another org's curriculum", async () => {
@@ -341,7 +341,7 @@ describe("curriculum-service", () => {
         }),
       );
 
-      const progress = await listCurriculumProgress(orgId, curriculum.id);
+      const progress = await listCurriculumProgress(orgId, curriculum.id, "OWNER");
       expect(progress).toHaveLength(1);
       expect(progress[0]).toMatchObject({
         objectiveId: objective!.id,
@@ -360,7 +360,7 @@ describe("curriculum-service", () => {
       const avatarId = await seedAvatar(orgA.orgId, orgA.userId);
       const curriculum = await createCurriculum(orgA.orgId, orgA.userId, { avatarId, title: "X" });
 
-      await expect(listCurriculumProgress(orgB.orgId, curriculum.id)).rejects.toMatchObject({ statusCode: 404 });
+      await expect(listCurriculumProgress(orgB.orgId, curriculum.id, "OWNER")).rejects.toMatchObject({ statusCode: 404 });
     });
   });
 });
