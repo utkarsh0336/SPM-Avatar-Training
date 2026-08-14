@@ -58,6 +58,7 @@ Invariants worth asserting in dev builds:
 | Avatar provider fails (Mode B) | No video track after 5s | Degrade renderer to `mesh3d`, keep audio | Avatar changes appearance, session continues |
 | WebGL context lost | `webglcontextlost` | Degrade to `voiceOnly` | Waveform replaces avatar |
 | Tool timeout (>4s) | AbortSignal | Tell the model the tool failed; avatar apologises and offers escalation | Natural spoken recovery |
+| Turn TTFA over budget (>1400ms mediated) | `turn-latency-guard.ts` watchdog (`TURN_TTFA_BUDGET_MS`) | `latency.budget_exceeded` sent, turn continues; after 3 consecutive over-budget turns for an org, in-process circuit breaker skips retrieval and forces fallback-first TTS until a turn comes in under budget | Nothing blocking — turn completes as normal |
 
 **Degrade, never drop.** Every failure above has a path that keeps the learner learning. A session
 that ends because a video provider hiccuped is a bug, not an outage.

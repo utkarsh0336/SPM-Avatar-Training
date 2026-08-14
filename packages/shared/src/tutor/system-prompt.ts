@@ -16,6 +16,16 @@ const EXPERTISE_TOPIC_TITLES: Record<Expertise, string> = {
   MARKETING_BRANDING: "Marketing & Branding",
 };
 
+/**
+ * The only real domain-vocabulary string available at STT-call time (a
+ * SessionCurriculum has no title field) — used as Whisper's `prompt` bias.
+ * See conversation-service.ts's session.start handler and
+ * .claude/specs/voice-quality-latency-enforcement.md.
+ */
+export function expertiseTopicTitle(expertise: Expertise): string {
+  return EXPERTISE_TOPIC_TITLES[expertise];
+}
+
 export interface BuildSystemPromptInput {
   avatarName: string;
   expertise: Expertise;
@@ -50,6 +60,7 @@ const READING_LEVEL_INSTRUCTION: Record<ReadingLevel, string> = {
 const LANGUAGE_INSTRUCTION: Record<Language, string> = {
   English: "Respond in English.",
   Hindi: "Respond in Hindi (Devanagari script), regardless of what language the learner uses.",
+  Spanish: "Respond in Spanish, regardless of what language the learner uses.",
 };
 
 /**

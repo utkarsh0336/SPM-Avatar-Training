@@ -50,12 +50,14 @@ export const avatarLanguageSchema = z.enum(["ENGLISH", "HINDI"]);
  */
 export const readingLevelSchema = z.enum(["SIMPLE", "STANDARD", "ADVANCED"]);
 /**
- * The two languages actually wired end-to-end (LLM reply language, TTS voice,
- * STT hint) — see providers/tts-voice-map.ts's resolveHindiVoice doc comment
- * for why Hindi is Azure/msedge-tts-only (echogarden's installed Piper voice
- * catalog has no Hindi entries, verified live).
+ * The three languages actually wired end-to-end (LLM reply language, TTS
+ * voice, STT hint) — see providers/tts-voice-map.ts's resolveHindiVoice doc
+ * comment for why Hindi is Azure/msedge-tts-only (echogarden's installed
+ * Piper voice catalog has no Hindi entries, verified live), and
+ * resolveSpanishPrimaryVoice/resolveSpanishVoice for Spanish's two-candidate
+ * failover (echogarden DOES have usable Spanish voices, verified live).
  */
-export const languageSchema = z.enum(["English", "Hindi"]);
+export const languageSchema = z.enum(["English", "Hindi", "Spanish"]);
 
 export const hairStyleSchema = z.enum(["SHORT", "MEDIUM", "LONG", "CURLY", "WAVY", "BALD"]);
 

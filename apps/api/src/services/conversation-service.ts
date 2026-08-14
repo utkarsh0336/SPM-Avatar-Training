@@ -11,6 +11,7 @@ import {
   SentenceChunker,
   classifyEmotion,
   clientMessageSchema,
+  expertiseTopicTitle,
   resolveVoiceGender,
   resolveWhisperLanguageCode,
   serverMessageSchema,
@@ -40,6 +41,12 @@ import {
   type SessionCurriculumObjective,
 } from "./curriculum-service.js";
 import { getAvatarById } from "./avatar-service.js";
+import {
+  defaultTurnLatencyCircuitBreaker,
+  startTurnLatencyWatchdog,
+  TURN_TTFA_BUDGET_MS,
+  type TurnLatencyCircuitBreaker,
+} from "./turn-latency-guard.js";
 
 // docs/ARCHITECTURE.md §5's retrieval budget ("<100ms p95 ... or it needs a
 // filler utterance") — this pipeline has no filler-utterance mechanism, so
@@ -134,6 +141,14 @@ export interface ConversationHandlerDeps {
   getRemainingObjectiveTitles?: typeof getRemainingObjectiveTitles;
   /** Injectable for tests; defaults to the real ./avatar-service.js. Only called when claims.pinnedAvatarId is set (embed sessions). */
   getAvatarById?: typeof getAvatarById;
+  /**
+   * Injectable for tests; defaults to the shared module-level singleton in
+   * turn-latency-guard.ts, which must persist across connections/turns —
+   * same requirement as apps/api/src/lib/rate-limit.ts's own module-level
+   * Map. Tests should inject a fresh instance (via
+   * createTurnLatencyCircuitBreaker()) to stay hermetic.
+   */
+  turnLatencyCircuitBreaker?: TurnLatencyCircuitBreaker;
 }
 
 /**
@@ -283,6 +298,7 @@ export function createConversationHandler(
   const persistProgress = deps.recordObjectiveProgress ?? recordObjectiveProgress;
   const remainingObjectiveTitles = deps.getRemainingObjectiveTitles ?? getRemainingObjectiveTitles;
   const loadAvatarById = deps.getAvatarById ?? getAvatarById;
+  const circuitBreaker = deps.turnLatencyCircuitBreaker ?? defaultTurnLatencyCircuitBreaker;
   const messages: LLMMessage[] = [];
 
   let llm: LLMProvider | null = null;
@@ -291,6 +307,7 @@ export function createConversationHandler(
   let voiceTone: VoiceTone = "NEUTRAL";
   let gender: Gender = "FEMALE";
   let language: Language = "English";
+  let sttPromptHint: string | undefined;
   let currentUtteranceId: string | null = null;
   let currentAbortController: AbortController | null = null;
   let currentTurnLlmServedBy: string | undefined;
@@ -325,7 +342,10 @@ export function createConversationHandler(
     }
     try {
       const bytes = Buffer.from(audioBase64, "base64");
-      const text = await stt.transcribe(bytes, mimeType, { language: resolveWhisperLanguageCode(language) });
+      const text = await stt.transcribe(bytes, mimeType, {
+        language: resolveWhisperLanguageCode(language),
+        prompt: sttPromptHint,
+      });
       return { text, sttProvider: stt.name };
     } catch {
       send({ type: "stt.failed", utteranceId, retryable: true });
@@ -338,6 +358,8 @@ export function createConversationHandler(
     signal: AbortSignal,
     isFirst: boolean,
     tracker: ReturnType<typeof createTurnLatencyTracker>,
+    clearLatencyWatchdog: () => void,
+    forceFallbackFirst: boolean,
     onServed: (name: string) => void,
   ): Promise<SynthesizedSentence | null> {
     let resolvedMimeType = "audio/wav";
@@ -350,6 +372,10 @@ export function createConversationHandler(
         resolvedMimeType = mimeType;
         onServed(name);
       },
+      // Set when the turn-latency circuit breaker has tripped for this org —
+      // skip the (possibly still-slow) primary and go straight to fallback.
+      // See turn-latency-guard.ts.
+      forceFallbackFirst,
     });
     try {
       const chunks: Uint8Array[] = [];
@@ -360,7 +386,10 @@ export function createConversationHandler(
         chunks.push(chunk);
       }
       if (chunks.length === 0) return null;
-      if (isFirst) tracker.markTtsFirstChunk();
+      if (isFirst) {
+        tracker.markTtsFirstChunk();
+        clearLatencyWatchdog();
+      }
       return { text: sentenceText, audio: concatUint8Arrays(chunks), mimeType: resolvedMimeType };
     } catch {
       return null;
@@ -467,6 +496,19 @@ ${step.branches.map((branch, index) => `${letters[index]}) ${branch.matchCriteri
     currentTurnLlmServedBy = undefined;
     send({ type: "turn.started", utteranceId });
 
+    // Whole-turn TTFA SLA gate — see turn-latency-guard.ts. A soft, non-fatal
+    // signal (the turn keeps running); cleared the moment the first sentence's
+    // audio is ready, or at any of this function's exit points below.
+    const clearLatencyWatchdog = startTurnLatencyWatchdog(TURN_TTFA_BUDGET_MS, controller.signal, () => {
+      send({ type: "latency.budget_exceeded", utteranceId, budgetMs: TURN_TTFA_BUDGET_MS });
+    });
+
+    // Circuit breaker tripped for this org (repeated over-budget turns) —
+    // skip retrieval entirely and force TTS to try its fallback candidate
+    // first, so a turn already running behind doesn't also pay for a slow
+    // primary attempt. See turn-latency-guard.ts.
+    const forceFallbackFirst = circuitBreaker.isTripped(claims.orgId);
+
     // Retrieval-augmented grounding (SOW §3.3) — embed the learner's own
     // utterance, look up the org's most relevant KnowledgeChunks, and fold
     // them into THIS turn's system prompt only (never persisted into the
@@ -474,13 +516,15 @@ ${step.branches.map((branch, index) => `${letters[index]}) ${branch.matchCriteri
     // Failure or timeout degrades to the ungrounded Priority-3 path rather
     // than failing the turn — see .claude/rules/realtime.md "degrade,
     // never drop" and .claude/specs/knowledge-management.md.
-    const retrievedChunks = await withRetrievalTimeout(
-      retrieveKnowledge(claims.orgId, text).catch((error: unknown) => {
-        console.error("knowledge retrieval failed — degrading turn to ungrounded generation", error);
-        return [];
-      }),
-      RETRIEVAL_TIMEOUT_MS,
-    );
+    const retrievedChunks = forceFallbackFirst
+      ? []
+      : await withRetrievalTimeout(
+          retrieveKnowledge(claims.orgId, text).catch((error: unknown) => {
+            console.error("knowledge retrieval failed — degrading turn to ungrounded generation", error);
+            return [];
+          }),
+          RETRIEVAL_TIMEOUT_MS,
+        );
     tracker.markRetrievalDone();
     const turnSystemPrompt = appendKnowledgeContext(systemPrompt, retrievedChunks);
     const sources: KnowledgeSource[] = toKnowledgeSources(retrievedChunks);
@@ -495,9 +539,17 @@ ${step.branches.map((branch, index) => `${letters[index]}) ${branch.matchCriteri
     function enqueueSentence(sentenceText: string): void {
       const index = sentencePromises.length;
       sentencePromises.push(
-        synthesizeSentence(sentenceText, controller.signal, index === 0, tracker, (name) => {
-          lastServedByTts = name;
-        }),
+        synthesizeSentence(
+          sentenceText,
+          controller.signal,
+          index === 0,
+          tracker,
+          clearLatencyWatchdog,
+          forceFallbackFirst,
+          (name) => {
+            lastServedByTts = name;
+          },
+        ),
       );
     }
 
@@ -714,11 +766,16 @@ ${step.branches.map((branch, index) => `${letters[index]}) ${branch.matchCriteri
           message: "The AI tutor is temporarily unavailable. Please try again in a moment.",
         });
       }
+      clearLatencyWatchdog();
       currentUtteranceId = null;
       return;
     }
 
     if (controller.signal.aborted) {
+      // Redundant with the watchdog's own internal abort-listener — clearing
+      // explicitly here too is intentional/defensive, matching
+      // withToolTimeout's existing dual clearTimeout+removeEventListener style.
+      clearLatencyWatchdog();
       currentUtteranceId = null;
       return; // turn.cancelled was already sent by the barge_in handler
     }
@@ -726,6 +783,7 @@ ${step.branches.map((branch, index) => `${letters[index]}) ${branch.matchCriteri
     await flushSentSentences(true);
 
     if (controller.signal.aborted) {
+      clearLatencyWatchdog();
       currentUtteranceId = null;
       return;
     }
@@ -737,6 +795,7 @@ ${step.branches.map((branch, index) => `${letters[index]}) ${branch.matchCriteri
         kind: "tts",
         message: "The AI tutor's voice is temporarily unavailable. Please try again in a moment.",
       });
+      clearLatencyWatchdog();
       currentUtteranceId = null;
       return;
     }
@@ -761,9 +820,11 @@ ${step.branches.map((branch, index) => `${letters[index]}) ${branch.matchCriteri
       emotion,
     });
     send({ type: "turn.ended", utteranceId });
+    clearLatencyWatchdog();
     currentUtteranceId = null;
 
     const latency = tracker.finish({ llm: currentTurnLlmServedBy, stt: sttProvider, tts: lastServedByTts });
+    circuitBreaker.recordTurn(claims.orgId, latency.ttsFirstChunkMs);
     send({
       type: "latency",
       utteranceId,
@@ -826,6 +887,10 @@ ${step.branches.map((branch, index) => `${letters[index]}) ${branch.matchCriteri
         }
 
         systemPrompt = buildSystemPrompt({ avatarName, expertise, language, readingLevel });
+        // Whisper vocabulary-bias hint — see STTTranscribeOptions.prompt's doc
+        // comment. The only real domain-vocabulary string available here;
+        // SessionCurriculum carries no title field.
+        sttPromptHint = expertiseTopicTitle(expertise);
         voiceTone = resolvedVoiceTone;
         gender = resolvedGender;
         llm = createLLM(process.env, {

@@ -179,7 +179,11 @@ export function useConversationSession({
         // Mic permission and the ticket mint have no data dependency on
         // each other — run them concurrently.
         const [micStream, ticketResult] = await Promise.all([
-          navigator.mediaDevices.getUserMedia({ audio: true }),
+          // Native browser DSP, requested explicitly rather than left to
+          // user-agent defaults — see .claude/specs/voice-quality-latency-enforcement.md.
+          navigator.mediaDevices.getUserMedia({
+            audio: { noiseSuppression: true, echoCancellation: true, autoGainControl: true },
+          }),
           mintConversationTicket(),
         ]);
         const micTrack = micStream.getAudioTracks()[0];

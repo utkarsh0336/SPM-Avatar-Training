@@ -5,6 +5,7 @@ import type { Language } from "../tutor/avatar-config.js";
 const WHISPER_LANGUAGE_CODE: Record<Language, string> = {
   English: "en",
   Hindi: "hi",
+  Spanish: "es",
 };
 
 /** Maps our Language enum to the ISO-639-1 code Whisper's `language` field expects. */

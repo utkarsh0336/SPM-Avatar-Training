@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appendCurriculumContext, appendKnowledgeContext, buildSystemPrompt } from "./system-prompt.js";
+import { appendCurriculumContext, appendKnowledgeContext, buildSystemPrompt, expertiseTopicTitle } from "./system-prompt.js";
 
 describe("buildSystemPrompt", () => {
   it("includes the avatar name and the resolved topic title", () => {
@@ -24,6 +24,12 @@ describe("buildSystemPrompt", () => {
   it("instructs a Hindi response when language is Hindi", () => {
     const prompt = buildSystemPrompt({ avatarName: "Priya", expertise: "HR_LEAVE_POLICY", language: "Hindi" });
     expect(prompt).toMatch(/Respond in Hindi/);
+    expect(prompt).not.toMatch(/Respond in English/);
+  });
+
+  it("instructs a Spanish response when language is Spanish", () => {
+    const prompt = buildSystemPrompt({ avatarName: "Carlos", expertise: "HR_LEAVE_POLICY", language: "Spanish" });
+    expect(prompt).toMatch(/Respond in Spanish/);
     expect(prompt).not.toMatch(/Respond in English/);
   });
 
@@ -204,5 +210,13 @@ describe("appendCurriculumContext", () => {
       { id: "obj-1", title: "Flat", teachingContent: "C", checkQuestion: "How many days?", scenarioSteps: [] },
     ]);
     expect(result).toContain("Check question: How many days?");
+  });
+});
+
+describe("expertiseTopicTitle", () => {
+  it("resolves the same topic title buildSystemPrompt uses internally", () => {
+    expect(expertiseTopicTitle("HR_LEAVE_POLICY")).toBe("HR & Leave Policy");
+    const prompt = buildSystemPrompt({ avatarName: "Nancy", expertise: "HR_LEAVE_POLICY" });
+    expect(prompt).toContain(expertiseTopicTitle("HR_LEAVE_POLICY"));
   });
 });

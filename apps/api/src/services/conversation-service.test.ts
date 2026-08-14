@@ -3,6 +3,7 @@ import type { LLMMessage, LLMProvider, LLMStreamEvent, ObjectiveProgressVerdict,
 import { createConversationHandler, type ConversationHandlerDeps } from "./conversation-service.js";
 import type { RetrievedChunk } from "./retrieval-service.js";
 import type { SessionCurriculum, SessionCurriculumObjective } from "./curriculum-service.js";
+import { createTurnLatencyCircuitBreaker, TURN_TTFA_BUDGET_MS } from "./turn-latency-guard.js";
 
 class FakeSocket {
   readyState = 1;
@@ -190,7 +191,36 @@ describe("createConversationHandler", () => {
     expect(createTTS).toHaveBeenCalledWith("WARM", "FEMALE", "Hindi", process.env, expect.anything());
     const sttInstance = (createSTT as unknown as { mock: { results: { value: STTProvider }[] } }).mock.results[0]!
       .value;
-    expect(sttInstance.transcribe).toHaveBeenCalledWith(expect.any(Uint8Array), "audio/wav", { language: "hi" });
+    // sessionStartBase's expertise is HR_LEAVE_POLICY — see the dedicated
+    // accent-adaptation test below for the prompt field's own coverage.
+    expect(sttInstance.transcribe).toHaveBeenCalledWith(expect.any(Uint8Array), "audio/wav", {
+      language: "hi",
+      prompt: "HR & Leave Policy",
+    });
+  });
+
+  it("threads the session's expertise topic into Whisper's `prompt` accent/vocabulary-bias hint", async () => {
+    const socket = new FakeSocket();
+    const createSTT = fakeSTT("success");
+    createConversationHandler(socket as never, claims, {
+      createLLM: fakeLLM("success", ["Hi. "]),
+      createSTT,
+      createTTS: fakeTTS("success"),
+      ...noRetrieval,
+    });
+    socket.emitMessage({ ...sessionStartBase, expertise: "IT_TECHNOLOGY" });
+    socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+    await vi.waitFor(() => {
+      expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+    });
+
+    const sttInstance = (createSTT as unknown as { mock: { results: { value: STTProvider }[] } }).mock.results[0]!
+      .value;
+    expect(sttInstance.transcribe).toHaveBeenCalledWith(expect.any(Uint8Array), "audio/wav", {
+      language: "en",
+      prompt: "IT & Technology",
+    });
   });
 
   it("processes a full audio turn: transcript, turn.started, tts.chunk, turn.ended, latency", async () => {
@@ -233,6 +263,119 @@ describe("createConversationHandler", () => {
     // Plain informational reply — classifyEmotion reads it as neutral, and
     // (unlike sources) emotion is always set, never omitted, for role:"avatar".
     expect(avatarTranscript?.emotion).toBe("neutral");
+  });
+
+  describe("turn-latency SLA gate", () => {
+    it("sends latency.budget_exceeded once when TTS runs past the TTFA budget, and the turn still completes", async () => {
+      vi.useFakeTimers();
+      try {
+        const socket = new FakeSocket();
+        let releaseSynth: (() => void) | undefined;
+        const gate = new Promise<void>((resolve) => {
+          releaseSynth = resolve;
+        });
+        const createTTS: ConversationHandlerDeps["createTTS"] = vi.fn((_tone, _gender, _language, _env, opts) => {
+          return {
+            name: "fake-tts",
+            mimeType: "audio/wav",
+            async *synthesize() {
+              await gate;
+              opts?.onResolved?.("fake-echogarden", "audio/wav");
+              yield new Uint8Array([1, 2, 3]);
+            },
+          } as never;
+        });
+        createConversationHandler(socket as never, claims, {
+          createLLM: fakeLLM("success", ["Hi. "]),
+          createSTT: fakeSTT("success"),
+          createTTS,
+          turnLatencyCircuitBreaker: createTurnLatencyCircuitBreaker(),
+          ...noRetrieval,
+        });
+        socket.emitMessage(sessionStartBase);
+        socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+        await vi.advanceTimersByTimeAsync(TURN_TTFA_BUDGET_MS);
+        expect(findMessages(socket, "latency.budget_exceeded")).toEqual([
+          { type: "latency.budget_exceeded", utteranceId: "u1", budgetMs: TURN_TTFA_BUDGET_MS },
+        ]);
+
+        // Switch back to real timers before releasing the gate — vi.waitFor's
+        // own polling doesn't advance fake timers on its own.
+        vi.useRealTimers();
+        releaseSynth!();
+        await vi.waitFor(() => {
+          expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+        });
+        // Still exactly one — clearing the watchdog on first audio must
+        // prevent a second, stale firing.
+        expect(findMessages(socket, "latency.budget_exceeded")).toHaveLength(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("skips retrieval and forces fallback-first TTS once the circuit breaker is tripped for the org", async () => {
+      const socket = new FakeSocket();
+      const breaker = createTurnLatencyCircuitBreaker({ budgetMs: TURN_TTFA_BUDGET_MS, consecutiveMissesToTrip: 3 });
+      breaker.recordTurn(claims.orgId, TURN_TTFA_BUDGET_MS + 100);
+      breaker.recordTurn(claims.orgId, TURN_TTFA_BUDGET_MS + 100);
+      breaker.recordTurn(claims.orgId, TURN_TTFA_BUDGET_MS + 100);
+      expect(breaker.isTripped(claims.orgId)).toBe(true);
+
+      const retrieveContext = fakeRetrieveContext();
+      const createTTS = fakeTTS("success");
+      createConversationHandler(socket as never, claims, {
+        createLLM: fakeLLM("success", ["Hi. "]),
+        createSTT: fakeSTT("success"),
+        createTTS,
+        retrieveContext,
+        turnLatencyCircuitBreaker: breaker,
+      });
+      socket.emitMessage(sessionStartBase);
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+
+      expect(retrieveContext).not.toHaveBeenCalled();
+      expect(createTTS).toHaveBeenCalledWith(
+        "WARM",
+        "FEMALE",
+        "English",
+        process.env,
+        expect.objectContaining({ forceFallbackFirst: true }),
+      );
+    });
+
+    it("does not skip retrieval or force fallback-first TTS when the breaker is untripped", async () => {
+      const socket = new FakeSocket();
+      const retrieveContext = fakeRetrieveContext();
+      const createTTS = fakeTTS("success");
+      createConversationHandler(socket as never, claims, {
+        createLLM: fakeLLM("success", ["Hi. "]),
+        createSTT: fakeSTT("success"),
+        createTTS,
+        retrieveContext,
+        turnLatencyCircuitBreaker: createTurnLatencyCircuitBreaker(),
+      });
+      socket.emitMessage(sessionStartBase);
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+
+      expect(retrieveContext).toHaveBeenCalledTimes(1);
+      expect(createTTS).toHaveBeenCalledWith(
+        "WARM",
+        "FEMALE",
+        "English",
+        process.env,
+        expect.objectContaining({ forceFallbackFirst: false }),
+      );
+    });
   });
 
   it("attaches the classified emotion to an avatar transcript, even when it's neutral", async () => {

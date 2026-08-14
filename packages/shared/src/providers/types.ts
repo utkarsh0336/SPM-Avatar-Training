@@ -64,6 +64,17 @@ export interface LLMProvider {
 export interface STTTranscribeOptions {
   /** ISO-639-1 hint (e.g. "hi") — improves accuracy for non-English audio. Omitted lets the provider auto-detect. */
   language?: string;
+  /**
+   * Domain-vocabulary bias (e.g. the session's curriculum/expertise topic) —
+   * passed through verbatim to providers that support it. Omitted (not
+   * empty-stringed) when no bias applies. This is accuracy biasing on the
+   * SAME single transcription call, not a retry: a confidence-triggered
+   * second STT call would be a synchronous await in the speech path with no
+   * filler utterance to mask it — see conversation-service.ts's own note
+   * that this pipeline has no filler-utterance mechanism, and
+   * .claude/agents/latency-auditor.md's rule against exactly that pattern.
+   */
+  prompt?: string;
 }
 
 export interface STTProvider {
