@@ -106,7 +106,9 @@ describe("GET /v1/avatars", () => {
 
     const response = await app.inject({ method: "GET", url: "/v1/avatars", cookies: { avatrain_session: token } });
     expect(response.statusCode).toBe(200);
-    expect(response.json().avatars).toEqual([{ id: expect.any(String), name: "Active Avatar", curriculumId: null }]);
+    expect(response.json().avatars).toEqual([
+      { id: expect.any(String), name: "Active Avatar", curriculumId: null, programType: null },
+    ]);
   });
 
   it("reports the curriculumId for an avatar that already has one", async () => {
@@ -120,7 +122,7 @@ describe("GET /v1/avatars", () => {
 
     const response = await app.inject({ method: "GET", url: "/v1/avatars", cookies: { avatrain_session: token } });
     expect(response.json().avatars).toEqual([
-      { id: avatar.id, name: "Curriculum Avatar", curriculumId: curriculum.id },
+      { id: avatar.id, name: "Curriculum Avatar", curriculumId: curriculum.id, programType: null },
     ]);
   });
 });

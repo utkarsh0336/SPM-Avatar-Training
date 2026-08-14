@@ -9,11 +9,33 @@ import {
   listActiveAvatars,
   listCurriculumProgress,
   replaceCurriculumObjectives,
+  updateCurriculum,
 } from "../../../lib/api-client";
-import type { AvatarSummary, CurriculumResult, ObjectiveInput, ObjectiveProgressEntry } from "@avatrain/shared/curriculum";
+import type {
+  AvatarSummary,
+  CurriculumResult,
+  ObjectiveInput,
+  ObjectiveProgressEntry,
+  ProgramType,
+} from "@avatrain/shared/curriculum";
 import { ObjectiveList, type ObjectiveDraft } from "./ObjectiveList";
 import { ProgressTable } from "./ProgressTable";
 import styles from "./page.module.css";
+
+// Human-readable labels for SOW §3.4's four program types — see
+// .claude/specs/training-catalog.md. "" (not a ProgramType value) represents
+// null/uncategorized in the <select> below.
+const PROGRAM_TYPE_OPTIONS: { value: ProgramType | ""; label: string }[] = [
+  { value: "", label: "Uncategorized" },
+  { value: "EMPLOYEE_ONBOARDING", label: "Employee Onboarding" },
+  { value: "COMPLIANCE_TRAINING", label: "Compliance Training" },
+  { value: "CUSTOMER_EDUCATION", label: "Customer Education" },
+  { value: "PARTNER_ENABLEMENT", label: "Partner Enablement" },
+];
+
+function programTypeLabel(programType: ProgramType | null): string {
+  return PROGRAM_TYPE_OPTIONS.find((option) => option.value === (programType ?? ""))?.label ?? "Uncategorized";
+}
 
 function toDrafts(curriculum: CurriculumResult): ObjectiveDraft[] {
   return curriculum.objectives.map((objective) => ({
@@ -46,9 +68,11 @@ export function CurriculumEditor() {
   const [objectives, setObjectives] = useState<ObjectiveDraft[]>([]);
   const [progress, setProgress] = useState<ObjectiveProgressEntry[]>([]);
   const [newCurriculumTitle, setNewCurriculumTitle] = useState("");
+  const [newCurriculumProgramType, setNewCurriculumProgramType] = useState<ProgramType | "">("");
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [savingProgramType, setSavingProgramType] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refreshAvatars = useCallback(async () => {
@@ -98,14 +122,34 @@ export function CurriculumEditor() {
     setCreating(true);
     setError(null);
     try {
-      const created = await createCurriculum({ avatarId: selectedAvatarId, title: newCurriculumTitle.trim() });
+      const created = await createCurriculum({
+        avatarId: selectedAvatarId,
+        title: newCurriculumTitle.trim(),
+        ...(newCurriculumProgramType ? { programType: newCurriculumProgramType } : {}),
+      });
       setNewCurriculumTitle("");
+      setNewCurriculumProgramType("");
       await refreshAvatars();
       await loadCurriculumFor(created.id);
     } catch (err) {
       setError(humanizeError(err));
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function handleChangeProgramType(next: ProgramType | ""): Promise<void> {
+    if (!curriculum) return;
+    setSavingProgramType(true);
+    setError(null);
+    try {
+      const updated = await updateCurriculum(curriculum.id, { programType: next || null });
+      setCurriculum(updated);
+      await refreshAvatars();
+    } catch (err) {
+      setError(humanizeError(err));
+    } finally {
+      setSavingProgramType(false);
     }
   }
 
@@ -178,6 +222,7 @@ export function CurriculumEditor() {
           >
             {avatar.name}
             {!avatar.curriculumId && <span className={styles.avatarChipHint}>no curriculum</span>}
+            {avatar.curriculumId && <span className={styles.avatarChipHint}>{programTypeLabel(avatar.programType)}</span>}
           </button>
         ))}
       </div>
@@ -194,6 +239,17 @@ export function CurriculumEditor() {
             value={newCurriculumTitle}
             onChange={(e) => setNewCurriculumTitle(e.target.value)}
           />
+          <select
+            className={styles.textInput}
+            value={newCurriculumProgramType}
+            onChange={(e) => setNewCurriculumProgramType(e.target.value as ProgramType | "")}
+          >
+            {PROGRAM_TYPE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
           <button
             type="button"
             className={styles.primaryButton}
@@ -209,6 +265,18 @@ export function CurriculumEditor() {
         <>
           <div className={styles.curriculumHeader}>
             <h2 className={styles.curriculumTitle}>{curriculum.title}</h2>
+            <select
+              className={styles.programTypeSelect}
+              value={curriculum.programType ?? ""}
+              disabled={savingProgramType}
+              onChange={(e) => void handleChangeProgramType(e.target.value as ProgramType | "")}
+            >
+              {PROGRAM_TYPE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
             <button
               type="button"
               className={styles.dangerButton}

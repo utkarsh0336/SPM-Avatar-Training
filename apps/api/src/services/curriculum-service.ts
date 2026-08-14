@@ -9,6 +9,7 @@ import {
   type ObjectiveProgressEntry,
   type ObjectiveProgressVerdict,
   type ObjectiveResult,
+  type UpdateCurriculumRequest,
 } from "@avatrain/shared";
 import type { Curriculum, Objective } from "@prisma/client";
 import { badRequest, conflict, notFound } from "../lib/http-errors.js";
@@ -31,6 +32,7 @@ function toCurriculumResult(curriculum: Curriculum, objectives: Objective[]): Cu
     id: curriculum.id,
     avatarId: curriculum.avatarId,
     title: curriculum.title,
+    programType: curriculum.programType,
     objectives: [...objectives].sort((a, b) => a.order - b.order).map(toObjectiveResult),
     createdAt: curriculum.createdAt.toISOString(),
     updatedAt: curriculum.updatedAt.toISOString(),
@@ -48,10 +50,21 @@ export async function createCurriculum(
   try {
     const curriculum = await withOrg(orgId, (tx) =>
       tx.curriculum.create({
-        data: { orgId, avatarId: input.avatarId, createdById: userId, title: input.title },
+        data: {
+          orgId,
+          avatarId: input.avatarId,
+          createdById: userId,
+          title: input.title,
+          programType: input.programType ?? null,
+        },
       }),
     );
-    return { id: curriculum.id, avatarId: curriculum.avatarId, title: curriculum.title };
+    return {
+      id: curriculum.id,
+      avatarId: curriculum.avatarId,
+      title: curriculum.title,
+      programType: curriculum.programType,
+    };
   } catch (error) {
     if (isUniqueConstraintError(error)) throw conflict("curriculum_exists", "this avatar already has a curriculum");
     throw error;
@@ -64,6 +77,34 @@ export async function getCurriculum(orgId: string, curriculumId: string): Promis
 
   const objectives = await withOrg(orgId, (tx) => tx.objective.findMany({ where: { curriculumId, orgId } }));
   return toCurriculumResult(curriculum, objectives);
+}
+
+/**
+ * PATCH /v1/curricula/:curriculumId — OWNER-only (route-level gate). Partial
+ * update, matching knowledge-service.ts's updateDocumentMetadata's
+ * `!== undefined` convention: an omitted field is left untouched, an
+ * explicit `null` on programType clears it back to uncategorized. See
+ * .claude/specs/training-catalog.md.
+ */
+export async function updateCurriculum(
+  orgId: string,
+  curriculumId: string,
+  patch: UpdateCurriculumRequest,
+): Promise<CurriculumResult> {
+  return withOrg(orgId, async (tx) => {
+    const existing = await tx.curriculum.findFirst({ where: { id: curriculumId, orgId } });
+    if (!existing) throw notFound("curriculum_not_found");
+
+    const updated = await tx.curriculum.update({
+      where: { id: curriculumId },
+      data: {
+        ...(patch.title !== undefined ? { title: patch.title } : {}),
+        ...(patch.programType !== undefined ? { programType: patch.programType } : {}),
+      },
+    });
+    const objectives = await tx.objective.findMany({ where: { curriculumId, orgId } });
+    return toCurriculumResult(updated, objectives);
+  });
 }
 
 export async function deleteCurriculum(orgId: string, curriculumId: string): Promise<void> {
