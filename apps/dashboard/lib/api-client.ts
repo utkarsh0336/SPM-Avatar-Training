@@ -32,6 +32,7 @@ import {
   completeChecklistItemResponseSchema,
   createChecklistResponseSchema,
   createCurriculumResponseSchema,
+  curriculumEffectivenessSchema,
   curriculumSchema,
   listAvatarsResponseSchema,
   listCurriculaResponseSchema,
@@ -44,6 +45,7 @@ import {
   type CreateChecklistResponse,
   type CreateCurriculumRequest,
   type CreateCurriculumResponse,
+  type CurriculumEffectiveness,
   type CurriculumResult,
   type ListAvatarsResponse,
   type ListCurriculaResponse,
@@ -553,6 +555,12 @@ export async function completeChecklistItem(itemId: string, completed: boolean):
 export async function listCurriculumProgress(curriculumId: string): Promise<ListCurriculumProgressResponse> {
   const result = await apiFetch<unknown>(`/curricula/${curriculumId}/progress`, { method: "GET" });
   return listCurriculumProgressResponseSchema.parse(result);
+}
+
+/** GET /v1/curricula/:id/effectiveness — completion rate, mastery trend, time-to-competency. */
+export async function getCurriculumEffectiveness(curriculumId: string): Promise<CurriculumEffectiveness> {
+  const result = await apiFetch<unknown>(`/curricula/${curriculumId}/effectiveness`, { method: "GET" });
+  return curriculumEffectivenessSchema.parse(result);
 }
 
 /**

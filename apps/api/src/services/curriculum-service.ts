@@ -3,7 +3,9 @@ import {
   withOrg,
   type CreateCurriculumRequest,
   type CreateCurriculumResponse,
+  type CurriculumEffectiveness,
   type CurriculumResult,
+  type ObjectiveEffectiveness,
   type ObjectiveInput,
   type ObjectiveMasteryStatus,
   type ObjectiveProgressEntry,
@@ -397,4 +399,88 @@ export async function listCurriculumProgress(
     feedback: row.feedback,
     updatedAt: row.updatedAt.toISOString(),
   }));
+}
+
+function average(values: number[]): number | null {
+  if (values.length === 0) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function timeToCompetencySeconds(row: { createdAt: Date; updatedAt: Date }): number {
+  return (row.updatedAt.getTime() - row.createdAt.getTime()) / 1000;
+}
+
+/**
+ * Aggregates the same rows listCurriculumProgress returns raw into
+ * completion rate, per-objective mastery trend, and time-to-competency. See
+ * .claude/specs/training-effectiveness-measurement.md. Known limitation
+ * (deliberately not solved with new schema): a re-graded PASS moves
+ * updatedAt to the newer pass, so time-to-competency measures
+ * time-to-most-recent-pass, not time-to-first-pass.
+ */
+export async function getCurriculumEffectiveness(
+  orgId: string,
+  curriculumId: string,
+  role: Role,
+): Promise<CurriculumEffectiveness> {
+  const curriculum = await withOrg(orgId, (tx) => tx.curriculum.findFirst({ where: { id: curriculumId, orgId } }));
+  if (!curriculum) throw notFound("curriculum_not_found");
+  assertVisibleTo(role, curriculum);
+
+  const objectives = await withOrg(orgId, (tx) =>
+    tx.objective.findMany({ where: { curriculumId, orgId }, orderBy: { order: "asc" } }),
+  );
+  const rows = await withOrg(orgId, (tx) =>
+    tx.objectiveProgress.findMany({ where: { orgId, objective: { curriculumId } } }),
+  );
+
+  const rowsByObjective = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const existing = rowsByObjective.get(row.objectiveId);
+    if (existing) existing.push(row);
+    else rowsByObjective.set(row.objectiveId, [row]);
+  }
+
+  const objectiveStats: ObjectiveEffectiveness[] = objectives.map((objective) => {
+    const objectiveRows = rowsByObjective.get(objective.id) ?? [];
+    const passRows = objectiveRows.filter((row) => row.verdict === "PASS");
+    const attemptedLearnerCount = objectiveRows.length;
+    const passedLearnerCount = passRows.length;
+    return {
+      objectiveId: objective.id,
+      objectiveTitle: objective.title,
+      order: objective.order,
+      attemptedLearnerCount,
+      passedLearnerCount,
+      passRate: attemptedLearnerCount > 0 ? passedLearnerCount / attemptedLearnerCount : 0,
+      avgAttemptsToPass: average(passRows.map((row) => row.attempts)),
+      avgTimeToCompetencySeconds: average(passRows.map(timeToCompetencySeconds)),
+    };
+  });
+
+  const learnerIds = new Set(rows.map((row) => row.learnerId));
+  const passedObjectiveIdsByLearner = new Map<string, Set<string>>();
+  for (const row of rows) {
+    if (row.verdict !== "PASS") continue;
+    const existing = passedObjectiveIdsByLearner.get(row.learnerId);
+    if (existing) existing.add(row.objectiveId);
+    else passedObjectiveIdsByLearner.set(row.learnerId, new Set([row.objectiveId]));
+  }
+  // objectives.length > 0 guard: a curriculum with no objectives must never
+  // vacuously count every learner as "completed."
+  const completedLearnerCount =
+    objectives.length === 0
+      ? 0
+      : [...learnerIds].filter((learnerId) => passedObjectiveIdsByLearner.get(learnerId)?.size === objectives.length)
+          .length;
+  const learnerCount = learnerIds.size;
+
+  return {
+    curriculumId,
+    learnerCount,
+    completedLearnerCount,
+    completionRate: learnerCount > 0 ? completedLearnerCount / learnerCount : 0,
+    avgTimeToCompetencySeconds: average(rows.filter((row) => row.verdict === "PASS").map(timeToCompetencySeconds)),
+    objectives: objectiveStats,
+  };
 }
