@@ -10,6 +10,7 @@ interface ConversationSessionContextValue {
   pendingTurn: boolean;
   captionText: string;
   amplitude: number;
+  usingLiveKit: boolean;
   avatarContainerRef: RefObject<HTMLDivElement>;
   /** Passed straight through from the provider's own prop — see .claude/specs/induction-checklist.md's ChecklistPanel. */
   avatarId?: string | null;

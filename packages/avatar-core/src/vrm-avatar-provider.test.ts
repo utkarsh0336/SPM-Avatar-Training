@@ -242,6 +242,44 @@ describe("createVrmAvatarProvider", () => {
     expect(() => provider.setEmotion?.("happy")).not.toThrow();
   });
 
+  it("setPhase() drives the gesture animator's arm bone over successive render-loop ticks", async () => {
+    const leftUpperArm = { rotation: { x: 0, y: 0, z: -1.2 } }; // as if vrm-rest-pose.ts already ran
+    const vrm = {
+      ...createFakeVrm(),
+      humanoid: { getNormalizedBoneNode: (name: string) => (name === "leftUpperArm" ? leftUpperArm : null) },
+    } as unknown as VRM;
+    const sceneHandle = createFakeSceneHandle(vrm);
+    const loadScene = vi.fn().mockResolvedValue(sceneHandle);
+    const raf = createFakeRaf();
+    const provider = createVrmAvatarProvider({
+      loadScene,
+      createAudioElement: createFakeAudioElement,
+      requestAnimationFrame: raf.raf,
+      cancelAnimationFrame: raf.caf,
+    });
+
+    await provider.start({ replicaId: "r1", container: createFakeContainer() });
+    const baseZ = leftUpperArm.rotation.z;
+    provider.setPhase?.("speaking");
+
+    for (let i = 0; i < 10; i++) {
+      const calls = raf.raf.mock.calls;
+      const latestTick = calls[calls.length - 1]![0] as () => void;
+      latestTick();
+    }
+
+    expect(leftUpperArm.rotation.z).not.toBe(baseZ);
+  });
+
+  it("setPhase() is a no-op once the Mock fallback is active", async () => {
+    const loadScene = vi.fn().mockRejectedValue(new Error("no WebGL"));
+    const fallback = createFakeMockFallback();
+    const provider = createVrmAvatarProvider({ loadScene, fallbackProvider: fallback, createAudioElement: createFakeAudioElement });
+
+    await provider.start({ replicaId: "r1", container: createFakeContainer() });
+    expect(() => provider.setPhase?.("speaking")).not.toThrow();
+  });
+
   it("stop() while the model is still loading discards it once loaded, instead of mounting an orphaned canvas", async () => {
     const sceneHandle = createFakeSceneHandle();
     let resolveLoad!: (handle: VrmSceneHandle) => void;

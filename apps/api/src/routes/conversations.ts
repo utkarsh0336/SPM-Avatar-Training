@@ -1,9 +1,16 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { WebSocket } from "ws";
-import { trainingSessionIdParamSchema } from "@avatrain/shared";
+import { prisma, trainingSessionIdParamSchema } from "@avatrain/shared";
 import { checkRateLimit } from "../lib/rate-limit.js";
-import { serviceUnavailable, unauthorized } from "../lib/http-errors.js";
+import { conflict, forbidden, serviceUnavailable, unauthorized } from "../lib/http-errors.js";
 import { isSimliConfigured, mintSimliSession } from "../lib/simli.js";
+import {
+  checkSessionNotEnded,
+  createLiveKitRoom,
+  isLiveKitConfigured,
+  mintLiveKitToken,
+  RoomOwnershipMismatchError,
+} from "../lib/livekit.js";
 import { mintWsTicket, redeemWsTicket, type WsTicketClaims } from "../lib/ws-tickets.js";
 import { createConversationHandler } from "../services/conversation-service.js";
 import { getCallerSimliFaceId } from "../services/onboarding-service.js";
@@ -23,6 +30,10 @@ const TICKET_RATE_LIMIT = { max: 20, windowMs: 5 * 60_000 };
 // ticket), so an unbounded mint loop here directly costs money, not just
 // invites abuse. See .claude/specs/avatar-builder-customization.md.
 const SIMLI_SESSION_RATE_LIMIT = { max: 10, windowMs: 5 * 60_000 };
+
+// Same tier as SIMLI_SESSION_RATE_LIMIT — Mode B mediates a paid, metered
+// LiveKit room + agent worker, not a free resource like the WS ticket.
+const LIVEKIT_CONNECT_RATE_LIMIT = { max: 10, windowMs: 5 * 60_000 };
 
 export function registerConversationRoutes(app: FastifyInstance): void {
   app.post("/v1/conversations/ticket", { preHandler: app.authenticate }, async (request, reply) => {
@@ -57,6 +68,47 @@ export function registerConversationRoutes(app: FastifyInstance): void {
       const faceId = await getCallerSimliFaceId(orgId, userId);
       const { sessionToken, iceServers } = await mintSimliSession({ faceId });
       reply.status(201).send({ sessionToken, iceServers });
+    },
+  );
+
+  // Mode B (LiveKit) credential-minting route — additive to the default WS
+  // transport above, reachable only for Enterprise-plan orgs and only when
+  // FEATURE_LIVEKIT_ENABLED is set. See
+  // .claude/specs/real-time-video-avatar-interaction.md.
+  app.post(
+    "/v1/conversations/:trainingSessionId/livekit-connect",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      if (process.env.FEATURE_LIVEKIT_ENABLED !== "true" || !isLiveKitConfigured()) {
+        throw serviceUnavailable("feature_disabled");
+      }
+
+      const { trainingSessionId } = trainingSessionIdParamSchema.parse(request.params);
+      const { orgId, userId } = request.authContext!;
+
+      const key = `livekit-connect:${userId}`;
+      if (!checkRateLimit(key, LIVEKIT_CONNECT_RATE_LIMIT)) throw unauthorized("rate_limited");
+
+      // Fresh read, never client-supplied — same "organizations is RLS-exempt,
+      // direct prisma.organization.findUniqueOrThrow" posture org-service.ts
+      // already documents for itself.
+      const org = await prisma.organization.findUniqueOrThrow({
+        where: { id: orgId },
+        select: { plan: true },
+      });
+      if (org.plan !== "ENTERPRISE") throw forbidden("plan_not_enterprise");
+
+      try {
+        if (!(await checkSessionNotEnded(trainingSessionId, orgId))) throw conflict("session_ended");
+        const { roomName } = await createLiveKitRoom(trainingSessionId, orgId);
+        const { livekitUrl, roomToken } = await mintLiveKitToken({ roomName, orgId });
+        reply.status(201).send({ livekitUrl, roomToken, roomName });
+      } catch (err) {
+        if (err instanceof RoomOwnershipMismatchError) {
+          throw forbidden("training_session_owned_by_another_org");
+        }
+        throw err;
+      }
     },
   );
 

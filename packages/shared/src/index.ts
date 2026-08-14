@@ -25,3 +25,4 @@ export * from "./knowledge/index.js";
 export * from "./curriculum/index.js";
 export * from "./avatar/index.js";
 export * from "./application/index.js";
+export * from "./livekit/index.js";

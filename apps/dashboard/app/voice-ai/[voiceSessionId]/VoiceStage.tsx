@@ -55,7 +55,7 @@ function useSmoothedAmplitude(target: number, smoothing = 0.15): number {
 // continuously, so this toggles the same mic gate rather than a separate
 // push-to-talk mode the transport doesn't support.
 export function VoiceStage({ expert }: VoiceStageProps) {
-  const { status, amplitude, avatarContainerRef } = useVoiceConversationSessionContext();
+  const { status, amplitude, avatarContainerRef, usingLiveKit } = useVoiceConversationSessionContext();
   const { state, update } = useVoiceSessionUi();
   const micGated = state.muted || state.paused;
   const isSpeaking = status === "speaking";
@@ -67,6 +67,7 @@ export function VoiceStage({ expert }: VoiceStageProps) {
         <span className={styles.liveDot} />
         LIVE SESSION
         <span className={styles.liveTopic}>· {expert.topic}</span>
+        {usingLiveKit && <span className={styles.photorealBadge}>Photoreal</span>}
       </div>
 
       <div className={`${styles.avatarRing} ${isSpeaking ? styles.avatarRingSpeaking : ""}`}>

@@ -22,6 +22,12 @@ const RESTRICTED_IMPORTS = {
   officeparser: ["apps/api/src/lib/document-parsers/pptx.ts"],
   xlsx: ["apps/api/src/lib/document-parsers/xlsx.ts"],
   bullmq: ["apps/api/src/lib/ingestion-queue.ts", "apps/api/src/lib/ingestion-queue.test.ts"],
+  "livekit-server-sdk": ["apps/api/src/lib/livekit.ts", "apps/api/src/lib/livekit.test.ts"],
+  "simli-client": [
+    "apps/api/src/lib/simli.ts",
+    "apps/agent/src/simli-bridge.ts",
+    "packages/avatar-core/src/simli-avatar-provider.ts",
+  ],
 };
 
 function findSourceFiles(dir) {

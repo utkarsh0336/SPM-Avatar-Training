@@ -38,3 +38,12 @@ export const orgBrandingResultSchema = z.object({
 });
 
 export type OrgBrandingResult = z.infer<typeof orgBrandingResultSchema>;
+
+// Deliberately not folded into orgBrandingResultSchema: that schema is
+// returned by GET /v1/auth/me to every authenticated member, and plan is a
+// billing-tier concern with no reason to reach every member response.
+// Callers that need it (e.g. the livekit-connect route's plan gate) read
+// Organization.plan fresh via Prisma, server-side, never from client input.
+export const organizationPlanSchema = z.enum(["STARTER", "PRO", "ENTERPRISE"]);
+
+export type OrganizationPlan = z.infer<typeof organizationPlanSchema>;

@@ -4,15 +4,25 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch --env-file=../../.env src/index.ts dev",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "bench:latency": "node -e \"console.log('no benchmarks yet — needs a live LiveKit deployment')\""
   },
   "devDependencies": {
     "@types/node": "^20.17.10",
+    "@types/ws": "^8.18.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
+  },
+  "dependencies": {
+    "@avatrain/shared": "workspace:^",
+    "@livekit/agents": "^1.6.3",
+    "@livekit/rtc-node": "^0.13.33",
+    "simli-client": "^3.0.2",
+    "ws": "^8.21.3",
+    "zod": "^3.24.1"
   }
 }

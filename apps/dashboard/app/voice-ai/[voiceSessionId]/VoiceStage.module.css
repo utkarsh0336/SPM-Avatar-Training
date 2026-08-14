@@ -34,6 +34,17 @@
   font-weight: 400;
 }
 
+.photorealBadge {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(139, 92, 246, 0.18);
+  border: 1px solid rgba(139, 92, 246, 0.5);
+  color: var(--vc-text-primary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
 .avatarRing {
   position: relative;
   width: 168px;
