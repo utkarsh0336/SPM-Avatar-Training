@@ -12,6 +12,7 @@ import {
   type ObjectiveProgressVerdict,
   type ObjectiveResult,
   type Role,
+  type ScenarioStepResult,
   type UpdateCurriculumRequest,
 } from "@avatrain/shared";
 import type { Curriculum, Objective } from "@prisma/client";
@@ -32,7 +33,7 @@ function assertVisibleTo(role: Role, curriculum: Curriculum): void {
   }
 }
 
-function toObjectiveResult(objective: Objective): ObjectiveResult {
+function toObjectiveResult(objective: Objective, scenarioSteps: ScenarioStepResult[] = []): ObjectiveResult {
   return {
     id: objective.id,
     order: objective.order,
@@ -40,21 +41,67 @@ function toObjectiveResult(objective: Objective): ObjectiveResult {
     teachingContent: objective.teachingContent,
     checkQuestion: objective.checkQuestion,
     gradingCriteria: objective.gradingCriteria,
+    scenarioSteps,
     createdAt: objective.createdAt.toISOString(),
     updatedAt: objective.updatedAt.toISOString(),
   };
 }
 
-function toCurriculumResult(curriculum: Curriculum, objectives: Objective[]): CurriculumResult {
+function toCurriculumResult(
+  curriculum: Curriculum,
+  objectives: Objective[],
+  scenarioStepsByObjectiveId: Map<string, ScenarioStepResult[]> = new Map(),
+): CurriculumResult {
   return {
     id: curriculum.id,
     avatarId: curriculum.avatarId,
     title: curriculum.title,
     programType: curriculum.programType,
-    objectives: [...objectives].sort((a, b) => a.order - b.order).map(toObjectiveResult),
+    objectives: [...objectives]
+      .sort((a, b) => a.order - b.order)
+      .map((o) => toObjectiveResult(o, scenarioStepsByObjectiveId.get(o.id))),
     createdAt: curriculum.createdAt.toISOString(),
     updatedAt: curriculum.updatedAt.toISOString(),
   };
+}
+
+/**
+ * Shared by getCurriculum/updateCurriculum/replaceObjectives/getCurriculumForAvatar — always
+ * called AFTER any writing withOrg block has already committed (never nested inside one; Prisma
+ * doesn't support nested transactions), so it's just one extra concurrent-safe read. See
+ * .claude/specs/branching-scenario-questions.md.
+ */
+async function loadScenarioStepsByCurriculumId(
+  orgId: string,
+  curriculumId: string,
+): Promise<Map<string, ScenarioStepResult[]>> {
+  const steps = await withOrg(orgId, (tx) =>
+    tx.scenarioStep.findMany({
+      where: { orgId, objective: { curriculumId } },
+      include: { branchesFromHere: { orderBy: { order: "asc" } } },
+      orderBy: { order: "asc" },
+    }),
+  );
+
+  const byObjectiveId = new Map<string, ScenarioStepResult[]>();
+  for (const step of steps) {
+    const result: ScenarioStepResult = {
+      id: step.id,
+      order: step.order,
+      prompt: step.prompt,
+      branches: step.branchesFromHere.map((branch) => ({
+        id: branch.id,
+        order: branch.order,
+        matchCriteria: branch.matchCriteria,
+        nextStepId: branch.nextStepId,
+        outcome: branch.outcome,
+      })),
+    };
+    const list = byObjectiveId.get(step.objectiveId);
+    if (list) list.push(result);
+    else byObjectiveId.set(step.objectiveId, [result]);
+  }
+  return byObjectiveId;
 }
 
 export async function createCurriculum(
@@ -95,7 +142,8 @@ export async function getCurriculum(orgId: string, curriculumId: string, role: R
   assertVisibleTo(role, curriculum);
 
   const objectives = await withOrg(orgId, (tx) => tx.objective.findMany({ where: { curriculumId, orgId } }));
-  return toCurriculumResult(curriculum, objectives);
+  const scenarioStepsByObjectiveId = await loadScenarioStepsByCurriculumId(orgId, curriculumId);
+  return toCurriculumResult(curriculum, objectives, scenarioStepsByObjectiveId);
 }
 
 export interface CurriculumSummary {
@@ -153,7 +201,7 @@ export async function updateCurriculum(
   curriculumId: string,
   patch: UpdateCurriculumRequest,
 ): Promise<CurriculumResult> {
-  return withOrg(orgId, async (tx) => {
+  const { updated, objectives } = await withOrg(orgId, async (tx) => {
     const existing = await tx.curriculum.findFirst({ where: { id: curriculumId, orgId } });
     if (!existing) throw notFound("curriculum_not_found");
 
@@ -165,8 +213,10 @@ export async function updateCurriculum(
       },
     });
     const objectives = await tx.objective.findMany({ where: { curriculumId, orgId } });
-    return toCurriculumResult(updated, objectives);
+    return { updated, objectives };
   });
+  const scenarioStepsByObjectiveId = await loadScenarioStepsByCurriculumId(orgId, curriculumId);
+  return toCurriculumResult(updated, objectives, scenarioStepsByObjectiveId);
 }
 
 export async function deleteCurriculum(orgId: string, curriculumId: string): Promise<void> {
@@ -201,7 +251,7 @@ export async function replaceObjectives(
   curriculumId: string,
   objectives: ObjectiveInput[],
 ): Promise<ObjectiveResult[]> {
-  return withOrg(orgId, async (tx) => {
+  const saved = await withOrg(orgId, async (tx) => {
     const curriculum = await tx.curriculum.findFirst({ where: { id: curriculumId, orgId } });
     if (!curriculum) throw notFound("curriculum_not_found");
 
@@ -242,8 +292,10 @@ export async function replaceObjectives(
       );
     }
 
-    return saved.sort((a, b) => a.order - b.order).map(toObjectiveResult);
+    return saved.sort((a, b) => a.order - b.order);
   });
+  const scenarioStepsByObjectiveId = await loadScenarioStepsByCurriculumId(orgId, curriculumId);
+  return saved.map((o) => toObjectiveResult(o, scenarioStepsByObjectiveId.get(o.id)));
 }
 
 export interface SessionCurriculumObjective {
@@ -252,6 +304,10 @@ export interface SessionCurriculumObjective {
   teachingContent: string;
   checkQuestion: string;
   gradingCriteria: string;
+  // Empty = flat checkQuestion/gradingCriteria path; non-empty = branching scenario, see
+  // .claude/specs/branching-scenario-questions.md. Reuses the API result type directly for
+  // session runtime state — no parallel type needed.
+  scenarioSteps: ScenarioStepResult[];
   status: ObjectiveMasteryStatus;
   lastFeedback?: string;
   attempts?: number;
@@ -290,7 +346,7 @@ export async function getCurriculumForAvatar(
   // lookup's added cost to one round trip, not two. See
   // .claude/specs/adaptive-learning-personalization.md; latency-auditor flagged the
   // sequential version as an avoidable extra round trip inside session.start's budget.
-  const [objectives, progressRows] = await Promise.all([
+  const [objectives, progressRows, scenarioStepsByObjectiveId] = await Promise.all([
     withOrg(orgId, (tx) =>
       tx.objective.findMany({ where: { curriculumId: curriculum.id, orgId }, orderBy: { order: "asc" } }),
     ),
@@ -299,6 +355,7 @@ export async function getCurriculumForAvatar(
           tx.objectiveProgress.findMany({ where: { orgId, learnerId, objective: { curriculumId: curriculum.id } } }),
         )
       : Promise.resolve([]),
+    loadScenarioStepsByCurriculumId(orgId, curriculum.id),
   ]);
   if (objectives.length === 0) return null;
 
@@ -323,6 +380,7 @@ export async function getCurriculumForAvatar(
         teachingContent: o.teachingContent,
         checkQuestion: o.checkQuestion,
         gradingCriteria: o.gradingCriteria,
+        scenarioSteps: scenarioStepsByObjectiveId.get(o.id) ?? [],
         status,
         ...(status === "NEEDS_REVIEW" ? { lastFeedback: progress!.feedback, attempts: progress!.attempts } : {}),
         ...(status === "MASTERED" ? { attempts: progress!.attempts } : {}),

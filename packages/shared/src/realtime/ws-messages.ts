@@ -210,6 +210,16 @@ export const checkpointStartedMessageSchema = z.object({
 });
 export type CheckpointStartedMessage = z.infer<typeof checkpointStartedMessageSchema>;
 
+// See .claude/specs/branching-scenario-questions.md. Sent when advance_scenario continues to a
+// non-terminal step; a terminal branch reuses checkpointResultMessageSchema below unchanged.
+export const scenarioStepMessageSchema = z.object({
+  type: z.literal("scenario.step"),
+  objectiveId: z.string(),
+  stepId: z.string(),
+  prompt: z.string(),
+});
+export type ScenarioStepMessage = z.infer<typeof scenarioStepMessageSchema>;
+
 export const checkpointResultMessageSchema = z.object({
   type: z.literal("checkpoint.result"),
   objectiveId: z.string(),
@@ -237,6 +247,7 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
   latencyMessageSchema,
   errorMessageSchema,
   checkpointStartedMessageSchema,
+  scenarioStepMessageSchema,
   checkpointResultMessageSchema,
   moduleCompletedMessageSchema,
 ]);

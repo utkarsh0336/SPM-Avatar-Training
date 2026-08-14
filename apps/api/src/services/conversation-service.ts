@@ -25,6 +25,8 @@ import {
   type AvatarRecord,
   type ObjectiveProgressVerdict,
   type ReadingLevel,
+  type ScenarioBranchResult,
+  type ScenarioStepResult,
   type STTProvider,
   type VoiceTone,
 } from "@avatrain/shared";
@@ -63,6 +65,14 @@ const MAX_HISTORY_MESSAGES = 20;
 // 400ms" exit criterion, with headroom for the grading judge's own LLM call.
 const MAX_TOOL_ROUNDTRIPS = 4;
 const TOOL_TIMEOUT_MS = 3000;
+
+// Bounds turns-per-checkpoint for a branching scenario (see
+// .claude/specs/branching-scenario-questions.md) — distinct from
+// MAX_TOOL_ROUNDTRIPS, which bounds tool-calls-per-turn. A pathological
+// branch graph (e.g. one that only ever routes back to itself) force-
+// resolves to RETRY past this many advance_scenario hops rather than
+// letting a checkpoint run forever across turns.
+const MAX_SCENARIO_HOPS = 8;
 
 // Same reasoning as RETRIEVAL_TIMEOUT_MS, applied to session.start's
 // curriculum lookup — latency-auditor flagged this bootstrap DB round trip
@@ -290,6 +300,14 @@ export function createConversationHandler(
   // code path below no-ops gracefully on null, so an ordinary session
   // behaves exactly as it did before this feature existed.
   let curriculum: SessionCurriculum | null = null;
+  // Session-scoped, not turn-scoped — like `curriculum` above, not
+  // `gradedThisTurn` below. start_checkpoint and advance_scenario are
+  // necessarily different turns in a real spoken conversation, the same way
+  // start_checkpoint/grade_answer already are (see runTool's own doc
+  // comment). Keyed by objectiveId; cleared once that objective's scenario
+  // resolves to a terminal branch. See
+  // .claude/specs/branching-scenario-questions.md.
+  const activeScenarioState = new Map<string, { currentStepId: string; hops: number }>();
 
   function send(message: ServerMessage): void {
     if (socket.readyState !== WS_OPEN) return;
@@ -384,6 +402,46 @@ Grading criteria: ${objective.gradingCriteria}`;
       .find((line) => !/^\s*VERDICT:/i.test(line))
       ?.trim();
     return { verdict, feedback: feedbackLine || (verdict === "PASS" ? "Correct." : "Not quite — try again.") };
+  }
+
+  /**
+   * advance_scenario's judge — same shape/timeout as gradeAnswerWithJudge above, generalized from
+   * a binary PASS/RETRY classification to an N-way pick among a scenario step's branches. See
+   * .claude/specs/branching-scenario-questions.md. Never lets the model self-report which branch
+   * matched — same .claude/rules/tenancy.md rule gradeAnswerWithJudge already follows.
+   */
+  async function classifyScenarioAnswerWithJudge(
+    step: ScenarioStepResult,
+    answerText: string,
+    signal: AbortSignal,
+  ): Promise<{ branch: ScenarioBranchResult; feedback: string }> {
+    const judge = createLLM(process.env, {});
+    const letters = step.branches.map((_, index) => String.fromCharCode(65 + index));
+    const judgeSystemPrompt = `You are classifying a learner's spoken answer to a training scenario step. Respond with EXACTLY two lines: the first line is "BRANCH: <letter>" naming the best-matching option below, the second line is one short sentence of feedback for the learner.
+
+Step prompt: ${step.prompt}
+Options:
+${step.branches.map((branch, index) => `${letters[index]}) ${branch.matchCriteria}`).join("\n")}`;
+
+    let raw = "";
+    for await (const event of judge.chat([{ role: "user", content: answerText }], {
+      systemPrompt: judgeSystemPrompt,
+      signal,
+    })) {
+      if (event.type === "text") raw += event.text;
+    }
+
+    const match = /BRANCH:\s*([A-Z])/i.exec(raw);
+    const index = match ? letters.indexOf(match[1]!.toUpperCase()) : -1;
+    // Unparseable or out-of-range judge output falls back to the LAST branch — the same
+    // fail-toward-a-safe-default spirit gradeAnswerWithJudge's own RETRY-on-parse-failure
+    // fallback has. Authoring convention: put a catch-all branch last.
+    const branch = index >= 0 ? step.branches[index]! : step.branches[step.branches.length - 1]!;
+    const feedbackLine = raw
+      .split("\n")
+      .find((line) => !/^\s*BRANCH:/i.test(line))
+      ?.trim();
+    return { branch, feedback: feedbackLine || "Let's continue." };
   }
 
   async function processTurn(
@@ -498,14 +556,56 @@ Grading criteria: ${objective.gradingCriteria}`;
           if (!controller.signal.aborted) {
             send({ type: "checkpoint.started", objectiveId: objective.id, objectiveTitle: objective.title });
           }
+          if (objective.scenarioSteps.length > 0) {
+            const firstStep = objective.scenarioSteps[0]!;
+            activeScenarioState.set(objective.id, { currentStepId: firstStep.id, hops: 0 });
+            return `ok: checkpoint started, now present this: ${firstStep.prompt}`;
+          }
           return "ok: checkpoint started, now ask the check question";
         }
         case "grade_answer": {
           const objective = curriculum.objectives.find((o) => o.id === objectiveId);
           if (!objective) return "error: unknown objectiveId";
+          if (objective.scenarioSteps.length > 0) {
+            return "error: this objective uses a branching scenario — call advance_scenario instead";
+          }
           const result = await gradeAnswerWithJudge(objective, text, controller.signal);
           gradedThisTurn.set(objective.id, result);
           return `verdict: ${result.verdict}; feedback: ${result.feedback}`;
+        }
+        case "advance_scenario": {
+          const objective = curriculum.objectives.find((o) => o.id === objectiveId);
+          if (!objective) return "error: unknown objectiveId";
+          const state = objectiveId ? activeScenarioState.get(objectiveId) : undefined;
+          if (!state) {
+            return "error: call start_checkpoint for this objective before advancing its scenario";
+          }
+          const currentStep = objective.scenarioSteps.find((s) => s.id === state.currentStepId);
+          if (!currentStep) return "error: scenario step not found";
+
+          const { branch, feedback } = await classifyScenarioAnswerWithJudge(currentStep, text, controller.signal);
+
+          if (branch.nextStepId === null) {
+            gradedThisTurn.set(objective.id, { verdict: branch.outcome!, feedback });
+            activeScenarioState.delete(objective.id);
+            return `verdict: ${branch.outcome}; feedback: ${feedback}`;
+          }
+
+          state.hops += 1;
+          if (state.hops > MAX_SCENARIO_HOPS) {
+            const fallback = { verdict: "RETRY" as ObjectiveProgressVerdict, feedback: "Let's move on and revisit this later." };
+            gradedThisTurn.set(objective.id, fallback);
+            activeScenarioState.delete(objective.id);
+            return `verdict: ${fallback.verdict}; feedback: ${fallback.feedback}`;
+          }
+
+          const nextStep = objective.scenarioSteps.find((s) => s.id === branch.nextStepId);
+          if (!nextStep) return "error: scenario step not found";
+          state.currentStepId = nextStep.id;
+          if (!controller.signal.aborted) {
+            send({ type: "scenario.step", objectiveId: objective.id, stepId: nextStep.id, prompt: nextStep.prompt });
+          }
+          return `ok: present this next: ${nextStep.prompt}`;
         }
         case "record_progress": {
           const graded = objectiveId ? gradedThisTurn.get(objectiveId) : undefined;

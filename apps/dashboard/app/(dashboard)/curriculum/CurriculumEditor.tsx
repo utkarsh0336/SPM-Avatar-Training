@@ -57,6 +57,7 @@ function toDrafts(curriculum: CurriculumResult): ObjectiveDraft[] {
     teachingContent: objective.teachingContent,
     checkQuestion: objective.checkQuestion,
     gradingCriteria: objective.gradingCriteria,
+    scenarioSteps: objective.scenarioSteps,
   }));
 }
 

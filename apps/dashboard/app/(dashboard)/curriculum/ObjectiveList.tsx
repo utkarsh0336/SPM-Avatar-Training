@@ -1,5 +1,6 @@
 "use client";
 
+import type { ScenarioStepResult } from "@avatrain/shared/curriculum";
 import { PlusIcon } from "../../sessions/icons";
 import { ObjectiveRow } from "./ObjectiveRow";
 import styles from "./page.module.css";
@@ -13,6 +14,12 @@ export interface ObjectiveDraft {
   teachingContent: string;
   checkQuestion: string;
   gradingCriteria: string;
+  /**
+   * As last loaded from the server — undefined for a brand-new, unsaved row. Not touched by this
+   * list's own save (PUT .../objectives); ObjectiveRow saves it independently via
+   * PUT /v1/objectives/:id/scenario. See .claude/specs/branching-scenario-questions.md.
+   */
+  scenarioSteps?: ScenarioStepResult[];
 }
 
 export interface ObjectiveListProps {

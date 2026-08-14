@@ -1,7 +1,10 @@
 "use client";
 
+import { useState } from "react";
+import { replaceObjectiveScenario } from "../../../lib/api-client";
 import { TrashIcon } from "../../sessions/icons";
 import type { ObjectiveDraft } from "./ObjectiveList";
+import { ScenarioEditor, scenarioDraftsToInput, scenarioResultToDrafts, type ScenarioStepDraft } from "./ScenarioEditor";
 import styles from "./page.module.css";
 
 export interface ObjectiveRowProps {
@@ -14,8 +17,36 @@ export interface ObjectiveRowProps {
   onMoveDown: () => void;
 }
 
-/** Purely presentational — CurriculumEditor owns all objective state, this only renders one row's editable fields. */
+/**
+ * Purely presentational for the flat title/teaching/check-question/grading fields —
+ * CurriculumEditor owns that state via onChange, same as every other row here. The branching
+ * scenario editor below is the one exception: it's self-contained (its own local draft state,
+ * its own PUT /v1/objectives/:id/scenario save call) because it's saved independently of the
+ * main objectives list, exactly like ChecklistEditor is independent of it. See
+ * .claude/specs/branching-scenario-questions.md's UI Changes.
+ */
 export function ObjectiveRow({ objective, index, total, onChange, onRemove, onMoveUp, onMoveDown }: ObjectiveRowProps) {
+  const [scenarioExpanded, setScenarioExpanded] = useState(false);
+  const [scenarioSteps, setScenarioSteps] = useState<ScenarioStepDraft[]>(() =>
+    scenarioResultToDrafts(objective.scenarioSteps ?? []),
+  );
+  const [savingScenario, setSavingScenario] = useState(false);
+  const [scenarioError, setScenarioError] = useState<string | null>(null);
+
+  async function handleSaveScenario(): Promise<void> {
+    if (!objective.id) return;
+    setSavingScenario(true);
+    setScenarioError(null);
+    try {
+      const result = await replaceObjectiveScenario(objective.id, scenarioDraftsToInput(scenarioSteps));
+      setScenarioSteps(scenarioResultToDrafts(result.steps));
+    } catch {
+      setScenarioError("Failed to save scenario. Please try again.");
+    } finally {
+      setSavingScenario(false);
+    }
+  }
+
   return (
     <div className={styles.objectiveRow}>
       <div className={styles.objectiveRowHeader}>
@@ -65,6 +96,26 @@ export function ObjectiveRow({ objective, index, total, onChange, onRemove, onMo
         value={objective.gradingCriteria}
         onChange={(e) => onChange({ gradingCriteria: e.target.value })}
       />
+
+      <button
+        type="button"
+        className={styles.addButton}
+        disabled={!objective.id}
+        title={objective.id ? undefined : "Save this objective first"}
+        onClick={() => setScenarioExpanded((expanded) => !expanded)}
+      >
+        {scenarioExpanded ? "Hide Branching Scenario" : "Branching Scenario"}
+      </button>
+
+      {scenarioExpanded && objective.id && (
+        <>
+          <ScenarioEditor steps={scenarioSteps} onChange={setScenarioSteps} />
+          {scenarioError && <p className={styles.error}>{scenarioError}</p>}
+          <button type="button" className={styles.primaryButton} disabled={savingScenario} onClick={() => void handleSaveScenario()}>
+            {savingScenario ? "Saving…" : "Save Scenario"}
+          </button>
+        </>
+      )}
     </div>
   );
 }

@@ -164,4 +164,45 @@ describe("appendCurriculumContext", () => {
     const result = appendCurriculumContext("base", objectives);
     expect(result.indexOf("First")).toBeLessThan(result.indexOf("Second"));
   });
+
+  it("shows a scenario objective's first step prompt instead of its check question", () => {
+    const result = appendCurriculumContext("base", [
+      {
+        id: "obj-1",
+        title: "Handling complaints",
+        teachingContent: "C",
+        checkQuestion: "unused",
+        scenarioSteps: [
+          {
+            id: "step-1",
+            order: 0,
+            prompt: "A customer complains about a late delivery. What do you say?",
+            branches: [],
+          },
+        ],
+      },
+    ]);
+    expect(result).toContain("Scenario opening line: A customer complains about a late delivery. What do you say?");
+    expect(result).not.toContain("Check question: unused");
+  });
+
+  it("instructs the model to use advance_scenario instead of grade_answer for scenario objectives", () => {
+    const result = appendCurriculumContext("base", [
+      {
+        id: "obj-1",
+        title: "T",
+        teachingContent: "C",
+        checkQuestion: "Q",
+        scenarioSteps: [{ id: "step-1", order: 0, prompt: "Opening", branches: [] }],
+      },
+    ]);
+    expect(result).toMatch(/advance_scenario/);
+  });
+
+  it("a non-scenario objective in the same list still shows its check question", () => {
+    const result = appendCurriculumContext("base", [
+      { id: "obj-1", title: "Flat", teachingContent: "C", checkQuestion: "How many days?", scenarioSteps: [] },
+    ]);
+    expect(result).toContain("Check question: How many days?");
+  });
 });

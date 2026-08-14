@@ -39,6 +39,22 @@ export const GRADE_ANSWER_TOOL: LLMToolDefinition = {
   },
 };
 
+export const ADVANCE_SCENARIO_TOOL: LLMToolDefinition = {
+  name: "advance_scenario",
+  description:
+    "Call this instead of grade_answer, immediately after the learner answers a scenario step's prompt for an objective whose curriculum context shows a scenario opening line instead of a check question.",
+  parameters: {
+    type: "object",
+    properties: {
+      objectiveId: {
+        type: "string",
+        description: "The id of the objective whose scenario step the learner just answered.",
+      },
+    },
+    required: ["objectiveId"],
+  },
+};
+
 export const RECORD_PROGRESS_TOOL: LLMToolDefinition = {
   name: "record_progress",
   description:
@@ -62,6 +78,7 @@ export const END_MODULE_TOOL: LLMToolDefinition = {
 export const CURRICULUM_TOOLS: LLMToolDefinition[] = [
   START_CHECKPOINT_TOOL,
   GRADE_ANSWER_TOOL,
+  ADVANCE_SCENARIO_TOOL,
   RECORD_PROGRESS_TOOL,
   END_MODULE_TOOL,
 ];

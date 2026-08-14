@@ -55,6 +55,10 @@ function fakeLLM(behavior: "success" | "throw", replyChunks: string[] = []): Con
 function fakeCurriculumLLM(
   teachingScript: LLMStreamEvent[][],
   judgeVerdict: ObjectiveProgressVerdict = "PASS",
+  // advance_scenario's classify judge — distinguished from the grade_answer judge by its own
+  // distinct systemPrompt prefix ("You are classifying"). Letter selects which branch it picks;
+  // see conversation-service.ts's classifyScenarioAnswerWithJudge.
+  branchLetter = "A",
 ): ConversationHandlerDeps["createLLM"] {
   let teachingCallIndex = 0;
   return vi.fn((_env, opts) => {
@@ -63,6 +67,10 @@ function fakeCurriculumLLM(
       async *chat(_messages: LLMMessage[], chatOpts: { systemPrompt: string }) {
         if (chatOpts.systemPrompt.startsWith("You are grading")) {
           yield { type: "text", text: `VERDICT: ${judgeVerdict}\nFeedback line.` } satisfies LLMStreamEvent;
+          return;
+        }
+        if (chatOpts.systemPrompt.startsWith("You are classifying")) {
+          yield { type: "text", text: `BRANCH: ${branchLetter}\nFeedback line.` } satisfies LLMStreamEvent;
           return;
         }
         opts?.onResolved?.("fake-gemini");
@@ -509,6 +517,7 @@ describe("createConversationHandler", () => {
         teachingContent: "20 days a year.",
         checkQuestion: "How many days?",
         gradingCriteria: "Answer must say 20 days.",
+        scenarioSteps: [],
         status: "NOT_STARTED",
       },
     ];
@@ -684,6 +693,225 @@ describe("createConversationHandler", () => {
       });
       expect(recordObjectiveProgress).not.toHaveBeenCalled();
       expect(findMessages(socket, "checkpoint.result")).toHaveLength(0);
+    });
+
+    describe("branching scenario questions", () => {
+      const twoStepScenarioObjective: SessionCurriculumObjective = {
+        id: "obj-2",
+        title: "Handling complaints",
+        teachingContent: "Apologize, then escalate if needed.",
+        checkQuestion: "unused for scenario objectives",
+        gradingCriteria: "unused for scenario objectives",
+        status: "NOT_STARTED",
+        scenarioSteps: [
+          {
+            id: "step-1",
+            order: 0,
+            prompt: "A customer complains about a late delivery. What do you say?",
+            branches: [
+              { id: "b1", order: 0, matchCriteria: "Apologizes and offers a resolution", nextStepId: "step-2", outcome: null },
+            ],
+          },
+          {
+            id: "step-2",
+            order: 1,
+            prompt: "The customer is still upset. What now?",
+            branches: [{ id: "b2", order: 0, matchCriteria: "Escalates to a manager", nextStepId: null, outcome: "PASS" }],
+          },
+        ],
+      };
+
+      const oneStepScenarioObjective: SessionCurriculumObjective = {
+        id: "obj-3",
+        title: "Simple scenario",
+        teachingContent: "T",
+        checkQuestion: "unused for scenario objectives",
+        gradingCriteria: "unused for scenario objectives",
+        status: "NOT_STARTED",
+        scenarioSteps: [
+          {
+            id: "step-1",
+            order: 0,
+            prompt: "Scenario opening line",
+            branches: [{ id: "b1", order: 0, matchCriteria: "resolves it", nextStepId: null, outcome: "PASS" }],
+          },
+        ],
+      };
+
+      it("advance_scenario continues to the next step (in a later turn than start_checkpoint) and sends scenario.step", async () => {
+        const socket = new FakeSocket();
+        createConversationHandler(socket as never, claims, {
+          createLLM: fakeCurriculumLLM([
+            [{ type: "tool_call", id: "call-1", name: "start_checkpoint", args: { objectiveId: "obj-2" } }],
+            [{ type: "text", text: "A customer complains about a late delivery. What do you say?" }],
+            [{ type: "tool_call", id: "call-2", name: "advance_scenario", args: { objectiveId: "obj-2" } }],
+            [{ type: "text", text: "The customer is still upset. What now?" }],
+          ]),
+          createSTT: fakeSTT("success", "I'm sorry, let me fix that for you"),
+          createTTS: fakeTTS("success"),
+          getCurriculumForAvatar: fakeCurriculum([twoStepScenarioObjective]),
+          getAvatarById: vi.fn(async () => null),
+          ...noRetrieval,
+        });
+        socket.emitMessage({ ...sessionStartBase, avatarId: "11111111-1111-1111-1111-111111111111" });
+        await vi.waitFor(() => expect(socket.sent).toContainEqual({ type: "session.ready" }));
+
+        socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+        await vi.waitFor(() => expect(findMessages(socket, "turn.ended")).toHaveLength(1));
+
+        socket.emitMessage({ type: "audio.chunk", utteranceId: "u2", audioBase64: "AAAA", mimeType: "audio/wav" });
+        await vi.waitFor(() => expect(findMessages(socket, "turn.ended")).toHaveLength(2));
+
+        expect(findMessages(socket, "scenario.step")).toEqual([
+          { type: "scenario.step", objectiveId: "obj-2", stepId: "step-2", prompt: "The customer is still upset. What now?" },
+        ]);
+      });
+
+      it("advance_scenario resolving a terminal branch feeds record_progress exactly like grade_answer does", async () => {
+        const socket = new FakeSocket();
+        const recordObjectiveProgress = vi.fn(async () => ({ attempts: 1 }));
+        createConversationHandler(socket as never, claims, {
+          createLLM: fakeCurriculumLLM([
+            [{ type: "tool_call", id: "call-1", name: "start_checkpoint", args: { objectiveId: "obj-3" } }],
+            [{ type: "text", text: "Scenario opening line" }],
+            [{ type: "tool_call", id: "call-2", name: "advance_scenario", args: { objectiveId: "obj-3" } }],
+            [{ type: "tool_call", id: "call-3", name: "record_progress", args: { objectiveId: "obj-3" } }],
+            [{ type: "text", text: "Nicely resolved." }],
+          ]),
+          createSTT: fakeSTT("success", "I apologized and fixed it"),
+          createTTS: fakeTTS("success"),
+          getCurriculumForAvatar: fakeCurriculum([oneStepScenarioObjective]),
+          getAvatarById: vi.fn(async () => null),
+          recordObjectiveProgress,
+          ...noRetrieval,
+        });
+        socket.emitMessage({ ...sessionStartBase, avatarId: "11111111-1111-1111-1111-111111111111" });
+        await vi.waitFor(() => expect(socket.sent).toContainEqual({ type: "session.ready" }));
+
+        socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+        await vi.waitFor(() => expect(findMessages(socket, "turn.ended")).toHaveLength(1));
+
+        socket.emitMessage({ type: "audio.chunk", utteranceId: "u2", audioBase64: "AAAA", mimeType: "audio/wav" });
+        await vi.waitFor(() => expect(findMessages(socket, "turn.ended")).toHaveLength(2));
+
+        expect(recordObjectiveProgress).toHaveBeenCalledWith("org-1", "obj-3", "user-1", "PASS", "Feedback line.");
+        expect(findMessages(socket, "checkpoint.result")).toEqual([
+          { type: "checkpoint.result", objectiveId: "obj-3", verdict: "PASS", feedback: "Feedback line.", attempts: 1 },
+        ]);
+      });
+
+      it("grade_answer rejects a scenario-tagged objective instead of grading it", async () => {
+        const socket = new FakeSocket();
+        const recordObjectiveProgress = vi.fn(async () => ({ attempts: 1 }));
+        createConversationHandler(socket as never, claims, {
+          createLLM: fakeCurriculumLLM([
+            [{ type: "tool_call", id: "call-1", name: "grade_answer", args: { objectiveId: "obj-3" } }],
+            [{ type: "tool_call", id: "call-2", name: "record_progress", args: { objectiveId: "obj-3" } }],
+            [{ type: "text", text: "Okay." }],
+          ]),
+          createSTT: fakeSTT("success"),
+          createTTS: fakeTTS("success"),
+          getCurriculumForAvatar: fakeCurriculum([oneStepScenarioObjective]),
+          getAvatarById: vi.fn(async () => null),
+          recordObjectiveProgress,
+          ...noRetrieval,
+        });
+        socket.emitMessage({ ...sessionStartBase, avatarId: "11111111-1111-1111-1111-111111111111" });
+        await vi.waitFor(() => expect(socket.sent).toContainEqual({ type: "session.ready" }));
+        socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+        await vi.waitFor(() => expect(findMessages(socket, "turn.ended")).toHaveLength(1));
+        expect(recordObjectiveProgress).not.toHaveBeenCalled();
+        expect(findMessages(socket, "checkpoint.result")).toHaveLength(0);
+      });
+
+      it("advance_scenario without a prior start_checkpoint in this session returns a tool error and does not advance", async () => {
+        const socket = new FakeSocket();
+        createConversationHandler(socket as never, claims, {
+          createLLM: fakeCurriculumLLM([
+            [{ type: "tool_call", id: "call-1", name: "advance_scenario", args: { objectiveId: "obj-2" } }],
+            [{ type: "text", text: "Okay." }],
+          ]),
+          createSTT: fakeSTT("success"),
+          createTTS: fakeTTS("success"),
+          getCurriculumForAvatar: fakeCurriculum([twoStepScenarioObjective]),
+          getAvatarById: vi.fn(async () => null),
+          ...noRetrieval,
+        });
+        socket.emitMessage({ ...sessionStartBase, avatarId: "11111111-1111-1111-1111-111111111111" });
+        await vi.waitFor(() => expect(socket.sent).toContainEqual({ type: "session.ready" }));
+        socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+        await vi.waitFor(() => expect(findMessages(socket, "turn.ended")).toHaveLength(1));
+        expect(findMessages(socket, "scenario.step")).toHaveLength(0);
+        expect(findMessages(socket, "checkpoint.result")).toHaveLength(0);
+      });
+
+      it("MAX_SCENARIO_HOPS force-resolves a self-looping branch graph to RETRY instead of continuing forever", async () => {
+        const MAX_SCENARIO_HOPS = 8;
+        const loopingObjective: SessionCurriculumObjective = {
+          id: "obj-4",
+          title: "Looping scenario",
+          teachingContent: "T",
+          checkQuestion: "unused",
+          gradingCriteria: "unused",
+          status: "NOT_STARTED",
+          scenarioSteps: [
+            {
+              id: "step-1",
+              order: 0,
+              prompt: "Loop prompt",
+              branches: [{ id: "b1", order: 0, matchCriteria: "anything", nextStepId: "step-1", outcome: null }],
+            },
+          ],
+        };
+
+        const script: LLMStreamEvent[][] = [
+          [{ type: "tool_call", id: "call-start", name: "start_checkpoint", args: { objectiveId: "obj-4" } }],
+          [{ type: "text", text: "Loop prompt" }],
+        ];
+        for (let i = 0; i < MAX_SCENARIO_HOPS; i++) {
+          script.push([{ type: "tool_call", id: `call-adv-${i}`, name: "advance_scenario", args: { objectiveId: "obj-4" } }]);
+          script.push([{ type: "text", text: `Still looping ${i}` }]);
+        }
+        // The (MAX_SCENARIO_HOPS + 1)th advance_scenario call pushes hops past the limit and
+        // force-resolves RETRY — record_progress right after proves it landed in gradedThisTurn.
+        script.push([{ type: "tool_call", id: "call-adv-final", name: "advance_scenario", args: { objectiveId: "obj-4" } }]);
+        script.push([{ type: "tool_call", id: "call-record", name: "record_progress", args: { objectiveId: "obj-4" } }]);
+        script.push([{ type: "text", text: "Let's move on." }]);
+
+        const socket = new FakeSocket();
+        const recordObjectiveProgress = vi.fn(async () => ({ attempts: 1 }));
+        createConversationHandler(socket as never, claims, {
+          createLLM: fakeCurriculumLLM(script),
+          createSTT: fakeSTT("success"),
+          createTTS: fakeTTS("success"),
+          getCurriculumForAvatar: fakeCurriculum([loopingObjective]),
+          getAvatarById: vi.fn(async () => null),
+          recordObjectiveProgress,
+          ...noRetrieval,
+        });
+        socket.emitMessage({ ...sessionStartBase, avatarId: "11111111-1111-1111-1111-111111111111" });
+        await vi.waitFor(() => expect(socket.sent).toContainEqual({ type: "session.ready" }));
+
+        let turnCount = 0;
+        // start_checkpoint's turn, then MAX_SCENARIO_HOPS continuing turns, then the
+        // force-resolve turn.
+        for (let i = 0; i < MAX_SCENARIO_HOPS + 2; i++) {
+          turnCount += 1;
+          socket.emitMessage({ type: "audio.chunk", utteranceId: `u${turnCount}`, audioBase64: "AAAA", mimeType: "audio/wav" });
+          await vi.waitFor(() => expect(findMessages(socket, "turn.ended")).toHaveLength(turnCount));
+        }
+
+        expect(findMessages(socket, "scenario.step")).toHaveLength(MAX_SCENARIO_HOPS);
+        expect(recordObjectiveProgress).toHaveBeenCalledWith(
+          "org-1",
+          "obj-4",
+          "user-1",
+          "RETRY",
+          "Let's move on and revisit this later.",
+        );
+      });
     });
 
     it("a tool handler that throws degrades to a synthetic error result instead of failing the turn", async () => {
@@ -898,6 +1126,7 @@ describe("createConversationHandler", () => {
           teachingContent: "20 days a year.",
           checkQuestion: "How many days?",
           gradingCriteria: "Answer must say 20 days.",
+          scenarioSteps: [],
           status: "MASTERED",
         },
         {
@@ -906,6 +1135,7 @@ describe("createConversationHandler", () => {
           teachingContent: "Manager sign-off required.",
           checkQuestion: "Who approves leave?",
           gradingCriteria: "Answer must say manager.",
+          scenarioSteps: [],
           status: "NEEDS_REVIEW",
           lastFeedback: "Missed the manager sign-off step.",
         },

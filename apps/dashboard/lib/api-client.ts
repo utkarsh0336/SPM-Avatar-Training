@@ -54,6 +54,9 @@ import {
   type ReplaceChecklistItemsResponse,
   type ReplaceCurriculumObjectivesResponse,
   type UpdateCurriculumRequest,
+  replaceObjectiveScenarioResponseSchema,
+  type ReplaceObjectiveScenarioResponse,
+  type ScenarioStepInput,
 } from "@avatrain/shared/curriculum";
 import {
   listMyAvatarsResponseSchema,
@@ -540,6 +543,18 @@ export async function deleteChecklist(curriculumId: string): Promise<void> {
     const body = (await response.json().catch(() => ({ error: "unknown_error" }))) as ApiErrorBody;
     throw new ApiError(response.status, body);
   }
+}
+
+/** PUT /v1/objectives/:id/scenario — OWNER only. Replace-the-whole-scenario semantics. */
+export async function replaceObjectiveScenario(
+  objectiveId: string,
+  steps: ScenarioStepInput[],
+): Promise<ReplaceObjectiveScenarioResponse> {
+  const result = await apiFetch<unknown>(`/objectives/${objectiveId}/scenario`, {
+    method: "PUT",
+    body: JSON.stringify({ steps }),
+  });
+  return replaceObjectiveScenarioResponseSchema.parse(result);
 }
 
 /** PATCH /v1/checklist-items/:itemId/complete — any authenticated org member, own progress only. */

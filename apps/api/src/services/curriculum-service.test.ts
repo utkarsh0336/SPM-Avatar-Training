@@ -10,6 +10,7 @@ import {
   listCurriculumProgress,
   replaceObjectives,
 } from "./curriculum-service.js";
+import { replaceObjectiveScenario } from "./scenario-service.js";
 
 const createdOrgIds: string[] = [];
 const createdUserIds: string[] = [];
@@ -471,6 +472,43 @@ describe("curriculum-service", () => {
       const curriculum = await createCurriculum(orgA.orgId, orgA.userId, { avatarId, title: "X" });
 
       await expect(getCurriculumEffectiveness(orgB.orgId, curriculum.id, "OWNER")).rejects.toMatchObject({ statusCode: 404 });
+    });
+  });
+
+  describe("scenario steps surface through getCurriculum and getCurriculumForAvatar", () => {
+    it("round-trips a saved scenario through both read paths", async () => {
+      const { orgId, userId } = await seedOrgAndUser("Scenario Surface Org");
+      const avatarId = await seedAvatar(orgId, userId);
+      const curriculum = await createCurriculum(orgId, userId, { avatarId, title: "X" });
+      const [objective] = await replaceObjectives(orgId, curriculum.id, [
+        { title: "Obj 1", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+      ]);
+      await replaceObjectiveScenario(orgId, objective!.id, [
+        { order: 0, prompt: "Scenario opening", branches: [{ order: 0, matchCriteria: "M", nextStepOrder: null, outcome: "PASS" }] },
+      ]);
+
+      const viaGetCurriculum = await getCurriculum(orgId, curriculum.id, "OWNER");
+      expect(viaGetCurriculum.objectives[0]!.scenarioSteps).toHaveLength(1);
+      expect(viaGetCurriculum.objectives[0]!.scenarioSteps[0]).toMatchObject({ prompt: "Scenario opening" });
+
+      const viaGetCurriculumForAvatar = await getCurriculumForAvatar(orgId, avatarId, null);
+      expect(viaGetCurriculumForAvatar!.objectives[0]!.scenarioSteps).toHaveLength(1);
+      expect(viaGetCurriculumForAvatar!.objectives[0]!.scenarioSteps[0]).toMatchObject({ prompt: "Scenario opening" });
+    });
+
+    it("an objective with no scenario returns an empty array from both read paths", async () => {
+      const { orgId, userId } = await seedOrgAndUser("Scenario Empty Org");
+      const avatarId = await seedAvatar(orgId, userId);
+      const curriculum = await createCurriculum(orgId, userId, { avatarId, title: "X" });
+      await replaceObjectives(orgId, curriculum.id, [
+        { title: "Obj 1", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+      ]);
+
+      const viaGetCurriculum = await getCurriculum(orgId, curriculum.id, "OWNER");
+      expect(viaGetCurriculum.objectives[0]!.scenarioSteps).toEqual([]);
+
+      const viaGetCurriculumForAvatar = await getCurriculumForAvatar(orgId, avatarId, null);
+      expect(viaGetCurriculumForAvatar!.objectives[0]!.scenarioSteps).toEqual([]);
     });
   });
 });
