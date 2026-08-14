@@ -140,6 +140,13 @@
   color: var(--vc-text-muted);
 }
 
+.searchResultContent {
+  font-size: 13px;
+  color: var(--vc-text-secondary);
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
 .listError {
   font-size: 12.5px;
   color: var(--vc-red);
@@ -196,4 +203,224 @@
 .deleteButton:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.uploadMetaFields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.uploadTextInput {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--vc-border);
+  background: var(--vc-bg-elevated, transparent);
+  color: var(--vc-text-primary);
+  font-size: 13px;
+}
+
+.uploadTextInput:focus {
+  outline: none;
+  border-color: var(--vc-accent-violet);
+}
+
+.uploadSubmitButton {
+  align-self: flex-start;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: none;
+  background: var(--vc-accent-violet);
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.uploadSubmitButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.iconButton {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--vc-border);
+  background: transparent;
+  color: var(--vc-text-secondary);
+  cursor: pointer;
+}
+
+.iconButton:hover {
+  color: var(--vc-accent-violet);
+  border-color: var(--vc-accent-violet);
+}
+
+.versionBadge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--vc-text-muted);
+  background: var(--vc-chip-bg);
+  padding: 1px 6px;
+  border-radius: 999px;
+  margin-left: 8px;
+}
+
+.metaChipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.categoryChip {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--vc-accent-violet);
+  background: rgba(139, 92, 246, 0.12);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.tagChip {
+  font-size: 11px;
+  color: var(--vc-text-secondary);
+  background: var(--vc-chip-bg);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.listSection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.filterRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.filterSelect {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--vc-border);
+  background: transparent;
+  color: var(--vc-text-primary);
+  font-size: 12.5px;
+}
+
+.filterTagButton {
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--vc-border);
+  background: transparent;
+  color: var(--vc-text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.filterTagButtonActive {
+  color: var(--vc-accent-violet);
+  border-color: var(--vc-accent-violet);
+  background: rgba(139, 92, 246, 0.12);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  border-radius: 16px;
+  background: var(--vc-panel-bg);
+  border: 1px solid var(--vc-border-soft);
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.panelTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--vc-text-primary);
+}
+
+.panelCloseButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--vc-text-secondary);
+  cursor: pointer;
+}
+
+.panelCloseButton:hover {
+  color: var(--vc-text-primary);
+}
+
+.panelLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+  color: var(--vc-text-secondary);
+}
+
+.panelActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.panelSecondaryButton {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--vc-border);
+  background: transparent;
+  color: var(--vc-text-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.panelSecondaryButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.versionList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.versionListItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--vc-chip-bg);
+}
+
+.versionCurrentTag {
+  margin-left: 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--vc-green);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }

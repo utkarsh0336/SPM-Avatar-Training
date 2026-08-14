@@ -7,7 +7,7 @@
   },
   "packageManager": "pnpm@9.15.9",
   "scripts": {
-    "dev": "ulimit -n 10240; docker compose up -d && turbo run dev --parallel",
+    "dev": "ulimit -n 10240; docker compose up -d && turbo run dev worker --parallel",
     "build": "turbo run build",
     "verify": "pnpm lint && turbo run typecheck test && node scripts/verify-rls.mjs && node scripts/verify-provider-boundary.mjs && node scripts/verify-no-secrets-in-bundle.mjs && pnpm --filter @avatrain/embed run size",
     "lint": "eslint .",

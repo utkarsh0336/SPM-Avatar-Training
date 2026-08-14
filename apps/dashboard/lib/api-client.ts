@@ -13,11 +13,19 @@ import {
 } from "@avatrain/shared/onboarding";
 import { orgBrandingResultSchema, type OrgBrandingUpdateInput } from "@avatrain/shared/org";
 import {
+  knowledgeDocumentSchema,
+  knowledgeSearchResponseSchema,
   listKnowledgeDocumentsResponseSchema,
+  listKnowledgeDocumentVersionsResponseSchema,
   uploadKnowledgeDocumentResponseSchema,
+  uploadKnowledgeDocumentVersionResponseSchema,
   type KnowledgeDocumentResult,
+  type KnowledgeSearchResponse,
   type ListKnowledgeDocumentsResponse,
+  type ListKnowledgeDocumentVersionsResponse,
+  type UpdateKnowledgeDocumentInput,
   type UploadKnowledgeDocumentResponse,
+  type UploadKnowledgeDocumentVersionResponse,
 } from "@avatrain/shared/knowledge";
 import {
   createCurriculumResponseSchema,
@@ -219,10 +227,33 @@ export async function updateOrgBranding(patch: OrgBrandingUpdateInput): Promise<
   return orgBrandingResultSchema.parse(result);
 }
 
-/** GET /v1/knowledge/documents — OWNER only. See .claude/specs/knowledge-management.md. */
-export async function listKnowledgeDocuments(): Promise<ListKnowledgeDocumentsResponse> {
-  const result = await apiFetch<unknown>("/knowledge/documents", { method: "GET" });
+export interface ListKnowledgeDocumentsFilter {
+  category?: string;
+  tags?: string[];
+}
+
+/**
+ * GET /v1/knowledge/documents — OWNER only. See
+ * .claude/specs/knowledge-management.md. Filters are supported server-side
+ * (see apps/api/src/routes/knowledge.ts), but KnowledgeBase.tsx fetches the
+ * full unfiltered list and filters client-side instead — that keeps the
+ * filter dropdown's option set from narrowing to only what's currently
+ * visible, and document counts here are small enough that this is fine.
+ */
+export async function listKnowledgeDocuments(
+  filter: ListKnowledgeDocumentsFilter = {},
+): Promise<ListKnowledgeDocumentsResponse> {
+  const params = new URLSearchParams();
+  if (filter.category) params.set("category", filter.category);
+  for (const tag of filter.tags ?? []) params.append("tag", tag);
+  const query = params.toString();
+  const result = await apiFetch<unknown>(`/knowledge/documents${query ? `?${query}` : ""}`, { method: "GET" });
   return listKnowledgeDocumentsResponseSchema.parse(result);
+}
+
+export interface UploadKnowledgeDocumentOptions {
+  category?: string;
+  tags?: string[];
 }
 
 /**
@@ -230,15 +261,73 @@ export async function listKnowledgeDocuments(): Promise<ListKnowledgeDocumentsRe
  * browser sets the multipart boundary itself from a FormData body, which
  * apiFetch's unconditional `Content-Type: application/json` would break.
  */
-export async function uploadKnowledgeDocument(file: File): Promise<UploadKnowledgeDocumentResponse> {
+export async function uploadKnowledgeDocument(
+  file: File,
+  options: UploadKnowledgeDocumentOptions = {},
+): Promise<UploadKnowledgeDocumentResponse> {
   const formData = new FormData();
   formData.append("file", file);
+  if (options.category) formData.append("category", options.category);
+  if (options.tags?.length) formData.append("tags", JSON.stringify(options.tags));
   const response = await fetch("/api/knowledge/documents", { method: "POST", body: formData });
   if (!response.ok) {
     const body = (await response.json().catch(() => ({ error: "unknown_error" }))) as ApiErrorBody;
     throw new ApiError(response.status, body);
   }
   return uploadKnowledgeDocumentResponseSchema.parse(await response.json());
+}
+
+/** PATCH /v1/knowledge/documents/:id — partial category/tags update. */
+export async function updateKnowledgeDocument(
+  documentId: string,
+  patch: UpdateKnowledgeDocumentInput,
+): Promise<KnowledgeDocumentResult> {
+  const result = await apiFetch<unknown>(`/knowledge/documents/${documentId}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+  return knowledgeDocumentSchema.parse(result);
+}
+
+/**
+ * POST /v1/knowledge/documents/:id/versions — multipart upload of the next
+ * version in an existing document's lineage. Same FormData/apiFetch-bypass
+ * reasoning as uploadKnowledgeDocument.
+ */
+export async function uploadKnowledgeDocumentVersion(
+  documentId: string,
+  file: File,
+  title?: string,
+): Promise<UploadKnowledgeDocumentVersionResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (title) formData.append("title", title);
+  const response = await fetch(`/api/knowledge/documents/${documentId}/versions`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({ error: "unknown_error" }))) as ApiErrorBody;
+    throw new ApiError(response.status, body);
+  }
+  return uploadKnowledgeDocumentVersionResponseSchema.parse(await response.json());
+}
+
+/** GET /v1/knowledge/documents/:id/versions — full version history, newest first. */
+export async function listKnowledgeDocumentVersions(documentId: string): Promise<ListKnowledgeDocumentVersionsResponse> {
+  const result = await apiFetch<unknown>(`/knowledge/documents/${documentId}/versions`, { method: "GET" });
+  return listKnowledgeDocumentVersionsResponseSchema.parse(result);
+}
+
+/** POST /v1/knowledge/documents/:id/versions/:versionId/restore. */
+export async function restoreKnowledgeDocumentVersion(
+  documentId: string,
+  versionId: string,
+): Promise<KnowledgeDocumentResult> {
+  const result = await apiFetch<unknown>(`/knowledge/documents/${documentId}/versions/${versionId}/restore`, {
+    method: "POST",
+  });
+  return knowledgeDocumentSchema.parse(result);
 }
 
 /**
@@ -254,7 +343,16 @@ export async function deleteKnowledgeDocument(documentId: string): Promise<void>
   }
 }
 
-export type { KnowledgeDocumentResult };
+/** GET /v1/knowledge/search — OWNER only. See .claude/specs/knowledge-search-and-ingestion-queue.md. */
+export async function searchKnowledge(q: string, topK?: number): Promise<KnowledgeSearchResponse> {
+  const params = new URLSearchParams({ q });
+  if (topK !== undefined) params.set("topK", String(topK));
+  const result = await apiFetch<unknown>(`/knowledge/search?${params.toString()}`, { method: "GET" });
+  return knowledgeSearchResponseSchema.parse(result);
+}
+
+export type { KnowledgeDocumentResult, KnowledgeSearchResponse, UpdateKnowledgeDocumentInput };
+export type { KnowledgeDocumentVersionResult } from "@avatrain/shared/knowledge";
 
 /** GET /v1/avatars — OWNER only. See .claude/specs/interactive-assessment.md. */
 export async function listActiveAvatars(): Promise<ListAvatarsResponse> {

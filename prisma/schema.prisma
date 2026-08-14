@@ -372,6 +372,18 @@ model KnowledgeDocument {
   errorMessage     String?                 @map("error_message")
   chunkCount       Int                     @default(0) @map("chunk_count")
 
+  category         String?                 @db.VarChar(100)
+  tags             String[]                @default([])
+
+  // Version control (.claude/specs/knowledge-document-lifecycle.md): rows
+  // sharing lineageId are versions of "the same document". isLatest flips
+  // only on ingestion success (see knowledge-service.ts's
+  // setLatestVersion()), never at upload time, so grounding never goes dark
+  // mid-processing or on a failed re-upload.
+  lineageId        String                  @default(uuid()) @map("lineage_id") @db.Uuid
+  version          Int                     @default(1)
+  isLatest         Boolean                 @default(true) @map("is_latest")
+
   createdAt        DateTime                @default(now()) @map("created_at")
   updatedAt        DateTime                @updatedAt @map("updated_at")
 
@@ -379,6 +391,8 @@ model KnowledgeDocument {
   chunks       KnowledgeChunk[]
 
   @@index([orgId])
+  @@index([orgId, category])
+  @@unique([lineageId, version])
   @@map("knowledge_documents")
 }
 

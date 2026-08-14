@@ -19,6 +19,9 @@ const RESTRICTED_IMPORTS = {
   "@xenova/transformers": ["packages/shared/src/providers/embedding-local.ts"],
   "pdf-parse": ["apps/api/src/lib/document-parsers/pdf.ts"],
   mammoth: ["apps/api/src/lib/document-parsers/docx.ts"],
+  officeparser: ["apps/api/src/lib/document-parsers/pptx.ts"],
+  xlsx: ["apps/api/src/lib/document-parsers/xlsx.ts"],
+  bullmq: ["apps/api/src/lib/ingestion-queue.ts", "apps/api/src/lib/ingestion-queue.test.ts"],
 };
 
 function findSourceFiles(dir) {
