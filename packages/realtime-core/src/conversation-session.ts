@@ -71,6 +71,13 @@ export interface ConversationAvatarSink {
    * role:"avatar" transcript that carries an emotion; never for role:"user".
    */
   setEmotion?(emotion: NonNullable<TranscriptMessage["emotion"]>): void;
+  /**
+   * Optional — only the VRM avatar provider implements this today (Mock/Simli
+   * have no bones to gesture with). Mirrors every onStatusChange transition
+   * this session fires, so a gesture animator can react to conversation
+   * phase without this package depending on packages/avatar-core.
+   */
+  setPhase?(phase: ConversationSessionStatus): void;
 }
 
 export type SessionStartConfig = Omit<SessionStartMessage, "type">;
@@ -136,7 +143,7 @@ const MIN_UTTERANCE_RMS = 0.015;
 export async function connectConversationSession(
   options: ConnectConversationSessionOptions,
 ): Promise<ConversationSessionHandle> {
-  options.onStatusChange("connecting");
+  setStatus("connecting");
 
   const audioContext = options.createAudioContext?.() ?? new AudioContext();
   const micStream = new MediaStream([options.micTrack]);
@@ -166,6 +173,15 @@ export async function connectConversationSession(
     ws.send(JSON.stringify(clientMessageSchema.parse(message)));
   }
 
+  // Single fan-out point for every phase transition this session fires —
+  // keeps options.onStatusChange (UI state) and options.avatar.setPhase?
+  // (gesture animator input) from drifting out of sync as new transitions
+  // are added, instead of two-lining every one of the 13 call sites below.
+  function setStatus(status: ConversationSessionStatus): void {
+    options.onStatusChange(status);
+    options.avatar.setPhase?.(status);
+  }
+
   const barge = createBargeInController({
     stopPlayback: () => {
       options.avatar.interrupt();
@@ -192,14 +208,14 @@ export async function connectConversationSession(
     };
     recorder.start();
     currentRecorder = recorder;
-    options.onStatusChange("listening");
+    setStatus("listening");
   }
 
   async function stopRecordingAndSend(): Promise<void> {
     const recorder = currentRecorder;
     if (!recorder || ended) return;
     currentRecorder = null;
-    options.onStatusChange("thinking");
+    setStatus("thinking");
 
     const utteranceId = crypto.randomUUID();
 
@@ -228,7 +244,7 @@ export async function connectConversationSession(
         // spike that satisfied the live VAD threshold momentarily. Drop the
         // turn silently rather than risk a hallucinated Whisper transcript;
         // there is nothing to tell the user, since nothing was said.
-        if (!ended) options.onStatusChange("listening");
+        if (!ended) setStatus("listening");
         return;
       }
 
@@ -236,7 +252,7 @@ export async function connectConversationSession(
 
       if (!ended) send({ type: "audio.chunk", utteranceId, audioBase64, mimeType: wav.mimeType });
     } catch {
-      if (!ended) options.onStatusChange("error");
+      if (!ended) setStatus("error");
     }
   }
 
@@ -315,7 +331,7 @@ export async function connectConversationSession(
         if (chunk.isLastForUtterance && currentUtteranceId === chunk.utteranceId) {
           currentUtteranceId = null;
           finalChunkQueued = false;
-          if (!ended) options.onStatusChange("listening");
+          if (!ended) setStatus("listening");
         }
       }
     });
@@ -333,7 +349,7 @@ export async function connectConversationSession(
       case "session.ready":
         // The UI's "LIVE" state should reflect the session being ready to
         // listen, not wait for the user's first detected utterance.
-        if (!ended) options.onStatusChange("listening");
+        if (!ended) setStatus("listening");
         break;
       case "transcript":
         options.onTranscript?.({
@@ -349,7 +365,7 @@ export async function connectConversationSession(
       case "turn.started":
         currentUtteranceId = parsed.utteranceId;
         finalChunkQueued = false;
-        options.onStatusChange("speaking");
+        setStatus("speaking");
         break;
       case "tts.chunk":
         queuePlayback(parsed);
@@ -369,7 +385,7 @@ export async function connectConversationSession(
         // empty LLM reply), where no tts.chunk ever arrives to do it.
         if (!finalChunkQueued) {
           currentUtteranceId = null;
-          if (!ended) options.onStatusChange("listening");
+          if (!ended) setStatus("listening");
         }
         break;
       case "turn.cancelled":
@@ -382,12 +398,12 @@ export async function connectConversationSession(
         // re-attempting per utterance — simplest correct behavior;
         // `retryable` is forwarded for future refinement, not branched on.
         sttDegraded = true;
-        if (!ended) options.onStatusChange("listening");
+        if (!ended) setStatus("listening");
         break;
       case "turn.failed":
         currentUtteranceId = null;
         options.onError?.(parsed.message);
-        if (!ended) options.onStatusChange("listening");
+        if (!ended) setStatus("listening");
         break;
       case "latency":
         options.onLatency?.({
@@ -429,7 +445,7 @@ export async function connectConversationSession(
     ws.addEventListener("error", () => reject(new Error("ws_connect_failed")));
     ws.addEventListener("message", handleServerMessage);
     ws.addEventListener("close", () => {
-      if (!ended) options.onStatusChange("error");
+      if (!ended) setStatus("error");
     });
   });
 
@@ -441,7 +457,7 @@ export async function connectConversationSession(
       send({ type: "session.end" });
       ws.close();
       audioContext.close().catch(() => {});
-      options.onStatusChange("ended");
+      setStatus("ended");
     },
   };
 }

@@ -1,9 +1,10 @@
-import type { AvatarEmotion, AvatarProvider, AvatarProviderStartConfig } from "./index.js";
+import type { AvatarConversationPhase, AvatarEmotion, AvatarProvider, AvatarProviderStartConfig } from "./index.js";
 import { loadVrmScene, type VrmSceneHandle, type LoadVrmSceneOptions } from "./vrm-loader.js";
 import { applyMaterialTints } from "./vrm-material-tint.js";
 import { createVrmExpressionDriver, type VrmExpressionDriver } from "./vrm-expression-driver.js";
 import { createVrmIdleAnimator, type VrmIdleAnimator } from "./vrm-idle-animator.js";
 import { createVrmEmotionDriver, type VrmEmotionDriver } from "./vrm-emotion-driver.js";
+import { createVrmGestureAnimator, type VrmGestureAnimator } from "./vrm-gesture-animator.js";
 import { vrmModelPath, placeholderVrmModelPath } from "./vrm-model-path.js";
 import { startAudioSpectrumLoop, type AudioSpectrumLoopHandle } from "./audio-amplitude.js";
 import { createMockAvatarProvider } from "./mock-avatar-provider.js";
@@ -93,6 +94,7 @@ export function createVrmAvatarProvider(options: VrmAvatarProviderOptions = {}):
   let expressionDriver: VrmExpressionDriver | null = null;
   let idleAnimator: VrmIdleAnimator | null = null;
   let emotionDriver: VrmEmotionDriver | null = null;
+  let gestureAnimator: VrmGestureAnimator | null = null;
   let audioContext: AudioContext | null = null;
   let sourceNode: { disconnect(): void } | null = null;
   let amplitudeLoop: AudioSpectrumLoopHandle | null = null;
@@ -113,6 +115,7 @@ export function createVrmAvatarProvider(options: VrmAvatarProviderOptions = {}):
       sceneHandle?.renderFrame();
       idleAnimator?.tick();
       emotionDriver?.tick();
+      gestureAnimator?.tick();
       renderRafHandle = raf(tick);
     };
     renderRafHandle = raf(tick);
@@ -161,6 +164,7 @@ export function createVrmAvatarProvider(options: VrmAvatarProviderOptions = {}):
     expressionDriver = createVrmExpressionDriver(handle.vrm);
     idleAnimator = createVrmIdleAnimator(handle.vrm);
     emotionDriver = createVrmEmotionDriver(handle.vrm);
+    gestureAnimator = createVrmGestureAnimator(handle.vrm);
     config.container.appendChild(audioElement);
     mounted = true;
     runRenderLoop();
@@ -226,6 +230,11 @@ export function createVrmAvatarProvider(options: VrmAvatarProviderOptions = {}):
       emotionDriver?.setEmotion(emotion);
     },
 
+    setPhase(phase: AvatarConversationPhase): void {
+      if (usingFallback) return; // Mock has no bones; nothing to drive
+      gestureAnimator?.setPhase(phase);
+    },
+
     stop(): void {
       if (usingFallback) {
         getFallback().stop();
@@ -246,6 +255,8 @@ export function createVrmAvatarProvider(options: VrmAvatarProviderOptions = {}):
       idleAnimator = null;
       emotionDriver?.reset();
       emotionDriver = null;
+      gestureAnimator?.reset();
+      gestureAnimator = null;
       if (mounted) audioElement.remove();
       mounted = false;
     },

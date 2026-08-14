@@ -212,6 +212,27 @@ export async function mintSimliSession(): Promise<SimliSessionResult> {
   return simliSessionResultSchema.parse(result);
 }
 
+const liveKitConnectResultSchema = z.object({
+  livekitUrl: z.string(),
+  roomToken: z.string(),
+  roomName: z.string(),
+});
+export type LiveKitConnectResult = z.infer<typeof liveKitConnectResultSchema>;
+
+/**
+ * Attempts to mint LiveKit (Mode B / photoreal avatar) credentials for a
+ * session — only ever succeeds for an Enterprise-plan org with
+ * FEATURE_LIVEKIT_ENABLED set; 403/503/409 otherwise. Callers treat ANY
+ * failure (including this) as "Mode B unavailable for this session, fall
+ * back to the default VRM/Simli path" — never a hard session error. See
+ * useConversationSession.ts / useVoiceConversationSession.ts and
+ * .claude/specs/real-time-video-avatar-interaction.md.
+ */
+export async function mintLiveKitConnection(trainingSessionId: string): Promise<LiveKitConnectResult> {
+  const result = await apiFetch<unknown>(`/conversations/${trainingSessionId}/livekit-connect`, { method: "POST" });
+  return liveKitConnectResultSchema.parse(result);
+}
+
 /** GET /v1/onboarding — get-or-create semantics, always returns a draft. */
 export async function getOnboardingDraft(): Promise<OnboardingDraftResponse> {
   const result = await apiFetch<unknown>("/onboarding", { method: "GET" });

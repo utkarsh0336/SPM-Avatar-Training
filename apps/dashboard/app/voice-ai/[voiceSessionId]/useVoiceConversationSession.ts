@@ -11,6 +11,7 @@ import {
 import { connectConversationSession, type ConversationSessionStatus } from "@avatrain/realtime-core";
 import type { Language } from "@avatrain/shared/tutor";
 import { mintConversationTicket, mintSimliSession } from "../../../lib/api-client";
+import { tryConnectLiveKitAvatar, type LiveKitAvatarConnection } from "../../../lib/livekit-avatar-connect";
 import type { VoiceExpert } from "../../../lib/fixtures/voice-experts";
 
 export interface VoiceConversationMessage {
@@ -34,6 +35,8 @@ interface UseVoiceConversationSessionResult {
   messages: VoiceConversationMessage[];
   pendingTurn: boolean;
   amplitude: number;
+  /** True once the Mode B (LiveKit/photoreal) avatar path is live for this session — drives the Photoreal badge. */
+  usingLiveKit: boolean;
 }
 
 const DEFAULT_WS_BASE = "ws://localhost:4000";
@@ -55,18 +58,22 @@ export function useVoiceConversationSession({
   const [status, setStatus] = useState<ConversationSessionStatus>("connecting");
   const [messages, setMessages] = useState<VoiceConversationMessage[]>([]);
   const [amplitude, setAmplitude] = useState(0);
+  const [usingLiveKit, setUsingLiveKit] = useState(false);
   const micTrackRef = useRef<MediaStreamTrack | null>(null);
   const micDisabledRef = useRef(micDisabled);
+  const liveKitConnectionRef = useRef<LiveKitAvatarConnection | null>(null);
 
   useEffect(() => {
     micDisabledRef.current = micDisabled;
     if (micTrackRef.current) micTrackRef.current.enabled = !micDisabled;
+    void liveKitConnectionRef.current?.room.localParticipant.setMicrophoneEnabled(!micDisabled);
   }, [micDisabled]);
 
   useEffect(() => {
     let cancelled = false;
     let handle: { disconnect(): void } | null = null;
     let avatarProvider: AvatarProvider | null = null;
+    let liveKitConnection: LiveKitAvatarConnection | null = null;
 
     // A language change reconnects (this effect re-runs) rather than
     // patching the live session — session.start's language is fixed for the
@@ -75,10 +82,27 @@ export function useVoiceConversationSession({
     setStatus("connecting");
     setMessages([]);
     setAmplitude(0);
+    setUsingLiveKit(false);
 
     async function start(): Promise<void> {
       const container = containerRef.current;
       if (!container) return;
+
+      // Mode B (LiveKit/photoreal) attempt first — see
+      // useConversationSession.ts's identical block for the full rationale.
+      const liveKit = await tryConnectLiveKitAvatar(voiceSessionId, container);
+      if (cancelled) {
+        liveKit?.disconnect();
+        return;
+      }
+      if (liveKit) {
+        liveKitConnection = liveKit;
+        liveKitConnectionRef.current = liveKit;
+        await liveKit.room.localParticipant.setMicrophoneEnabled(!micDisabledRef.current);
+        setUsingLiveKit(true);
+        setStatus("listening");
+        return;
+      }
 
       const replicaId = resolveReplicaId({ style: expert.style, gender: expert.gender, outfit: expert.outfit });
 
@@ -157,8 +181,10 @@ export function useVoiceConversationSession({
       micTrackRef.current?.stop();
       micTrackRef.current = null;
       avatarProvider?.stop();
+      liveKitConnection?.disconnect();
+      liveKitConnectionRef.current = null;
     };
   }, [voiceSessionId, expert, containerRef, language]);
 
-  return { status, messages, pendingTurn: status === "thinking", amplitude };
+  return { status, messages, pendingTurn: status === "thinking", amplitude, usingLiveKit };
 }

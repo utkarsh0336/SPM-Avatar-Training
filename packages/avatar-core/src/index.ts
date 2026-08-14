@@ -14,6 +14,15 @@ export interface AvatarProviderStartConfig {
 export type AvatarEmotion = "happy" | "sad" | "surprised" | "neutral";
 
 /**
+ * Duplicated from packages/realtime-core/src/conversation-session.ts's
+ * ConversationSessionStatus rather than imported — same decoupling reason
+ * AvatarEmotion above is duplicated from packages/shared/src/tutor/emotion.ts's
+ * Emotion type: this package has no dependency on realtime-core today and
+ * shouldn't gain one just to name a conversation phase. Keep in sync by hand.
+ */
+export type AvatarConversationPhase = "connecting" | "listening" | "thinking" | "speaking" | "error" | "ended";
+
+/**
  * The provider interface from .claude/specs/ai-avatar.md §4 — the app codes
  * against this only. Phase 1 (this pass) ships MockAvatarProvider only;
  * Tavus/HeyGen (Phase 2) and a self-hosted lip-sync service (Phase 3) are
@@ -36,6 +45,12 @@ export interface AvatarProvider {
    * VRM expression preset for the current utterance.
    */
   setEmotion?(emotion: AvatarEmotion): void;
+  /**
+   * Optional — only VrmAvatarProvider implements this (Mock has no bones by
+   * design, Simli's body is vendor-driven). Drives the gesture/body-language
+   * animator's active preset off the current conversation phase.
+   */
+  setPhase?(phase: AvatarConversationPhase): void;
 }
 
 export * from "./mock-avatar-provider.js";
@@ -53,6 +68,8 @@ export * from "./vrm-material-tint.js";
 export * from "./vrm-expression-driver.js";
 export * from "./vrm-idle-animator.js";
 export * from "./vrm-emotion-driver.js";
+export * from "./gesture-presets.js";
+export * from "./vrm-gesture-animator.js";
 export * from "./vrm-avatar-provider.js";
 export * from "./vrm-avatar-preview-renderer.js";
 export * from "./avatar-provider-factory.js";

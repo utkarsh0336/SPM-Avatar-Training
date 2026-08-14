@@ -12,6 +12,7 @@ import { connectConversationSession, type ConversationSessionStatus } from "@ava
 import type { AvatarStyle, Gender, Outfit, Expertise, VoiceTone } from "@avatrain/shared/tutor";
 import type { AvatarRecord } from "@avatrain/shared/avatar";
 import { getAvatar, getMyAvatars, mintConversationTicket, mintSimliSession } from "../../../lib/api-client";
+import { tryConnectLiveKitAvatar, type LiveKitAvatarConnection } from "../../../lib/livekit-avatar-connect";
 
 export interface ConversationMessage {
   id: string;
@@ -34,6 +35,8 @@ interface UseConversationSessionResult {
   pendingTurn: boolean;
   captionText: string;
   amplitude: number;
+  /** True once the Mode B (LiveKit/photoreal) avatar path is live for this session — drives the Photoreal badge. */
+  usingLiveKit: boolean;
 }
 
 interface ResolvedPersona {
@@ -113,22 +116,44 @@ export function useConversationSession({
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [captionText, setCaptionText] = useState("");
   const [amplitude, setAmplitude] = useState(0);
+  const [usingLiveKit, setUsingLiveKit] = useState(false);
   const micTrackRef = useRef<MediaStreamTrack | null>(null);
   const mutedRef = useRef(muted);
+  const liveKitConnectionRef = useRef<LiveKitAvatarConnection | null>(null);
 
   useEffect(() => {
     mutedRef.current = muted;
     if (micTrackRef.current) micTrackRef.current.enabled = !muted;
+    void liveKitConnectionRef.current?.room.localParticipant.setMicrophoneEnabled(!muted);
   }, [muted]);
 
   useEffect(() => {
     let cancelled = false;
     let handle: { disconnect(): void } | null = null;
     let avatarProvider: AvatarProvider | null = null;
+    let liveKitConnection: LiveKitAvatarConnection | null = null;
 
     async function start(): Promise<void> {
       const container = containerRef.current;
       if (!container) return;
+
+      // Mode B (LiveKit/photoreal) attempt first — succeeds only for an
+      // Enterprise-plan org with the feature flag on; any failure is
+      // expected (the default path for every other org) and falls straight
+      // through to the existing VRM/Mock/Simli flow below, unchanged.
+      const liveKit = await tryConnectLiveKitAvatar(trainingSessionId, container);
+      if (cancelled) {
+        liveKit?.disconnect();
+        return;
+      }
+      if (liveKit) {
+        liveKitConnection = liveKit;
+        liveKitConnectionRef.current = liveKit;
+        await liveKit.room.localParticipant.setMicrophoneEnabled(!mutedRef.current);
+        setUsingLiveKit(true);
+        setStatus("listening");
+        return;
+      }
 
       // Fetch, not localStorage — the persisted Avatar record is the source
       // of truth for a live session's persona now (see resolvePersona's doc
@@ -286,8 +311,10 @@ export function useConversationSession({
       micTrackRef.current?.stop();
       micTrackRef.current = null;
       avatarProvider?.stop();
+      liveKitConnection?.disconnect();
+      liveKitConnectionRef.current = null;
     };
   }, [trainingSessionId, topic, containerRef, avatarId]);
 
-  return { status, messages, pendingTurn: status === "thinking", captionText, amplitude };
+  return { status, messages, pendingTurn: status === "thinking", captionText, amplitude, usingLiveKit };
 }

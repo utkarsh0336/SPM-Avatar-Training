@@ -12,6 +12,17 @@ enum DataRegion {
   EU
 }
 
+/// Minimal plan tier, set manually (ops / prisma studio) — no self-serve
+/// upgrade flow or Stripe linkage exists yet (that's a future billing
+/// spec). Exists so Mode B (LiveKit) can be gated to ENTERPRISE orgs only,
+/// per CLAUDE.md's "LiveKit only for enterprise avatar mode" — see
+/// .claude/specs/real-time-video-avatar-interaction.md.
+enum OrganizationPlan {
+  STARTER
+  PRO
+  ENTERPRISE
+}
+
 /// PARTNER added by .claude/specs/partner-role.md — read-only, scoped to
 /// Curriculum.programType === PARTNER_ENABLEMENT (training-catalog.md).
 /// requireRole(role) stays an exact-match single-role check; see
@@ -168,16 +179,17 @@ enum ProgramType {
 
 /// Tenant root. Not itself org-scoped — everything else hangs off org_id.
 model Organization {
-  id                String     @id @default(uuid()) @db.Uuid
+  id                String           @id @default(uuid()) @db.Uuid
   name              String
-  dataRegion        DataRegion @default(US) @map("data_region")
+  dataRegion        DataRegion       @default(US) @map("data_region")
+  plan              OrganizationPlan @default(STARTER)
   // Additive branding fields — see .claude/specs/tenant-branding.md. All
   // nullable: an org that never sets them renders with the product's
   // existing hardcoded defaults, never breaks.
-  logoUrl           String?    @map("logo_url")
-  primaryColorHex   String?    @map("primary_color_hex")
-  secondaryColorHex String?    @map("secondary_color_hex")
-  createdAt         DateTime   @default(now()) @map("created_at")
+  logoUrl           String?          @map("logo_url")
+  primaryColorHex   String?          @map("primary_color_hex")
+  secondaryColorHex String?          @map("secondary_color_hex")
+  createdAt         DateTime         @default(now()) @map("created_at")
 
   applications            Application[]
   memberships             Membership[]

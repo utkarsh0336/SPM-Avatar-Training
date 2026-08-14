@@ -16,7 +16,7 @@ interface VideoStageProps {
 // avatarContainerRef. 80% of the product experience is the conversation,
 // not the mouth, but the mouth does move.
 export function VideoStage({ session }: VideoStageProps) {
-  const { status, captionText, amplitude, avatarContainerRef } = useConversationSessionContext();
+  const { status, captionText, amplitude, avatarContainerRef, usingLiveKit } = useConversationSessionContext();
   const isLive = status === "listening" || status === "thinking" || status === "speaking";
 
   return (
@@ -29,6 +29,8 @@ export function VideoStage({ session }: VideoStageProps) {
         <span className={styles.liveDot} />
         LIVE
       </div>
+
+      {usingLiveKit && <div className={styles.photorealBadge}>Photoreal</div>}
 
       <div className={styles.headerBadge}>
         <SpeakerIcon size={14} />

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hexColorSchema, orgBrandingUpdateSchema, orgLogoUrlSchema, orgNameSchema } from "./schema.js";
+import { hexColorSchema, orgBrandingUpdateSchema, orgLogoUrlSchema, orgNameSchema, organizationPlanSchema } from "./schema.js";
 
 describe("hexColorSchema", () => {
   it("accepts a well-formed 6-digit hex color", () => {
@@ -84,5 +84,21 @@ describe("orgBrandingUpdateSchema", () => {
     // caller might otherwise assume rejection.
     const result = orgBrandingUpdateSchema.parse({ orgId: "should-be-ignored", name: "Acme" });
     expect(result).toEqual({ name: "Acme" });
+  });
+});
+
+describe("organizationPlanSchema", () => {
+  it("accepts each of the three plan values", () => {
+    expect(organizationPlanSchema.safeParse("STARTER").success).toBe(true);
+    expect(organizationPlanSchema.safeParse("PRO").success).toBe(true);
+    expect(organizationPlanSchema.safeParse("ENTERPRISE").success).toBe(true);
+  });
+
+  it("rejects an arbitrary string", () => {
+    expect(organizationPlanSchema.safeParse("PREMIUM").success).toBe(false);
+  });
+
+  it("rejects a lowercase value", () => {
+    expect(organizationPlanSchema.safeParse("enterprise").success).toBe(false);
   });
 });

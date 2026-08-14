@@ -100,6 +100,7 @@ function createFakeAvatar(): ConversationAvatarSink & {
   speakCalls: string[];
   interrupt: ReturnType<typeof vi.fn>;
   setEmotion: ReturnType<typeof vi.fn>;
+  setPhase: ReturnType<typeof vi.fn>;
 } {
   const speakCalls: string[] = [];
   return {
@@ -109,6 +110,7 @@ function createFakeAvatar(): ConversationAvatarSink & {
     },
     interrupt: vi.fn(),
     setEmotion: vi.fn(),
+    setPhase: vi.fn(),
   };
 }
 
@@ -207,6 +209,24 @@ describe("connectConversationSession", () => {
     await connectPromise;
     ws.emitMessage({ type: "session.ready" });
     expect(onStatusChange).toHaveBeenCalledWith("listening");
+  });
+
+  it("mirrors every onStatusChange transition into avatar.setPhase", async () => {
+    // Regression guard: setStatus() must stay the single fan-out point for
+    // both onStatusChange (UI) and avatar.setPhase (gesture animator input)
+    // — this asserts they never drift apart across connect, session.ready,
+    // turn.started, and disconnect.
+    const { connectPromise, ws, avatar, onStatusChange } = setupHarness();
+    await connectPromise;
+    ws.emitMessage({ type: "session.ready" });
+    ws.emitMessage({ type: "turn.started", utteranceId: "u1" });
+
+    expect(avatar.setPhase.mock.calls.map((call) => call[0])).toEqual(
+      onStatusChange.mock.calls.map((call) => call[0]),
+    );
+    expect(avatar.setPhase).toHaveBeenCalledWith("connecting");
+    expect(avatar.setPhase).toHaveBeenCalledWith("listening");
+    expect(avatar.setPhase).toHaveBeenCalledWith("speaking");
   });
 
   it("forwards transcript messages for both roles", async () => {

@@ -11,6 +11,7 @@ interface VoiceConversationSessionContextValue {
   messages: VoiceConversationMessage[];
   pendingTurn: boolean;
   amplitude: number;
+  usingLiveKit: boolean;
   avatarContainerRef: RefObject<HTMLDivElement>;
 }
 
