@@ -2,7 +2,7 @@ export * from "./db/client.js";
 export * from "./db/with-org.js";
 export * from "./db/with-auth.js";
 export * from "./db/errors.js";
-export type { Role, UserStatus } from "@prisma/client";
+export type { Role, UserStatus, UiLocale } from "@prisma/client";
 export * from "./auth/password.js";
 export * from "./auth/tokens.js";
 export * from "./auth/schemas.js";

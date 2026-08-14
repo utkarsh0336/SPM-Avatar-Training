@@ -6,6 +6,7 @@ import {
   inviteSchema,
   loginSchema,
   signupSchema,
+  uiLocaleUpdateSchema,
 } from "@avatrain/shared";
 import { requireRole } from "../plugins/auth.js";
 import { clearSessionCookieHeader, getSessionToken, serializeSessionCookie } from "../lib/cookies.js";
@@ -87,6 +88,14 @@ export function registerAuthRoutes(app: FastifyInstance): void {
   app.get("/v1/auth/me", { preHandler: app.authenticate }, async (request, reply) => {
     // authenticate always populates authContext or throws first.
     const result = await authService.me(request.authContext!);
+    reply.status(200).send(result);
+  });
+
+  // Self-service admin-portal chrome preference — no role gate, unlike
+  // PATCH /v1/org/branding. See .claude/specs/dashboard-localization.md.
+  app.patch("/v1/auth/me", { preHandler: app.authenticate }, async (request, reply) => {
+    const input = uiLocaleUpdateSchema.parse(request.body);
+    const result = await authService.updateMyLocale(request.authContext!, input);
     reply.status(200).send(result);
   });
 

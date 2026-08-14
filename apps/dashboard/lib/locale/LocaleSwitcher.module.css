@@ -1,0 +1,28 @@
+/* Deliberately no design-token colors here (e.g. no var(--vc-*)) — this
+   component is shared between sessions/Sidebar.tsx and
+   onboarding/Sidebar.tsx, which use two separate, non-overlapping token
+   namespaces (--vc-* vs --ob-*; see each Sidebar.module.css). Callers pass
+   their own `className` (e.g. .localeToggle in each Sidebar.module.css) to
+   layer in token-correct colors instead. */
+.toggle {
+  background: none;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  color: inherit;
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 600;
+  opacity: 0.75;
+  padding: 3px 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.toggle:hover {
+  opacity: 1;
+}
+
+.toggle:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

@@ -16,6 +16,8 @@ import {
   type OrgBrandingResult,
   type Role,
   type SignupInput,
+  type UiLocale,
+  type UiLocaleUpdateInput,
 } from "@avatrain/shared";
 import { badRequest, conflict, gone, unauthorized } from "../lib/http-errors.js";
 import { toOrgResult } from "../lib/org-result.js";
@@ -27,6 +29,7 @@ interface UserResult {
   id: string;
   email: string;
   onboardingCompletedAt: string | null;
+  uiLocale: UiLocale;
 }
 
 export interface SessionResult {
@@ -50,11 +53,13 @@ function toUserResult(user: {
   id: string;
   email: string;
   onboardingCompletedAt: Date | null;
+  uiLocale: UiLocale;
 }): UserResult {
   return {
     id: user.id,
     email: user.email,
     onboardingCompletedAt: user.onboardingCompletedAt?.toISOString() ?? null,
+    uiLocale: user.uiLocale,
   };
 }
 
@@ -123,7 +128,10 @@ export async function signup(input: SignupInput): Promise<SessionResult> {
 
   return {
     token,
-    user: { id: userId, email: input.email, onboardingCompletedAt: null },
+    // A freshly created user always has the column default (EN) — no need
+    // to re-SELECT after the insert just to confirm what we already know,
+    // same reasoning as the org literal below.
+    user: { id: userId, email: input.email, onboardingCompletedAt: null, uiLocale: "EN" },
     // A freshly created org always has null branding fields — no need to
     // re-SELECT after the insert just to confirm what we already know.
     org: { id: orgId, name: input.orgName, logoUrl: null, primaryColorHex: null, secondaryColorHex: null },
@@ -186,6 +194,31 @@ export async function me(authContext: {
 }): Promise<MeResult> {
   const [user, org] = await Promise.all([
     prisma.user.findUniqueOrThrow({ where: { id: authContext.userId } }),
+    prisma.organization.findUniqueOrThrow({ where: { id: authContext.orgId } }),
+  ]);
+  return {
+    user: toUserResult(user),
+    org: toOrgResult(org),
+    role: authContext.role,
+  };
+}
+
+/**
+ * Self-service admin-portal chrome preference — see
+ * .claude/specs/dashboard-localization.md. userId always comes from the
+ * authenticated caller's own session (never the request body or a path
+ * param), so there is no cross-user write to guard against here, unlike
+ * org-service.ts's updateBranding which needs an explicit OWNER role gate.
+ */
+export async function updateMyLocale(
+  authContext: { userId: string; orgId: string; role: Role },
+  input: UiLocaleUpdateInput,
+): Promise<MeResult> {
+  const [user, org] = await Promise.all([
+    prisma.user.update({
+      where: { id: authContext.userId },
+      data: { uiLocale: input.uiLocale },
+    }),
     prisma.organization.findUniqueOrThrow({ where: { id: authContext.orgId } }),
   ]);
   return {

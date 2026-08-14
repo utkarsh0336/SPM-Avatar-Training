@@ -240,6 +240,16 @@ model Application {
   @@map("applications")
 }
 
+/// Admin-portal chrome locale — see .claude/specs/dashboard-localization.md.
+/// Deliberately its own enum rather than reusing AvatarLanguage
+/// (ENGLISH/HINDI): that enum drives the learner-facing avatar's
+/// conversation language; this one drives the trainer/admin's own UI
+/// language, a different concern that lives on User, not Avatar/Org.
+enum UiLocale {
+  EN
+  HI
+}
+
 /// Global identity root — not tenant-scoped, same reasoning as Organization
 /// itself (credentials aren't tenant business data). Exempt from RLS; see
 /// scripts/verify-rls.mjs EXEMPT_TABLES.
@@ -253,6 +263,10 @@ model User {
   // Owned by Authentication, consumed by the (separately specced) onboarding
   // wizard gate — see .claude/specs/onboarding.md "Depends On".
   onboardingCompletedAt DateTime?  @map("onboarding_completed_at")
+  // Personal admin-portal chrome preference, not a tenant-wide setting — see
+  // .claude/specs/dashboard-localization.md. Additive/defaulted so every
+  // existing user backfills to EN with no behavior change.
+  uiLocale              UiLocale   @default(EN) @map("ui_locale")
   createdAt             DateTime   @default(now()) @map("created_at")
   updatedAt             DateTime   @updatedAt @map("updated_at")
 

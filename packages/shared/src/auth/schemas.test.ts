@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emailSchema, passwordSchema, signupSchema, loginSchema } from "./schemas.js";
+import { emailSchema, passwordSchema, signupSchema, loginSchema, uiLocaleUpdateSchema } from "./schemas.js";
 
 describe("emailSchema", () => {
   it("lowercases the email", () => {
@@ -39,5 +39,21 @@ describe("loginSchema", () => {
 
   it("rejects an empty password", () => {
     expect(() => loginSchema.parse({ email: "a@b.com", password: "" })).toThrow();
+  });
+});
+
+describe("uiLocaleUpdateSchema", () => {
+  it("accepts EN and HI", () => {
+    expect(uiLocaleUpdateSchema.parse({ uiLocale: "EN" })).toEqual({ uiLocale: "EN" });
+    expect(uiLocaleUpdateSchema.parse({ uiLocale: "HI" })).toEqual({ uiLocale: "HI" });
+  });
+
+  it("rejects any other value", () => {
+    expect(() => uiLocaleUpdateSchema.parse({ uiLocale: "FR" })).toThrow();
+    expect(() => uiLocaleUpdateSchema.parse({ uiLocale: "english" })).toThrow();
+  });
+
+  it("rejects a missing uiLocale", () => {
+    expect(() => uiLocaleUpdateSchema.parse({})).toThrow();
   });
 });

@@ -53,10 +53,27 @@ export type GoogleCallbackInput = z.infer<typeof googleCallbackSchema>;
 
 export const roleSchema = z.enum(["OWNER", "MEMBER", "PARTNER"]);
 
+// Admin-portal chrome language — see .claude/specs/dashboard-localization.md.
+// Deliberately separate from the avatar's conversation-language schema
+// (packages/shared/src/tutor/avatar-config.ts's languageSchema): that one
+// drives the learner-facing avatar, this one drives the trainer/admin's own
+// UI, and the two are allowed to diverge for a single user.
+export const uiLocaleSchema = z.enum(["EN", "HI"]);
+export type UiLocaleInput = z.infer<typeof uiLocaleSchema>;
+
+// PATCH /v1/auth/me body — self-service, no other fields yet. The route
+// derives the target user from the session (request.authContext.userId),
+// never from the body, so there is no id field to validate here.
+export const uiLocaleUpdateSchema = z.object({
+  uiLocale: uiLocaleSchema,
+});
+export type UiLocaleUpdateInput = z.infer<typeof uiLocaleUpdateSchema>;
+
 export const userResponseSchema = z.object({
   id: z.string().uuid(),
   email: z.string(),
   onboardingCompletedAt: z.string().nullable(),
+  uiLocale: uiLocaleSchema,
 });
 
 export const orgResponseSchema = z.object({

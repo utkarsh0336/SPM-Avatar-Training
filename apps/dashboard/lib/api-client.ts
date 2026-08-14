@@ -12,6 +12,7 @@ import {
   type OnboardingDraftResponse,
 } from "@avatrain/shared/onboarding";
 import { orgBrandingResultSchema, type OrgBrandingUpdateInput } from "@avatrain/shared/org";
+import type { UiLocaleInput } from "@avatrain/shared/auth";
 import {
   knowledgeDocumentSchema,
   knowledgeSearchResponseSchema,
@@ -79,6 +80,10 @@ export interface AuthUser {
   id: string;
   email: string;
   onboardingCompletedAt: string | null;
+  // Admin-portal chrome language — see .claude/specs/dashboard-localization.md.
+  // Distinct from AvatarLanguage (the learner-facing avatar's conversation
+  // language), which this file never imports.
+  uiLocale: UiLocaleInput;
 }
 
 export interface AuthOrg {
@@ -156,6 +161,15 @@ export function acceptInvite(token: string, password: string): Promise<AuthResul
 
 export function logout(): Promise<{ ok: true }> {
   return apiFetch<{ ok: true }>("/auth/logout", { method: "POST" });
+}
+
+/** PATCH /v1/auth/me — self-service, no role gate (unlike
+ * updateOrgBranding). See .claude/specs/dashboard-localization.md. */
+export function updateMyLocale(uiLocale: UiLocaleInput): Promise<AuthResult> {
+  return apiFetch<AuthResult>("/auth/me", {
+    method: "PATCH",
+    body: JSON.stringify({ uiLocale }),
+  });
 }
 
 /**
