@@ -55,4 +55,37 @@ describe("createTTSProviderFromEnv", () => {
     await drain(provider.synthesize("नमस्ते", "unused", opts));
     expect(onResolved).toHaveBeenCalledWith("msedge-tts", "audio/webm;codecs=opus");
   });
+
+  it("defaults to echogarden first for Spanish, unlike Hindi (echogarden DOES have usable Spanish voices)", async () => {
+    const onResolved = vi.fn();
+    const provider = createTTSProviderFromEnv("NEUTRAL", "FEMALE", "Spanish", {}, { onResolved });
+    await drain(provider.synthesize("hola", "unused", opts));
+    expect(onResolved).toHaveBeenCalledWith("echogarden", "audio/wav");
+  });
+
+  it("tries msedge-tts first for Spanish when TTS_PROVIDER=msedge-tts", async () => {
+    const onResolved = vi.fn();
+    const provider = createTTSProviderFromEnv(
+      "NEUTRAL",
+      "MALE",
+      "Spanish",
+      { TTS_PROVIDER: "msedge-tts" },
+      { onResolved },
+    );
+    await drain(provider.synthesize("hola", "unused", opts));
+    expect(onResolved).toHaveBeenCalledWith("msedge-tts", "audio/webm;codecs=opus");
+  });
+
+  it("forceFallbackFirst tries msedge-tts first even with TTS_PROVIDER unset — the turn-latency circuit breaker's degradation lever", async () => {
+    const onResolved = vi.fn();
+    const provider = createTTSProviderFromEnv(
+      "NEUTRAL",
+      "FEMALE",
+      "English",
+      {},
+      { onResolved, forceFallbackFirst: true },
+    );
+    await drain(provider.synthesize("hi", "unused", opts));
+    expect(onResolved).toHaveBeenCalledWith("msedge-tts", "audio/webm;codecs=opus");
+  });
 });

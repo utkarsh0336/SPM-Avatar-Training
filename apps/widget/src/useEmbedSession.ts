@@ -94,7 +94,11 @@ export function useEmbedSession({ embedKey, containerRef, muted }: UseEmbedSessi
         await avatarProvider.start({ replicaId, container });
 
         const [micStream, ticketResult] = await Promise.all([
-          navigator.mediaDevices.getUserMedia({ audio: true }),
+          // Native browser DSP, requested explicitly rather than left to
+          // user-agent defaults — see .claude/specs/voice-quality-latency-enforcement.md.
+          navigator.mediaDevices.getUserMedia({
+            audio: { noiseSuppression: true, echoCancellation: true, autoGainControl: true },
+          }),
           mintEmbedTicket(embedKey),
         ]);
         const micTrack = micStream.getAudioTracks()[0];

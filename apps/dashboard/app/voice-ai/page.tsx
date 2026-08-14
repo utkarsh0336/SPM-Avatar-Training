@@ -9,7 +9,7 @@ import { useVoiceSessions } from "./VoiceSessionsContext";
 import { SELECTABLE_VOICE_EXPERTS } from "../../lib/fixtures/voice-experts";
 import { MicIcon, PlayIcon, ChevronRightIcon, WandIcon } from "../sessions/icons";
 
-const LANGUAGE_OPTIONS: Language[] = ["English", "Hindi"];
+const LANGUAGE_OPTIONS: Language[] = ["English", "Hindi", "Spanish"];
 
 // "Start a Voice Session" — the AI-expert + language picker shown before a
 // live voice session begins. 3 experts (Male/Female/Neutral), not the

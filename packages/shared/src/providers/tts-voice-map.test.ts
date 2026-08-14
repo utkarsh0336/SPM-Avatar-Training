@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { resolveFallbackVoice, resolveHindiVoice, resolvePrimaryVoice, resolveVoiceGender } from "./tts-voice-map.js";
+import {
+  resolveFallbackVoice,
+  resolveHindiVoice,
+  resolvePrimaryVoice,
+  resolveSpanishFallbackVoice,
+  resolveSpanishPrimaryVoice,
+  resolveVoiceGender,
+} from "./tts-voice-map.js";
 
 describe("tts-voice-map", () => {
   it("resolves distinct primary (echogarden/Piper) voices per tone for a male avatar", () => {
@@ -77,5 +84,17 @@ describe("tts-voice-map", () => {
     expect(resolveHindiVoice("MALE")).toBe("hi-IN-MadhurNeural");
     expect(resolveHindiVoice("FEMALE")).toBe("hi-IN-SwaraNeural");
     expect(resolveHindiVoice("NEUTRAL")).toBe("hi-IN-SwaraNeural");
+  });
+
+  it("resolves the verified single-speaker Piper Spanish voices by gender", () => {
+    expect(resolveSpanishPrimaryVoice("MALE")).toBe("es_ES-davefx-medium");
+    expect(resolveSpanishPrimaryVoice("FEMALE")).toBe("es_MX-claude-high");
+    expect(resolveSpanishPrimaryVoice("NEUTRAL")).toBe("es_MX-claude-high");
+  });
+
+  it("resolves the two real es-ES Azure neural voices by gender", () => {
+    expect(resolveSpanishFallbackVoice("MALE")).toBe("es-ES-AlvaroNeural");
+    expect(resolveSpanishFallbackVoice("FEMALE")).toBe("es-ES-ElviraNeural");
+    expect(resolveSpanishFallbackVoice("NEUTRAL")).toBe("es-ES-ElviraNeural");
   });
 });

@@ -192,6 +192,17 @@ export const latencyMessageSchema = z.object({
 });
 export type LatencyMessage = z.infer<typeof latencyMessageSchema>;
 
+// Sent at most once per turn, from apps/api's turn-latency-guard.ts watchdog,
+// when a turn hasn't produced its first audio chunk within
+// TURN_TTFA_BUDGET_MS — a soft, non-fatal signal (the turn keeps running),
+// distinct from turn.failed. See .claude/specs/voice-quality-latency-enforcement.md.
+export const latencyBudgetExceededMessageSchema = z.object({
+  type: z.literal("latency.budget_exceeded"),
+  utteranceId: z.string(),
+  budgetMs: z.number(),
+});
+export type LatencyBudgetExceededMessage = z.infer<typeof latencyBudgetExceededMessageSchema>;
+
 export const errorMessageSchema = z.object({
   type: z.literal("error"),
   code: z.string(),
@@ -245,6 +256,7 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
   sttFailedMessageSchema,
   turnFailedMessageSchema,
   latencyMessageSchema,
+  latencyBudgetExceededMessageSchema,
   errorMessageSchema,
   checkpointStartedMessageSchema,
   scenarioStepMessageSchema,

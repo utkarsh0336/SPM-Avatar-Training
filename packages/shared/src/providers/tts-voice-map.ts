@@ -120,3 +120,54 @@ const HINDI_VOICE_BY_GENDER: Record<Gender, string> = {
 export function resolveHindiVoice(gender: Gender): string {
   return HINDI_VOICE_BY_GENDER[gender];
 }
+
+/**
+ * Unlike Hindi, echogarden's installed vits (Piper) catalog DOES have usable
+ * Spanish voices — verified live by reading the installed echogarden@3.0.5
+ * package's own voice catalog directly
+ * (node_modules/echogarden/dist/synthesis/VitsTTS.js), same method used for
+ * PRIMARY_VOICE_BY_GENDER_AND_TONE above. Only one single-speaker,
+ * correctly-gender-tagged, medium-quality-or-better voice exists per gender
+ * (the same "single-speaker + real gender tag" bar PRIMARY_VOICE_BY_GENDER_AND_TONE
+ * already applies) — es_ES-sharvard-medium, the only other es_ES entry, is a
+ * 2-speaker voice tagged gender:'unknown', unusable for the same reason the
+ * old libritts_r-medium model was. No DEEP/NEUTRAL/WARM tone variants exist
+ * either, so — like Hindi — tone is ignored here. The male/female pair is
+ * NOT the same locale (es_ES male, es_MX female): es_ES has no usable female
+ * voice at all in this catalog, and es_MX-claude-high is the best quality
+ * female option available (high, vs. the male pair's medium) — an accepted
+ * compromise, not an oversight. See tts-factory.ts's Spanish branch, which
+ * — unlike Hindi's msedge-tts-only path — gets a real two-candidate failover
+ * (this primary + msedge-tts fallback below) because a usable primary
+ * actually exists.
+ */
+const SPANISH_PRIMARY_VOICE_BY_GENDER: Record<Gender, string> = {
+  MALE: "es_ES-davefx-medium",
+  FEMALE: "es_MX-claude-high",
+  // No gender-neutral single-speaker Piper voice exists — reuses the FEMALE
+  // entry, same convention as PRIMARY_VOICE_BY_GENDER_AND_TONE's NEUTRAL row.
+  NEUTRAL: "es_MX-claude-high",
+};
+
+/**
+ * Real es-ES neural voices, confirmed live via msedge-tts's own
+ * getVoices(): 322 total voices, 45 tagged es-*, including exactly one es-ES
+ * male and one es-ES female entry — es-ES-AlvaroNeural (Male) and
+ * es-ES-ElviraNeural (Female) — matching the single-consistent-locale
+ * convention every other language map in this file follows (en-US for
+ * English, hi-IN for Hindi). No tone variants exist for Spanish here either
+ * (same as Hindi), so tone is ignored.
+ */
+const SPANISH_FALLBACK_VOICE_BY_GENDER: Record<Gender, string> = {
+  MALE: "es-ES-AlvaroNeural",
+  FEMALE: "es-ES-ElviraNeural",
+  NEUTRAL: "es-ES-ElviraNeural",
+};
+
+export function resolveSpanishPrimaryVoice(gender: Gender): string {
+  return SPANISH_PRIMARY_VOICE_BY_GENDER[gender];
+}
+
+export function resolveSpanishFallbackVoice(gender: Gender): string {
+  return SPANISH_FALLBACK_VOICE_BY_GENDER[gender];
+}

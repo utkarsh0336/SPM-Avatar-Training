@@ -6,7 +6,7 @@ import styles from "./VoiceControlBar.module.css";
 import { EndCallIcon, GlobeIcon, MicIcon, MicOffIcon, PanelIcon, PauseIcon, PlayIcon } from "../../sessions/icons";
 import { useVoiceSessionUi } from "./VoiceSessionUiContext";
 
-const LANGUAGE_OPTIONS: Language[] = ["English", "Hindi"];
+const LANGUAGE_OPTIONS: Language[] = ["English", "Hindi", "Spanish"];
 
 interface VoiceControlBarProps {
   onEndSession: () => void;

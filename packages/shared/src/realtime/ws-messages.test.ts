@@ -148,6 +148,21 @@ describe("serverMessageSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  it("accepts a latency.budget_exceeded message and rejects one missing budgetMs", () => {
+    const result = serverMessageSchema.safeParse({
+      type: "latency.budget_exceeded",
+      utteranceId: "u1",
+      budgetMs: 1400,
+    });
+    expect(result.success).toBe(true);
+
+    const missingBudget = serverMessageSchema.safeParse({
+      type: "latency.budget_exceeded",
+      utteranceId: "u1",
+    });
+    expect(missingBudget.success).toBe(false);
+  });
+
   it("accepts an avatar transcript message with source attribution", () => {
     const result = serverMessageSchema.safeParse({
       type: "transcript",
