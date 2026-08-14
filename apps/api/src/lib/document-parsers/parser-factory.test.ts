@@ -16,6 +16,24 @@ describe("getDocumentParser", () => {
     );
   });
 
+  it("resolves the pptx parser for the pptx mime type", () => {
+    const mimeType = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+    expect(getDocumentParser(mimeType)?.mimeType).toBe(mimeType);
+  });
+
+  it("resolves the xlsx parser for the xlsx mime type", () => {
+    const mimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    expect(getDocumentParser(mimeType)?.mimeType).toBe(mimeType);
+  });
+
+  it("resolves the csv parser for text/csv", () => {
+    expect(getDocumentParser("text/csv")?.mimeType).toBe("text/csv");
+  });
+
+  it("resolves the html parser for text/html", () => {
+    expect(getDocumentParser("text/html")?.mimeType).toBe("text/html");
+  });
+
   it("returns null for an unsupported mime type", () => {
     expect(getDocumentParser("application/vnd.ms-powerpoint")).toBeNull();
   });

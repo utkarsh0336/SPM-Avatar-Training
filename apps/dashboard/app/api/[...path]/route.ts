@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 const API_URL = process.env.API_URL ?? "http://localhost:4000";
 
 async function proxy(request: NextRequest, path: string[]): Promise<NextResponse> {
-  const url = `${API_URL}/v1/${path.join("/")}`;
+  const url = `${API_URL}/v1/${path.join("/")}${request.nextUrl.search}`;
 
   // Only forward content-type when the inbound request actually has one —
   // defaulting to application/json unconditionally makes Fastify reject a

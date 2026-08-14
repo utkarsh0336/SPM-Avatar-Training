@@ -63,6 +63,20 @@ interface ChunkRow {
  * $orgId` below is belt-and-suspenders (matches every other tenant query in
  * this codebase, e.g. onboarding-service.ts) and lets the planner use the
  * org_id index alongside the HNSW ANN index.
+ *
+ * Deliberately does NOT filter on document version/isLatest here. A
+ * latency-auditor review of an earlier `AND kd.is_latest = true` predicate
+ * found — and empirically confirmed against a seeded 40k-chunk dataset —
+ * that filtering through the knowledge_documents join defeats the HNSW ANN
+ * scan's candidate stream and can silently return 0 rows once a meaningful
+ * fraction of an org's chunks belong to superseded versions (reproduced at
+ * just 50% latest-doc ratio, not only pathological cases). Instead, the
+ * *data* invariant "knowledge_chunks only ever contains rows for a
+ * lineage's current isLatest document" is enforced at write time by
+ * knowledge-service.ts's setLatestVersion() (deletes a superseded
+ * version's chunks in the same transaction that flips isLatest), so this
+ * query needs no extra predicate at all — every row it can see is already
+ * groundable.
  */
 export async function retrieveContext(
   orgId: string,

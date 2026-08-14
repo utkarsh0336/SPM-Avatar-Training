@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch --env-file=../../.env src/index.ts",
+    "worker": "tsx watch --env-file=../../.env src/worker.ts",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
@@ -13,10 +14,13 @@
     "@avatrain/shared": "workspace:*",
     "@fastify/multipart": "^10.1.0",
     "@fastify/websocket": "^11.3.0",
+    "bullmq": "5.81.3",
     "fastify": "^5.2.0",
     "mammoth": "^1.12.1",
+    "officeparser": "5.2.2",
     "pdf-parse": "^2.4.5",
     "simli-client": "^3.0.2",
+    "xlsx": "0.18.5",
     "zod": "^3.24.1"
   },
   "devDependencies": {
