@@ -119,6 +119,35 @@ export const listCurriculumProgressResponseSchema = z.object({
 });
 export type ListCurriculumProgressResponse = z.infer<typeof listCurriculumProgressResponseSchema>;
 
+// GET /v1/curricula/:curriculumId/effectiveness — aggregates the same
+// ObjectiveProgress rows listCurriculumProgress returns raw, into
+// completion/mastery/time-to-competency stats. See
+// .claude/specs/training-effectiveness-measurement.md.
+export const objectiveEffectivenessSchema = z.object({
+  objectiveId: z.string().uuid(),
+  objectiveTitle: z.string(),
+  order: z.number().int().nonnegative(),
+  attemptedLearnerCount: z.number().int().nonnegative(),
+  passedLearnerCount: z.number().int().nonnegative(),
+  passRate: z.number().min(0).max(1),
+  avgAttemptsToPass: z.number().nullable(),
+  avgTimeToCompetencySeconds: z.number().nullable(),
+});
+export type ObjectiveEffectiveness = z.infer<typeof objectiveEffectivenessSchema>;
+
+// objectives is ordered by Objective.order — reading pass rate down this
+// array is the "mastery trend": where learners stall as they progress
+// through the curriculum, without a new time-series/event table.
+export const curriculumEffectivenessSchema = z.object({
+  curriculumId: z.string().uuid(),
+  learnerCount: z.number().int().nonnegative(),
+  completedLearnerCount: z.number().int().nonnegative(),
+  completionRate: z.number().min(0).max(1),
+  avgTimeToCompetencySeconds: z.number().nullable(),
+  objectives: z.array(objectiveEffectivenessSchema),
+});
+export type CurriculumEffectiveness = z.infer<typeof curriculumEffectivenessSchema>;
+
 /**
  * Minimal avatar summary powering the Curriculum admin page's avatar
  * picker (GET /v1/avatars) — kept here rather than a new subpath since

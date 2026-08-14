@@ -77,4 +77,14 @@ export function registerCurriculumRoutes(app: FastifyInstance): void {
     );
     reply.status(200).send({ progress });
   });
+
+  app.get("/v1/curricula/:curriculumId/effectiveness", readGate, async (request, reply) => {
+    const { curriculumId } = curriculumIdParamSchema.parse(request.params);
+    const result = await curriculumService.getCurriculumEffectiveness(
+      request.authContext!.orgId,
+      curriculumId,
+      request.authContext!.role,
+    );
+    reply.status(200).send(result);
+  });
 }

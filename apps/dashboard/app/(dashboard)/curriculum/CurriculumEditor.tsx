@@ -9,6 +9,7 @@ import {
   deleteCurriculum,
   getChecklist,
   getCurriculum,
+  getCurriculumEffectiveness,
   listActiveAvatars,
   listCurricula,
   listCurriculumProgress,
@@ -20,6 +21,7 @@ import type {
   AvatarSummary,
   ChecklistItemInput,
   ChecklistResult,
+  CurriculumEffectiveness,
   CurriculumResult,
   CurriculumSummary,
   ObjectiveInput,
@@ -28,6 +30,7 @@ import type {
 } from "@avatrain/shared/curriculum";
 import { ObjectiveList, type ObjectiveDraft } from "./ObjectiveList";
 import { ChecklistEditor, type ChecklistItemDraft } from "./ChecklistEditor";
+import { EffectivenessSummary } from "./EffectivenessSummary";
 import { ProgressTable } from "./ProgressTable";
 import styles from "./page.module.css";
 
@@ -101,6 +104,7 @@ function OwnerCurriculumEditor() {
   const [curriculum, setCurriculum] = useState<CurriculumResult | null>(null);
   const [objectives, setObjectives] = useState<ObjectiveDraft[]>([]);
   const [progress, setProgress] = useState<ObjectiveProgressEntry[]>([]);
+  const [effectiveness, setEffectiveness] = useState<CurriculumEffectiveness | null>(null);
   const [checklist, setChecklist] = useState<ChecklistResult | null>(null);
   const [checklistItems, setChecklistItems] = useState<ChecklistItemDraft[]>([]);
   const [newCurriculumTitle, setNewCurriculumTitle] = useState("");
@@ -131,14 +135,16 @@ function OwnerCurriculumEditor() {
   const selectedAvatar = avatars.find((avatar) => avatar.id === selectedAvatarId) ?? null;
 
   const loadCurriculumFor = useCallback(async (curriculumId: string) => {
-    const [loadedCurriculum, loadedProgress, loadedChecklist] = await Promise.all([
+    const [loadedCurriculum, loadedProgress, loadedEffectiveness, loadedChecklist] = await Promise.all([
       getCurriculum(curriculumId),
       listCurriculumProgress(curriculumId),
+      getCurriculumEffectiveness(curriculumId),
       getChecklist(curriculumId),
     ]);
     setCurriculum(loadedCurriculum);
     setObjectives(toDrafts(loadedCurriculum));
     setProgress(loadedProgress.progress);
+    setEffectiveness(loadedEffectiveness);
     setChecklist(loadedChecklist);
     setChecklistItems(loadedChecklist ? toChecklistDrafts(loadedChecklist) : []);
   }, []);
@@ -149,6 +155,7 @@ function OwnerCurriculumEditor() {
       setCurriculum(null);
       setObjectives([]);
       setProgress([]);
+      setEffectiveness(null);
       setChecklist(null);
       setChecklistItems([]);
       return;
@@ -157,6 +164,7 @@ function OwnerCurriculumEditor() {
       setCurriculum(null);
       setObjectives([]);
       setProgress([]);
+      setEffectiveness(null);
       setChecklist(null);
       setChecklistItems([]);
       return;
@@ -440,6 +448,7 @@ function OwnerCurriculumEditor() {
             </>
           )}
 
+          <EffectivenessSummary effectiveness={effectiveness} />
           <ProgressTable progress={progress} />
         </>
       )}
@@ -461,6 +470,7 @@ function PartnerCurriculumView() {
   const [selectedCurriculumId, setSelectedCurriculumId] = useState<string | null>(null);
   const [curriculum, setCurriculum] = useState<CurriculumResult | null>(null);
   const [progress, setProgress] = useState<ObjectiveProgressEntry[]>([]);
+  const [effectiveness, setEffectiveness] = useState<CurriculumEffectiveness | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -476,12 +486,18 @@ function PartnerCurriculumView() {
     if (!selectedCurriculumId) {
       setCurriculum(null);
       setProgress([]);
+      setEffectiveness(null);
       return;
     }
-    void Promise.all([getCurriculum(selectedCurriculumId), listCurriculumProgress(selectedCurriculumId)])
-      .then(([loadedCurriculum, loadedProgress]) => {
+    void Promise.all([
+      getCurriculum(selectedCurriculumId),
+      listCurriculumProgress(selectedCurriculumId),
+      getCurriculumEffectiveness(selectedCurriculumId),
+    ])
+      .then(([loadedCurriculum, loadedProgress, loadedEffectiveness]) => {
         setCurriculum(loadedCurriculum);
         setProgress(loadedProgress.progress);
+        setEffectiveness(loadedEffectiveness);
       })
       .catch((err: unknown) => setError(humanizeError(err)));
   }, [selectedCurriculumId]);
@@ -530,6 +546,7 @@ function PartnerCurriculumView() {
             ))}
           </div>
 
+          <EffectivenessSummary effectiveness={effectiveness} />
           <ProgressTable progress={progress} />
         </>
       )}

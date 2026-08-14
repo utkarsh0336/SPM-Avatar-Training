@@ -5,6 +5,7 @@ import {
   createCurriculum,
   deleteCurriculum,
   getCurriculum,
+  getCurriculumEffectiveness,
   getCurriculumForAvatar,
   listCurriculumProgress,
   replaceObjectives,
@@ -361,6 +362,115 @@ describe("curriculum-service", () => {
       const curriculum = await createCurriculum(orgA.orgId, orgA.userId, { avatarId, title: "X" });
 
       await expect(listCurriculumProgress(orgB.orgId, curriculum.id, "OWNER")).rejects.toMatchObject({ statusCode: 404 });
+    });
+  });
+
+  describe("getCurriculumEffectiveness", () => {
+    it("returns zeros and nulls, never NaN, when no learner has attempted a checkpoint yet", async () => {
+      const { orgId, userId } = await seedOrgAndUser("Effectiveness Empty Org");
+      const avatarId = await seedAvatar(orgId, userId);
+      const curriculum = await createCurriculum(orgId, userId, { avatarId, title: "X" });
+      await replaceObjectives(orgId, curriculum.id, [
+        { title: "Obj 1", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+      ]);
+
+      const result = await getCurriculumEffectiveness(orgId, curriculum.id, "OWNER");
+      expect(result).toMatchObject({
+        learnerCount: 0,
+        completedLearnerCount: 0,
+        completionRate: 0,
+        avgTimeToCompetencySeconds: null,
+      });
+      expect(result.objectives).toHaveLength(1);
+      expect(result.objectives[0]).toMatchObject({
+        attemptedLearnerCount: 0,
+        passedLearnerCount: 0,
+        passRate: 0,
+        avgAttemptsToPass: null,
+        avgTimeToCompetencySeconds: null,
+      });
+    });
+
+    it("computes completion rate of 1 when a learner passes every objective", async () => {
+      const { orgId, userId } = await seedOrgAndUser("Effectiveness Complete Org");
+      const learner = await seedOrgAndUser("Effectiveness Complete Learner Org");
+      const avatarId = await seedAvatar(orgId, userId);
+      const curriculum = await createCurriculum(orgId, userId, { avatarId, title: "X" });
+      const [objectiveA, objectiveB] = await replaceObjectives(orgId, curriculum.id, [
+        { title: "Obj 1", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+        { title: "Obj 2", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+      ]);
+
+      await withAuthContext({ orgId }, (tx) =>
+        tx.objectiveProgress.createMany({
+          data: [
+            { orgId, objectiveId: objectiveA!.id, learnerId: learner.userId, verdict: "PASS", attempts: 1, feedback: "Good" },
+            { orgId, objectiveId: objectiveB!.id, learnerId: learner.userId, verdict: "PASS", attempts: 3, feedback: "Good" },
+          ],
+        }),
+      );
+
+      const result = await getCurriculumEffectiveness(orgId, curriculum.id, "OWNER");
+      expect(result.learnerCount).toBe(1);
+      expect(result.completedLearnerCount).toBe(1);
+      expect(result.completionRate).toBe(1);
+      expect(result.avgTimeToCompetencySeconds).not.toBeNull();
+      const objectiveBStats = result.objectives.find((o) => o.objectiveId === objectiveB!.id);
+      expect(objectiveBStats).toMatchObject({ avgAttemptsToPass: 3, passRate: 1 });
+    });
+
+    it("reflects a learner who retried before passing in avgAttemptsToPass", async () => {
+      const { orgId, userId } = await seedOrgAndUser("Effectiveness Retry Org");
+      const learner = await seedOrgAndUser("Effectiveness Retry Learner Org");
+      const avatarId = await seedAvatar(orgId, userId);
+      const curriculum = await createCurriculum(orgId, userId, { avatarId, title: "X" });
+      const [objective] = await replaceObjectives(orgId, curriculum.id, [
+        { title: "Obj 1", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+      ]);
+
+      await withAuthContext({ orgId }, (tx) =>
+        tx.objectiveProgress.create({
+          data: { orgId, objectiveId: objective!.id, learnerId: learner.userId, verdict: "PASS", attempts: 4, feedback: "Good after retries" },
+        }),
+      );
+
+      const result = await getCurriculumEffectiveness(orgId, curriculum.id, "OWNER");
+      expect(result.objectives[0]).toMatchObject({
+        attemptedLearnerCount: 1,
+        passedLearnerCount: 1,
+        passRate: 1,
+        avgAttemptsToPass: 4,
+      });
+    });
+
+    it("does not vacuously count learners as completed when the curriculum has no objectives", async () => {
+      const { orgId, userId } = await seedOrgAndUser("Effectiveness No Objectives Org");
+      const learner = await seedOrgAndUser("Effectiveness No Objectives Learner Org");
+      const avatarId = await seedAvatar(orgId, userId);
+      const curriculum = await createCurriculum(orgId, userId, { avatarId, title: "X" });
+      const [objective] = await replaceObjectives(orgId, curriculum.id, [
+        { title: "Obj 1", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+      ]);
+      await withAuthContext({ orgId }, (tx) =>
+        tx.objectiveProgress.create({
+          data: { orgId, objectiveId: objective!.id, learnerId: learner.userId, verdict: "PASS", attempts: 1, feedback: "Good" },
+        }),
+      );
+      // Remove every objective (cascades ObjectiveProgress) while the curriculum itself stays.
+      await replaceObjectives(orgId, curriculum.id, []);
+
+      const result = await getCurriculumEffectiveness(orgId, curriculum.id, "OWNER");
+      expect(result.completedLearnerCount).toBe(0);
+      expect(result.completionRate).toBe(0);
+    });
+
+    it("404s for another org's curriculum", async () => {
+      const orgA = await seedOrgAndUser("Effectiveness NotFound Org A");
+      const orgB = await seedOrgAndUser("Effectiveness NotFound Org B");
+      const avatarId = await seedAvatar(orgA.orgId, orgA.userId);
+      const curriculum = await createCurriculum(orgA.orgId, orgA.userId, { avatarId, title: "X" });
+
+      await expect(getCurriculumEffectiveness(orgB.orgId, curriculum.id, "OWNER")).rejects.toMatchObject({ statusCode: 404 });
     });
   });
 });

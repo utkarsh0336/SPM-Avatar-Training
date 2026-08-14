@@ -386,6 +386,13 @@ describe("curriculum routes", () => {
         });
         expect(putResponse.statusCode).toBe(404);
 
+        const effectivenessResponse = await app.inject({
+          method: "GET",
+          url: `/v1/curricula/${curriculumId}/effectiveness`,
+          cookies: { avatrain_session: orgB.token },
+        });
+        expect(effectivenessResponse.statusCode).toBe(404);
+
         const deleteResponse = await app.inject({
           method: "DELETE",
           url: `/v1/curricula/${curriculumId}`,
@@ -399,6 +406,13 @@ describe("curriculum routes", () => {
           cookies: { avatrain_session: orgA.token },
         });
         expect(stillThere.statusCode).toBe(200);
+
+        const effectivenessStillThere = await app.inject({
+          method: "GET",
+          url: `/v1/curricula/${curriculumId}/effectiveness`,
+          cookies: { avatrain_session: orgA.token },
+        });
+        expect(effectivenessStillThere.statusCode).toBe(200);
       });
     });
   });
@@ -439,6 +453,61 @@ describe("curriculum routes", () => {
       const response = await app.inject({
         method: "GET",
         url: `/v1/curricula/${curriculumId}/progress`,
+        cookies: { avatrain_session: orgB.token },
+      });
+      expect(response.statusCode).toBe(404);
+    });
+  });
+
+  describe("GET /v1/curricula/:curriculumId/effectiveness", () => {
+    it("returns aggregate zeros for a curriculum nobody has attempted yet", async () => {
+      const { token, orgId, userId } = await seedOrgWithSessionToken("Curriculum Effectiveness Org");
+      const avatarId = await seedAvatar(orgId, userId);
+      const create = await app.inject({
+        method: "POST",
+        url: "/v1/curricula",
+        cookies: { avatrain_session: token },
+        payload: { avatarId, title: "X" },
+      });
+      const { id: curriculumId } = create.json();
+      await app.inject({
+        method: "PUT",
+        url: `/v1/curricula/${curriculumId}/objectives`,
+        cookies: { avatrain_session: token },
+        payload: { objectives: [{ title: "Obj 1", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" }] },
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/v1/curricula/${curriculumId}/effectiveness`,
+        cookies: { avatrain_session: token },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        curriculumId,
+        learnerCount: 0,
+        completedLearnerCount: 0,
+        completionRate: 0,
+        avgTimeToCompetencySeconds: null,
+      });
+      expect(response.json().objectives).toHaveLength(1);
+    });
+
+    it("404s for another org's curriculum", async () => {
+      const orgA = await seedOrgWithSessionToken("Curriculum Effectiveness Isolation Org A");
+      const orgB = await seedOrgWithSessionToken("Curriculum Effectiveness Isolation Org B");
+      const avatarId = await seedAvatar(orgA.orgId, orgA.userId);
+      const create = await app.inject({
+        method: "POST",
+        url: "/v1/curricula",
+        cookies: { avatrain_session: orgA.token },
+        payload: { avatarId, title: "X" },
+      });
+      const { id: curriculumId } = create.json();
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/v1/curricula/${curriculumId}/effectiveness`,
         cookies: { avatrain_session: orgB.token },
       });
       expect(response.statusCode).toBe(404);
