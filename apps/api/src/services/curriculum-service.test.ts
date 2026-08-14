@@ -9,6 +9,7 @@ import {
   getCurriculumForAvatar,
   listCurriculumProgress,
   replaceObjectives,
+  updateCurriculum,
 } from "./curriculum-service.js";
 import { replaceObjectiveScenario } from "./scenario-service.js";
 
@@ -318,6 +319,69 @@ describe("curriculum-service", () => {
       const resultB = await getCurriculumForAvatar(orgB.orgId, avatarB, learner.userId);
       expect(resultB?.objectives[0]).toMatchObject({ status: "NOT_STARTED" });
     });
+
+    it("reweights objectives by mastery tier (NEEDS_REVIEW, then NOT_STARTED, then MASTERED) when adaptiveOrderingEnabled is true", async () => {
+      const { orgId, userId } = await seedOrgAndUser("Adaptive Reorder Org");
+      const learner = await seedOrgAndUser("Adaptive Reorder Learner Org");
+      const avatarId = await seedAvatar(orgId, userId);
+      const curriculum = await createCurriculum(orgId, userId, { avatarId, title: "X" });
+      const [obj1, obj2] = await replaceObjectives(orgId, curriculum.id, [
+        { title: "Mastered First", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+        { title: "Needs Review Second", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+        { title: "Not Started Third", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+      ]);
+      await withAuthContext({ orgId }, (tx) =>
+        tx.objectiveProgress.create({
+          data: { orgId, objectiveId: obj1!.id, learnerId: learner.userId, verdict: "PASS", attempts: 1, feedback: "Correct." },
+        }),
+      );
+      await withAuthContext({ orgId }, (tx) =>
+        tx.objectiveProgress.create({
+          data: { orgId, objectiveId: obj2!.id, learnerId: learner.userId, verdict: "RETRY", attempts: 1, feedback: "Try again." },
+        }),
+      );
+      await updateCurriculum(orgId, curriculum.id, { adaptiveOrderingEnabled: true });
+
+      const result = await getCurriculumForAvatar(orgId, avatarId, learner.userId);
+      expect(result?.objectives.map((o) => o.title)).toEqual([
+        "Needs Review Second",
+        "Not Started Third",
+        "Mastered First",
+      ]);
+    });
+
+    it("keeps authored order when adaptiveOrderingEnabled is false, even with mixed mastery statuses", async () => {
+      const { orgId, userId } = await seedOrgAndUser("Adaptive NoReorder Org");
+      const learner = await seedOrgAndUser("Adaptive NoReorder Learner Org");
+      const avatarId = await seedAvatar(orgId, userId);
+      const curriculum = await createCurriculum(orgId, userId, { avatarId, title: "X" });
+      const [obj1] = await replaceObjectives(orgId, curriculum.id, [
+        { title: "First", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+        { title: "Second", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+      ]);
+      await withAuthContext({ orgId }, (tx) =>
+        tx.objectiveProgress.create({
+          data: { orgId, objectiveId: obj1!.id, learnerId: learner.userId, verdict: "PASS", attempts: 1, feedback: "Correct." },
+        }),
+      );
+
+      const result = await getCurriculumForAvatar(orgId, avatarId, learner.userId);
+      expect(result?.objectives.map((o) => o.title)).toEqual(["First", "Second"]);
+    });
+
+    it("is a no-op for anonymous sessions even when adaptiveOrderingEnabled is true", async () => {
+      const { orgId, userId } = await seedOrgAndUser("Adaptive Anon Reorder Org");
+      const avatarId = await seedAvatar(orgId, userId);
+      const curriculum = await createCurriculum(orgId, userId, { avatarId, title: "X" });
+      await replaceObjectives(orgId, curriculum.id, [
+        { title: "First", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+        { title: "Second", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+      ]);
+      await updateCurriculum(orgId, curriculum.id, { adaptiveOrderingEnabled: true });
+
+      const result = await getCurriculumForAvatar(orgId, avatarId, null);
+      expect(result?.objectives.map((o) => o.title)).toEqual(["First", "Second"]);
+    });
   });
 
   describe("listCurriculumProgress", () => {
@@ -472,6 +536,26 @@ describe("curriculum-service", () => {
       const curriculum = await createCurriculum(orgA.orgId, orgA.userId, { avatarId, title: "X" });
 
       await expect(getCurriculumEffectiveness(orgB.orgId, curriculum.id, "OWNER")).rejects.toMatchObject({ statusCode: 404 });
+    });
+
+    it("keeps the mastery trend sorted by authored order even when adaptiveOrderingEnabled is true", async () => {
+      const { orgId, userId } = await seedOrgAndUser("Effectiveness Adaptive Org");
+      const learner = await seedOrgAndUser("Effectiveness Adaptive Learner Org");
+      const avatarId = await seedAvatar(orgId, userId);
+      const curriculum = await createCurriculum(orgId, userId, { avatarId, title: "X" });
+      const [objectiveA, objectiveB] = await replaceObjectives(orgId, curriculum.id, [
+        { title: "Obj 1", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+        { title: "Obj 2", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+      ]);
+      await withAuthContext({ orgId }, (tx) =>
+        tx.objectiveProgress.create({
+          data: { orgId, objectiveId: objectiveB!.id, learnerId: learner.userId, verdict: "PASS", attempts: 1, feedback: "Good" },
+        }),
+      );
+      await updateCurriculum(orgId, curriculum.id, { adaptiveOrderingEnabled: true });
+
+      const result = await getCurriculumEffectiveness(orgId, curriculum.id, "OWNER");
+      expect(result.objectives.map((o) => o.objectiveId)).toEqual([objectiveA!.id, objectiveB!.id]);
     });
   });
 

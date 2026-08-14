@@ -259,6 +259,35 @@ describe("curriculum routes", () => {
       expect(response.json()).toMatchObject({ programType: null });
     });
 
+    it("defaults adaptiveOrderingEnabled to false and round-trips it through PATCH/GET", async () => {
+      const { token, orgId, userId } = await seedOrgWithSessionToken("Curriculum Patch Adaptive Org");
+      const avatarId = await seedAvatar(orgId, userId);
+      const curriculumId = await createCurriculum(token, avatarId);
+
+      const created = await app.inject({
+        method: "GET",
+        url: `/v1/curricula/${curriculumId}`,
+        cookies: { avatrain_session: token },
+      });
+      expect(created.json()).toMatchObject({ adaptiveOrderingEnabled: false });
+
+      const patched = await app.inject({
+        method: "PATCH",
+        url: `/v1/curricula/${curriculumId}`,
+        cookies: { avatrain_session: token },
+        payload: { adaptiveOrderingEnabled: true },
+      });
+      expect(patched.statusCode).toBe(200);
+      expect(patched.json()).toMatchObject({ adaptiveOrderingEnabled: true });
+
+      const fetched = await app.inject({
+        method: "GET",
+        url: `/v1/curricula/${curriculumId}`,
+        cookies: { avatrain_session: token },
+      });
+      expect(fetched.json()).toMatchObject({ adaptiveOrderingEnabled: true });
+    });
+
     it("403s for a MEMBER caller", async () => {
       const { token } = await seedOrgWithSessionToken("Curriculum Patch Member Org", "MEMBER");
       const response = await app.inject({

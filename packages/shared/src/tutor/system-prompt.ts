@@ -151,10 +151,13 @@ const STATUS_ANNOTATION: Record<ObjectiveMasteryStatus, (lastFeedback?: string) 
  * systemPrompt unchanged) when the avatar has no attached curriculum, so
  * every existing avatar's behavior is unaffected.
  *
- * Objective order is never changed by mastery status — a trainer's authored order may encode real
- * teaching dependencies between objectives. Status only changes how each one is taught, via the
- * annotation and instructions below — see
- * .claude/specs/adaptive-learning-personalization.md's Scope decisions.
+ * Objective order is caller-determined, not decided here — this function only numbers and
+ * annotates whatever sequence it's handed. By default that sequence is the trainer's authored
+ * order, since a trainer's authored order may encode real teaching dependencies between
+ * objectives (.claude/specs/adaptive-learning-personalization.md's Scope decisions). A curriculum
+ * with adaptiveOrderingEnabled set is the one exception: getCurriculumForAvatar reweights the
+ * array by mastery tier before it ever reaches this function — see
+ * .claude/specs/adaptive-learning-paths.md.
  */
 export function appendCurriculumContext(systemPrompt: string, objectives: CurriculumContextObjective[]): string {
   if (objectives.length === 0) return systemPrompt;
