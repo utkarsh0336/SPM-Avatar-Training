@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { updateOrgBranding, type AuthOrg } from "../../../lib/api-client";
+import { useTranslation } from "../../../lib/locale/LocaleProvider";
 import styles from "./page.module.css";
 
 export interface BrandingFormProps {
@@ -13,6 +14,7 @@ const DEFAULT_PRIMARY = "#8B5CF6";
 const DEFAULT_SECONDARY = "#3B82F6";
 
 export function BrandingForm({ initialOrg }: BrandingFormProps) {
+  const { t } = useTranslation();
   const [name, setName] = useState(initialOrg.name);
   const [logoUrl, setLogoUrl] = useState(initialOrg.logoUrl ?? "");
   const [primaryColorHex, setPrimaryColorHex] = useState(initialOrg.primaryColorHex ?? DEFAULT_PRIMARY);
@@ -43,7 +45,7 @@ export function BrandingForm({ initialOrg }: BrandingFormProps) {
       // change immediately.
       window.location.reload();
     } catch {
-      setError("Couldn't save your changes. Please try again.");
+      setError(t("brandingForm.saveError"));
       setSubmitting(false);
     }
   }
@@ -52,7 +54,7 @@ export function BrandingForm({ initialOrg }: BrandingFormProps) {
     <form className={styles.form} onSubmit={handleSubmit}>
       <div className={styles.field}>
         <label className={styles.label} htmlFor="org-name">
-          Organization name
+          {t("brandingForm.orgNameLabel")}
         </label>
         <input
           id="org-name"
@@ -68,7 +70,7 @@ export function BrandingForm({ initialOrg }: BrandingFormProps) {
 
       <div className={styles.field}>
         <label className={styles.label} htmlFor="org-logo">
-          Logo URL
+          {t("brandingForm.logoUrlLabel")}
         </label>
         <input
           id="org-logo"
@@ -83,12 +85,12 @@ export function BrandingForm({ initialOrg }: BrandingFormProps) {
       <div className={styles.colorRow}>
         <div className={styles.field}>
           <label className={styles.label} htmlFor="org-primary-color">
-            Primary color
+            {t("brandingForm.primaryColorLabel")}
           </label>
           <div className={styles.colorInputWrap}>
             <input
               type="color"
-              aria-label="Primary color picker"
+              aria-label={t("brandingForm.primaryColorPickerAriaLabel")}
               className={styles.colorSwatch}
               value={HEX_COLOR_PATTERN.test(primaryColorHex) ? primaryColorHex : DEFAULT_PRIMARY}
               onChange={(event) => setPrimaryColorHex(event.target.value)}
@@ -107,12 +109,12 @@ export function BrandingForm({ initialOrg }: BrandingFormProps) {
 
         <div className={styles.field}>
           <label className={styles.label} htmlFor="org-secondary-color">
-            Secondary color
+            {t("brandingForm.secondaryColorLabel")}
           </label>
           <div className={styles.colorInputWrap}>
             <input
               type="color"
-              aria-label="Secondary color picker"
+              aria-label={t("brandingForm.secondaryColorPickerAriaLabel")}
               className={styles.colorSwatch}
               value={HEX_COLOR_PATTERN.test(secondaryColorHex) ? secondaryColorHex : DEFAULT_SECONDARY}
               onChange={(event) => setSecondaryColorHex(event.target.value)}
@@ -142,7 +144,7 @@ export function BrandingForm({ initialOrg }: BrandingFormProps) {
       )}
 
       <button type="submit" className={styles.submit} disabled={submitting}>
-        {submitting ? "Saving…" : "Save changes"}
+        {submitting ? t("brandingForm.saving") : t("brandingForm.saveChanges")}
       </button>
     </form>
   );

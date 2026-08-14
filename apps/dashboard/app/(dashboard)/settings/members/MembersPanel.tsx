@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, inviteMember, listMembers, type MemberResult } from "../../../../lib/api-client";
+import { useTranslation } from "../../../../lib/locale/LocaleProvider";
 import styles from "./MembersPanel.module.css";
 
 /**
@@ -12,6 +13,7 @@ import styles from "./MembersPanel.module.css";
  * .claude/specs/partner-role.md's UI Changes.
  */
 export function MembersPanel() {
+  const { t } = useTranslation();
   const [members, setMembers] = useState<MemberResult[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [email, setEmail] = useState("");
@@ -40,7 +42,7 @@ export function MembersPanel() {
       setInviteUrl(result.inviteUrl);
       setEmail("");
     } catch (err) {
-      setError(err instanceof ApiError ? (err.body.message ?? "Could not send this invite.") : "Could not reach the server.");
+      setError(err instanceof ApiError ? (err.body.message ?? t("membersPanel.inviteError")) : t("membersPanel.genericError"));
     } finally {
       setInviting(false);
     }
@@ -51,7 +53,7 @@ export function MembersPanel() {
   return (
     <>
       <div className={styles.inviteCard}>
-        <span className={styles.label}>Invite someone</span>
+        <span className={styles.label}>{t("membersPanel.inviteSomeone")}</span>
         <div className={styles.inviteRow}>
           <input
             type="email"
@@ -61,8 +63,8 @@ export function MembersPanel() {
             onChange={(event) => setEmail(event.target.value)}
           />
           <select className={styles.select} value={role} onChange={(event) => setRole(event.target.value as "MEMBER" | "PARTNER")}>
-            <option value="MEMBER">Member</option>
-            <option value="PARTNER">Partner</option>
+            <option value="MEMBER">{t("membersPanel.roleMember")}</option>
+            <option value="PARTNER">{t("membersPanel.rolePartner")}</option>
           </select>
           <button
             type="button"
@@ -70,13 +72,13 @@ export function MembersPanel() {
             disabled={inviting || !email.trim()}
             onClick={() => void handleInvite()}
           >
-            {inviting ? "Inviting…" : "Invite"}
+            {inviting ? t("membersPanel.inviting") : t("membersPanel.invite")}
           </button>
         </div>
         {error && <p className={styles.error}>{error}</p>}
         {inviteUrl && (
           <p className={styles.inviteUrl}>
-            Invite link (no email delivery yet — share this directly): <code>{inviteUrl}</code>
+            {t("membersPanel.inviteUrlPrefix")} <code>{inviteUrl}</code>
           </p>
         )}
       </div>

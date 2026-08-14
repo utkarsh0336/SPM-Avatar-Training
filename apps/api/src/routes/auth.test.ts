@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it, vi } from "vitest";
-import { prisma, setAuthContext, withAuthContext } from "@avatrain/shared";
+import { generateOpaqueToken, prisma, setAuthContext, sha256Hex, withAuthContext } from "@avatrain/shared";
 import { buildApp } from "../app.js";
 
 // exchangeGoogleCode does a real network round-trip to Google in production;
@@ -93,6 +93,29 @@ async function seedPasswordUser(orgName: string, email: string): Promise<{ userI
   return { userId, orgId };
 }
 
+// Same rate-limit-avoidance reasoning as seedPasswordUser above, extended
+// with a real Session row + token — the PATCH /v1/auth/me tests need an
+// authenticated cookie but have no reason to burn this file's shared
+// signup:${ip} rate-limit budget to get one.
+async function seedUserWithSession(orgName: string, email: string): Promise<{ userId: string; orgId: string; token: string }> {
+  const orgId = randomUUID();
+  const userId = randomUUID();
+  const token = generateOpaqueToken();
+  const tokenHash = sha256Hex(token);
+  await prisma.$transaction(async (tx) => {
+    await tx.organization.create({ data: { id: orgId, name: orgName } });
+    await tx.user.create({ data: { id: userId, email, passwordHash: "seeded-hash-not-used-by-locale-tests" } });
+    await setAuthContext(tx, { userId, orgId });
+    await tx.membership.create({ data: { orgId, userId, role: "OWNER" } });
+    await tx.session.create({
+      data: { orgId, userId, tokenHash, expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) },
+    });
+  });
+  createdOrgIds.push(orgId);
+  createdUserIds.push(userId);
+  return { userId, orgId, token };
+}
+
 async function seedPendingInvitee(orgName: string, email: string): Promise<{ orgId: string }> {
   const orgId = randomUUID();
   const ownerUserId = randomUUID();
@@ -137,7 +160,10 @@ describe("auth routes", () => {
       expect(response.statusCode).toBe(201);
       const body = response.json();
       expect(body).toMatchObject({
-        user: { email },
+        // uiLocale: "EN" here covers signup()'s hand-built literal (no
+        // re-SELECT after insert) matching the column default — see
+        // .claude/specs/dashboard-localization.md.
+        user: { email, uiLocale: "EN" },
         org: { name: "Acme" },
         role: "OWNER",
       });
@@ -253,6 +279,68 @@ describe("auth routes", () => {
       });
       expect(response.statusCode).toBe(200);
       expect(response.json()).toMatchObject({ user: { email }, role: "OWNER" });
+    });
+  });
+
+  describe("PATCH /v1/auth/me", () => {
+    it("returns 401 without a cookie", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/v1/auth/me",
+        payload: { uiLocale: "HI" },
+      });
+      expect(response.statusCode).toBe(401);
+    });
+
+    it("updates the caller's own uiLocale and reflects it on a later GET /me", async () => {
+      const email = uniqueEmail("locale-update");
+      const { token } = await seedUserWithSession("Acme", email);
+
+      const patchResponse = await app.inject({
+        method: "PATCH",
+        url: "/v1/auth/me",
+        cookies: { avatrain_session: token },
+        payload: { uiLocale: "HI" },
+      });
+      expect(patchResponse.statusCode).toBe(200);
+      expect(patchResponse.json()).toMatchObject({ user: { email, uiLocale: "HI" } });
+
+      const me = await app.inject({
+        method: "GET",
+        url: "/v1/auth/me",
+        cookies: { avatrain_session: token },
+      });
+      expect(me.json()).toMatchObject({ user: { uiLocale: "HI" } });
+    });
+
+    it("rejects a value outside the EN/HI enum with 400", async () => {
+      const email = uniqueEmail("locale-invalid");
+      const { token } = await seedUserWithSession("Acme", email);
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/v1/auth/me",
+        cookies: { avatrain_session: token },
+        payload: { uiLocale: "FR" },
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
+    it("has no id field to target another user — only the session's own userId is ever written", async () => {
+      const email = uniqueEmail("locale-self-only");
+      const { token } = await seedUserWithSession("Acme", email);
+      const otherUserId = randomUUID();
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/v1/auth/me",
+        cookies: { avatrain_session: token },
+        // uiLocaleUpdateSchema strips unknown fields — an injected id is
+        // simply ignored, never routed to a different user's row.
+        payload: { uiLocale: "HI", id: otherUserId, userId: otherUserId },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ user: { email } });
     });
   });
 

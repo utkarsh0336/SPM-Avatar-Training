@@ -137,6 +137,11 @@
   color: var(--ob-text-muted);
 }
 
+.localeToggle {
+  align-self: flex-start;
+  color: var(--ob-text-muted);
+}
+
 .userCard {
   display: flex;
   align-items: center;

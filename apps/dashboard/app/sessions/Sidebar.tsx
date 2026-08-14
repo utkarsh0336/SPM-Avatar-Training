@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { logout, type AuthOrg } from "../../lib/api-client";
+import { useTranslation } from "../../lib/locale/LocaleProvider";
+import { LocaleSwitcher } from "../../lib/locale/LocaleSwitcher";
 import styles from "./Sidebar.module.css";
 import {
   BellIcon,
@@ -35,6 +37,7 @@ export interface SidebarProps {
 
 export function Sidebar({ org }: SidebarProps) {
   const pathname = usePathname();
+  const { t } = useTranslation();
   const [personaDismissed, setPersonaDismissed] = useState(false);
   // /sessions, /voice-ai, and / (dashboard) are separate top-level route
   // trees sharing this one sidebar (see this file's own doc comment above) —
@@ -63,7 +66,7 @@ export function Sidebar({ org }: SidebarProps) {
     <aside className={styles.sidebar}>
       <div className={styles.workspace}>
         {org?.logoUrl && <img src={org.logoUrl} alt="" className={styles.workspaceLogo} />}
-        <span>{org?.name ?? "Avatrain"}</span>
+        <span>{org?.name ?? t("sessionsSidebar.workspaceFallback")}</span>
       </div>
 
       {!personaDismissed && (
@@ -72,13 +75,13 @@ export function Sidebar({ org }: SidebarProps) {
             <SparkleIcon size={16} />
           </span>
           <div className={styles.personaMeta}>
-            <span className={styles.personaName}>AI Nancy</span>
-            <span className={styles.personaSubtitle}>ENTERPRISE PLATFORM</span>
+            <span className={styles.personaName}>{t("sessionsSidebar.personaName")}</span>
+            <span className={styles.personaSubtitle}>{t("sessionsSidebar.personaSubtitle")}</span>
           </div>
           <button
             type="button"
             className={styles.personaClose}
-            aria-label="Dismiss"
+            aria-label={t("sessionsSidebar.personaDismissAriaLabel")}
             onClick={() => setPersonaDismissed(true)}
           >
             <CloseIcon size={14} />
@@ -88,74 +91,81 @@ export function Sidebar({ org }: SidebarProps) {
 
       <nav className={styles.nav}>
         <div className={styles.navGroup}>
-          <span className={styles.navLabel}>AI AVATAR HUB</span>
+          <span className={styles.navLabel}>{t("sessionsSidebar.groupAiAvatarHub")}</span>
           <a href="/sessions" className={activeHub === "new-chat" ? styles.navItemActive : styles.navItem}>
             <VideoIcon size={16} className={styles.navIcon} />
-            <span className={styles.navText}>New CHAT</span>
+            <span className={styles.navText}>{t("sessionsSidebar.navNewChat")}</span>
             {activeHub === "new-chat" && <ChevronRightIcon size={14} className={styles.navChevron} />}
           </a>
           <a href="/voice-ai" className={activeHub === "voice-ai" ? styles.navItemActive : styles.navItem}>
             <MicIcon size={16} className={styles.navIcon} />
-            <span className={styles.navText}>Voice AI</span>
+            <span className={styles.navText}>{t("sessionsSidebar.navVoiceAi")}</span>
             {activeHub === "voice-ai" && <ChevronRightIcon size={14} className={styles.navChevron} />}
           </a>
           <a href="/sessions" className={styles.navItem}>
             <BookmarkIcon size={16} className={styles.navIcon} />
-            <span className={styles.navText}>Saved Conversations</span>
+            <span className={styles.navText}>{t("sessionsSidebar.navSavedConversations")}</span>
           </a>
           <a href="/knowledge" className={activeHub === "knowledge" ? styles.navItemActive : styles.navItem}>
             <BookOpenIcon size={16} className={styles.navIcon} />
-            <span className={styles.navText}>Knowledge Base</span>
+            <span className={styles.navText}>{t("sessionsSidebar.navKnowledgeBase")}</span>
             {activeHub === "knowledge" && <ChevronRightIcon size={14} className={styles.navChevron} />}
           </a>
           <a href="/avatars" className={activeHub === "avatars" ? styles.navItemActive : styles.navItem}>
             <UserIcon size={16} className={styles.navIcon} />
-            <span className={styles.navText}>Avatars</span>
+            <span className={styles.navText}>{t("sessionsSidebar.navAvatars")}</span>
             {activeHub === "avatars" && <ChevronRightIcon size={14} className={styles.navChevron} />}
           </a>
         </div>
 
         <div className={styles.navGroup}>
-          <span className={styles.navLabel}>MAIN</span>
+          <span className={styles.navLabel}>{t("sessionsSidebar.groupMain")}</span>
           <a href="/" className={activeHub === "dashboard" ? styles.navItemActive : styles.navItem}>
             <GridIcon size={16} className={styles.navIcon} />
-            <span className={styles.navText}>Dashboard</span>
+            <span className={styles.navText}>{t("sessionsSidebar.navDashboard")}</span>
             {activeHub === "dashboard" && <ChevronRightIcon size={14} className={styles.navChevron} />}
           </a>
         </div>
 
         <div className={styles.navGroup}>
-          <span className={styles.navLabel}>ACCOUNT</span>
+          <span className={styles.navLabel}>{t("sessionsSidebar.groupAccount")}</span>
           <a href="/" className={styles.navItem}>
             <BellIcon size={16} className={styles.navIcon} />
-            <span className={styles.navText}>Notifications</span>
+            <span className={styles.navText}>{t("sessionsSidebar.navNotifications")}</span>
           </a>
           <a href="/" className={styles.navItem}>
             <HelpCircleIcon size={16} className={styles.navIcon} />
-            <span className={styles.navText}>Help Center</span>
+            <span className={styles.navText}>{t("sessionsSidebar.navHelpCenter")}</span>
           </a>
           <a href="/" className={styles.navItem}>
             <UserIcon size={16} className={styles.navIcon} />
-            <span className={styles.navText}>Profile</span>
+            <span className={styles.navText}>{t("sessionsSidebar.navProfile")}</span>
           </a>
         </div>
       </nav>
+
+      <LocaleSwitcher className={styles.localeToggle} />
 
       <div className={styles.userCard}>
         <span className={styles.userAvatar}>R</span>
         <div className={styles.userMeta}>
           <span className={styles.userName}>Rahul Sharma</span>
-          <span className={styles.userRole}>Sales Team</span>
+          <span className={styles.userRole}>{t("sessionsSidebar.userRole")}</span>
         </div>
         <button
           type="button"
           className={styles.userSettings}
-          aria-label="Settings"
+          aria-label={t("sessionsSidebar.settingsAriaLabel")}
           onClick={() => window.location.assign("/settings")}
         >
           <GearIcon size={16} />
         </button>
-        <button type="button" className={styles.userLogout} aria-label="Log out" onClick={() => void handleLogout()}>
+        <button
+          type="button"
+          className={styles.userLogout}
+          aria-label={t("sessionsSidebar.logoutAriaLabel")}
+          onClick={() => void handleLogout()}
+        >
           <LogOutIcon size={16} />
         </button>
       </div>

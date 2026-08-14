@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { getMe } from "../../lib/server-api";
 import { orgAccentStyle } from "../../lib/org-theme";
+import { resolveLocale } from "../../lib/locale/dictionaries";
+import { LocaleProvider } from "../../lib/locale/LocaleProvider";
 import { Sidebar } from "../sessions/Sidebar";
 import styles from "../sessions/layout.module.css";
 import tokens from "../sessions/tokens.module.css";
@@ -23,8 +25,10 @@ export default async function VoiceAiLayout({ children }: { children: ReactNode 
   const me = await getMe();
   return (
     <div className={`${tokens.tokens} ${styles.shell}`} style={orgAccentStyle(me?.org)}>
-      <Sidebar org={me?.org} />
-      <div className={styles.content}>{children}</div>
+      <LocaleProvider initialLocale={resolveLocale(me?.user.uiLocale)}>
+        <Sidebar org={me?.org} />
+        <div className={styles.content}>{children}</div>
+      </LocaleProvider>
     </div>
   );
 }

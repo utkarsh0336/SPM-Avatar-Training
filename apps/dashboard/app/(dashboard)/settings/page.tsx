@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getMe } from "../../../lib/server-api";
+import { getTranslator, resolveLocale } from "../../../lib/locale/dictionaries";
 import { BrandingForm } from "./BrandingForm";
 import styles from "./page.module.css";
 
@@ -21,36 +22,30 @@ export default async function SettingsPage() {
   if (!me) redirect("/login");
   if (me.role !== "OWNER") redirect("/");
 
+  const t = getTranslator(resolveLocale(me.user.uiLocale));
+
   return (
     <div className={styles.root}>
       <div className={styles.hero}>
-        <span className={styles.eyebrow}>SETTINGS</span>
-        <h1 className={styles.title}>Organization Branding</h1>
-        <p className={styles.subtitle}>
-          Customize how {me.org.name} looks across the AI Avatar workspace.
-        </p>
+        <span className={styles.eyebrow}>{t("settingsPage.eyebrow")}</span>
+        <h1 className={styles.title}>{t("settingsPage.title")}</h1>
+        <p className={styles.subtitle}>{t("settingsPage.subtitle", { orgName: me.org.name })}</p>
       </div>
       <BrandingForm initialOrg={me.org} />
 
       <div className={styles.form}>
-        <span className={styles.label}>EMBED ON A WEBSITE</span>
-        <p className={styles.subtitle}>
-          Put {me.org.name}&rsquo;s AI avatar on any site — create a publishable key, pin a persona, and allowlist
-          the origins that may load it.
-        </p>
+        <span className={styles.label}>{t("settingsPage.embedLabel")}</span>
+        <p className={styles.subtitle}>{t("settingsPage.embedSubtitle", { orgName: me.org.name })}</p>
         <Link href="/settings/embed" className={styles.submit}>
-          Manage Embeds
+          {t("settingsPage.manageEmbeds")}
         </Link>
       </div>
 
       <div className={styles.form}>
-        <span className={styles.label}>MEMBERS</span>
-        <p className={styles.subtitle}>
-          Invite teammates as a Member, or an external partner/distributor as a read-only Partner scoped to your
-          partner-enablement curricula.
-        </p>
+        <span className={styles.label}>{t("settingsPage.membersLabel")}</span>
+        <p className={styles.subtitle}>{t("settingsPage.membersSubtitle")}</p>
         <Link href="/settings/members" className={styles.submit}>
-          Manage Members
+          {t("settingsPage.manageMembers")}
         </Link>
       </div>
     </div>

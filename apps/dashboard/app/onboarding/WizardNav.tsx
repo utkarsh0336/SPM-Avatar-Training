@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useTranslation } from "../../lib/locale/LocaleProvider";
 import styles from "./WizardNav.module.css";
 import { ArrowLeftIcon, ArrowRightIcon } from "./icons";
 
@@ -19,19 +20,20 @@ export function WizardNav({
   onContinue,
   backDisabled = false,
   continueDisabled = false,
-  continueLabel = "Continue",
+  continueLabel,
   continueIcon = <ArrowRightIcon size={16} />,
   continueIconPosition = "end",
 }: WizardNavProps) {
+  const { t } = useTranslation();
   return (
     <div className={styles.nav}>
       <button type="button" className={styles.back} onClick={onBack} disabled={backDisabled}>
         <ArrowLeftIcon size={16} />
-        Back
+        {t("wizardNav.back")}
       </button>
       <button type="button" className={styles.continue} onClick={onContinue} disabled={continueDisabled}>
         {continueIconPosition === "start" && continueIcon}
-        {continueLabel}
+        {continueLabel ?? t("wizardNav.continue")}
         {continueIconPosition === "end" && continueIcon}
       </button>
     </div>
