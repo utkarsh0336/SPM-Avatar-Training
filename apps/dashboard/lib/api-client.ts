@@ -37,6 +37,7 @@ import {
   listAvatarsResponseSchema,
   listCurriculaResponseSchema,
   listCurriculumProgressResponseSchema,
+  listRecommendedAvatarsResponseSchema,
   replaceChecklistItemsResponseSchema,
   replaceCurriculumObjectivesResponseSchema,
   type ChecklistItemInput,
@@ -50,6 +51,7 @@ import {
   type ListAvatarsResponse,
   type ListCurriculaResponse,
   type ListCurriculumProgressResponse,
+  type ListRecommendedAvatarsResponse,
   type ObjectiveInput,
   type ReplaceChecklistItemsResponse,
   type ReplaceCurriculumObjectivesResponse,
@@ -399,6 +401,17 @@ export async function getAvatar(avatarId: string): Promise<AvatarRecord> {
 export async function listOrgAvatars(): Promise<ListMyAvatarsResponse> {
   const result = await apiFetch<unknown>("/avatars/all", { method: "GET" });
   return listMyAvatarsResponseSchema.parse(result);
+}
+
+/**
+ * GET /v1/avatars/recommended — any authenticated org member. Every ACTIVE avatar available to
+ * the caller (PARTNER narrowed to PARTNER_ENABLEMENT), annotated with the caller's own
+ * recommendationTier and sorted by it. Powers NewSessionModal.tsx's Persona picker — see
+ * .claude/specs/personalized-recommendation-engine.md.
+ */
+export async function getRecommendedAvatars(): Promise<ListRecommendedAvatarsResponse> {
+  const result = await apiFetch<unknown>("/avatars/recommended", { method: "GET" });
+  return listRecommendedAvatarsResponseSchema.parse(result);
 }
 
 /** POST /v1/avatars — OWNER only. Creates a blank DRAFT persona, ungated by onboarding's one-time-completion check. */

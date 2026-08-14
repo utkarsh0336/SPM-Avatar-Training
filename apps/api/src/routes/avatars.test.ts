@@ -566,3 +566,193 @@ describe("POST /v1/avatars/:avatarId/archive", () => {
     expect(response.statusCode).toBe(404);
   });
 });
+
+/**
+ * Creates an ACTIVE avatar with a Curriculum of `objectiveCount` objectives (no progress rows —
+ * callers add those separately per learner). See
+ * .claude/specs/personalized-recommendation-engine.md.
+ */
+async function seedAvatarWithCurriculum(
+  orgId: string,
+  userId: string,
+  objectiveCount: number,
+  overrides: { programType?: "EMPLOYEE_ONBOARDING" | "COMPLIANCE_TRAINING" | "CUSTOMER_EDUCATION" | "PARTNER_ENABLEMENT" } = {},
+) {
+  const avatar = await withAuthContext({ orgId, userId }, (tx) =>
+    tx.avatar.create({ data: { orgId, createdById: userId, name: "Recommended Avatar", status: "ACTIVE" } }),
+  );
+  const curriculum = await withAuthContext({ orgId, userId }, (tx) =>
+    tx.curriculum.create({
+      data: { orgId, avatarId: avatar.id, createdById: userId, title: "X", programType: overrides.programType },
+    }),
+  );
+  const objectives = await withAuthContext({ orgId, userId }, (tx) =>
+    Promise.all(
+      Array.from({ length: objectiveCount }, (_, i) =>
+        tx.objective.create({
+          data: {
+            orgId,
+            curriculumId: curriculum.id,
+            order: i,
+            title: `Objective ${i}`,
+            teachingContent: "T",
+            checkQuestion: "Q",
+            gradingCriteria: "G",
+          },
+        }),
+      ),
+    ),
+  );
+  return { avatar, curriculum, objectives };
+}
+
+async function recordProgress(
+  orgId: string,
+  objectiveId: string,
+  learnerId: string,
+  verdict: "PASS" | "RETRY",
+) {
+  await withAuthContext({ orgId }, (tx) =>
+    tx.objectiveProgress.create({
+      data: { orgId, objectiveId, learnerId, verdict, attempts: 1, feedback: "Feedback." },
+    }),
+  );
+}
+
+describe("GET /v1/avatars/recommended", () => {
+  it("requires authentication", async () => {
+    const response = await app.inject({ method: "GET", url: "/v1/avatars/recommended" });
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("does not require OWNER — a MEMBER can discover the org's whole avatar catalog, unlike every other avatar-listing route", async () => {
+    const { orgId, userId } = await seedOrgWithSessionToken("Recommended Member Org");
+    await seedAvatarWithCurriculum(orgId, userId, 1);
+    const member = await seedTeammateSessionToken(orgId, "MEMBER");
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/avatars/recommended",
+      cookies: { avatrain_session: member.token },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().avatars).toHaveLength(1);
+  });
+
+  it("tags and sorts NEEDS_REVIEW, IN_PROGRESS, NOT_STARTED, COMPLETED, then NO_CURRICULUM", async () => {
+    const { orgId, userId } = await seedOrgWithSessionToken("Recommended Tiers Org");
+    const learner = await seedTeammateSessionToken(orgId, "MEMBER");
+
+    const completed = await seedAvatarWithCurriculum(orgId, userId, 1);
+    await recordProgress(orgId, completed.objectives[0]!.id, learner.userId, "PASS");
+
+    const notStarted = await seedAvatarWithCurriculum(orgId, userId, 1);
+
+    const needsReview = await seedAvatarWithCurriculum(orgId, userId, 2);
+    await recordProgress(orgId, needsReview.objectives[0]!.id, learner.userId, "PASS");
+    await recordProgress(orgId, needsReview.objectives[1]!.id, learner.userId, "RETRY");
+
+    const inProgress = await seedAvatarWithCurriculum(orgId, userId, 2);
+    await recordProgress(orgId, inProgress.objectives[0]!.id, learner.userId, "PASS");
+
+    const noCurriculum = await withAuthContext({ orgId, userId }, (tx) =>
+      tx.avatar.create({ data: { orgId, createdById: userId, name: "Q&A Only", status: "ACTIVE" } }),
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/avatars/recommended",
+      cookies: { avatrain_session: learner.token },
+    });
+    expect(response.statusCode).toBe(200);
+    const avatars = response.json().avatars as Array<{ id: string; recommendationTier: string; completedObjectiveCount: number }>;
+    expect(avatars.map((a) => a.id)).toEqual([
+      needsReview.avatar.id,
+      inProgress.avatar.id,
+      notStarted.avatar.id,
+      completed.avatar.id,
+      noCurriculum.id,
+    ]);
+    expect(avatars.map((a) => a.recommendationTier)).toEqual([
+      "NEEDS_REVIEW",
+      "IN_PROGRESS",
+      "NOT_STARTED",
+      "COMPLETED",
+      "NO_CURRICULUM",
+    ]);
+    expect(avatars.find((a) => a.id === needsReview.avatar.id)?.completedObjectiveCount).toBe(1);
+  });
+
+  it("computes tiers per-caller — two learners on the same curriculum see different tiers", async () => {
+    const { orgId, userId } = await seedOrgWithSessionToken("Recommended PerLearner Org");
+    const { avatar, objectives } = await seedAvatarWithCurriculum(orgId, userId, 1);
+    const learnerA = await seedTeammateSessionToken(orgId, "MEMBER");
+    const learnerB = await seedTeammateSessionToken(orgId, "MEMBER");
+    await recordProgress(orgId, objectives[0]!.id, learnerA.userId, "PASS");
+
+    const responseA = await app.inject({
+      method: "GET",
+      url: "/v1/avatars/recommended",
+      cookies: { avatrain_session: learnerA.token },
+    });
+    const responseB = await app.inject({
+      method: "GET",
+      url: "/v1/avatars/recommended",
+      cookies: { avatrain_session: learnerB.token },
+    });
+    expect(responseA.json().avatars.find((a: { id: string }) => a.id === avatar.id).recommendationTier).toBe("COMPLETED");
+    expect(responseB.json().avatars.find((a: { id: string }) => a.id === avatar.id).recommendationTier).toBe("NOT_STARTED");
+  });
+
+  it("PARTNER sees only avatars whose curriculum is PARTNER_ENABLEMENT; OWNER sees all", async () => {
+    const { token, orgId, userId } = await seedOrgWithSessionToken("Recommended Partner Org");
+    const partner = await seedTeammateSessionToken(orgId, "PARTNER");
+    await seedAvatarWithCurriculum(orgId, userId, 1, { programType: "PARTNER_ENABLEMENT" });
+    await seedAvatarWithCurriculum(orgId, userId, 1, { programType: "COMPLIANCE_TRAINING" });
+
+    const ownerResponse = await app.inject({
+      method: "GET",
+      url: "/v1/avatars/recommended",
+      cookies: { avatrain_session: token },
+    });
+    expect(ownerResponse.json().avatars).toHaveLength(2);
+
+    const partnerResponse = await app.inject({
+      method: "GET",
+      url: "/v1/avatars/recommended",
+      cookies: { avatrain_session: partner.token },
+    });
+    expect(partnerResponse.json().avatars).toHaveLength(1);
+    expect(partnerResponse.json().avatars[0].programType).toBe("PARTNER_ENABLEMENT");
+  });
+
+  it("excludes DRAFT and ARCHIVED avatars", async () => {
+    const { token, orgId, userId } = await seedOrgWithSessionToken("Recommended Status Org");
+    await withAuthContext({ orgId, userId }, (tx) =>
+      tx.avatar.create({ data: { orgId, createdById: userId, name: "Draft", status: "DRAFT" } }),
+    );
+    await withAuthContext({ orgId, userId }, (tx) =>
+      tx.avatar.create({ data: { orgId, createdById: userId, name: "Archived", status: "ARCHIVED" } }),
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/avatars/recommended",
+      cookies: { avatrain_session: token },
+    });
+    expect(response.json().avatars).toEqual([]);
+  });
+
+  it("two-org isolation: never returns another org's avatars or leaks their progress", async () => {
+    const { token } = await seedOrgWithSessionToken("Recommended Isolation Org");
+    const otherOrg = await seedOrgWithSessionToken("Recommended Isolation Other Org");
+    await seedAvatarWithCurriculum(otherOrg.orgId, otherOrg.userId, 1);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/avatars/recommended",
+      cookies: { avatrain_session: token },
+    });
+    expect(response.json().avatars).toEqual([]);
+  });
+});
