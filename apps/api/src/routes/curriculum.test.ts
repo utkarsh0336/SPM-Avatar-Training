@@ -114,6 +114,151 @@ describe("curriculum routes", () => {
       });
       expect(response.statusCode).toBe(409);
     });
+
+    it("defaults programType to null when omitted (no regression)", async () => {
+      const { token, orgId, userId } = await seedOrgWithSessionToken("Curriculum No ProgramType Org");
+      const avatarId = await seedAvatar(orgId, userId);
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/curricula",
+        cookies: { avatrain_session: token },
+        payload: { avatarId, title: "X" },
+      });
+      expect(response.statusCode).toBe(201);
+      expect(response.json()).toMatchObject({ programType: null });
+    });
+
+    it("rejects an invalid programType value", async () => {
+      const { token, orgId, userId } = await seedOrgWithSessionToken("Curriculum Invalid ProgramType Org");
+      const avatarId = await seedAvatar(orgId, userId);
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/curricula",
+        cookies: { avatrain_session: token },
+        payload: { avatarId, title: "X", programType: "NOT_A_REAL_TYPE" },
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
+    it.each(["EMPLOYEE_ONBOARDING", "COMPLIANCE_TRAINING", "CUSTOMER_EDUCATION", "PARTNER_ENABLEMENT"])(
+      "persists programType %s",
+      async (programType) => {
+        const { token, orgId, userId } = await seedOrgWithSessionToken(`Curriculum ProgramType ${programType} Org`);
+        const avatarId = await seedAvatar(orgId, userId);
+        const response = await app.inject({
+          method: "POST",
+          url: "/v1/curricula",
+          cookies: { avatrain_session: token },
+          payload: { avatarId, title: "X", programType },
+        });
+        expect(response.statusCode).toBe(201);
+        expect(response.json()).toMatchObject({ programType });
+      },
+    );
+  });
+
+  describe("PATCH /v1/curricula/:curriculumId", () => {
+    async function createCurriculum(token: string, avatarId: string): Promise<string> {
+      const create = await app.inject({
+        method: "POST",
+        url: "/v1/curricula",
+        cookies: { avatrain_session: token },
+        payload: { avatarId, title: "Original Title" },
+      });
+      return create.json().id as string;
+    }
+
+    it("updates title only", async () => {
+      const { token, orgId, userId } = await seedOrgWithSessionToken("Curriculum Patch Title Org");
+      const avatarId = await seedAvatar(orgId, userId);
+      const curriculumId = await createCurriculum(token, avatarId);
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/v1/curricula/${curriculumId}`,
+        cookies: { avatrain_session: token },
+        payload: { title: "New Title" },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ title: "New Title", programType: null });
+    });
+
+    it("updates programType only", async () => {
+      const { token, orgId, userId } = await seedOrgWithSessionToken("Curriculum Patch ProgramType Org");
+      const avatarId = await seedAvatar(orgId, userId);
+      const curriculumId = await createCurriculum(token, avatarId);
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/v1/curricula/${curriculumId}`,
+        cookies: { avatrain_session: token },
+        payload: { programType: "PARTNER_ENABLEMENT" },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ title: "Original Title", programType: "PARTNER_ENABLEMENT" });
+    });
+
+    it("updates both title and programType together", async () => {
+      const { token, orgId, userId } = await seedOrgWithSessionToken("Curriculum Patch Both Org");
+      const avatarId = await seedAvatar(orgId, userId);
+      const curriculumId = await createCurriculum(token, avatarId);
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/v1/curricula/${curriculumId}`,
+        cookies: { avatrain_session: token },
+        payload: { title: "New Title", programType: "COMPLIANCE_TRAINING" },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ title: "New Title", programType: "COMPLIANCE_TRAINING" });
+    });
+
+    it("clears programType back to null with an explicit null", async () => {
+      const { token, orgId, userId } = await seedOrgWithSessionToken("Curriculum Patch Clear Org");
+      const avatarId = await seedAvatar(orgId, userId);
+      const curriculumId = await createCurriculum(token, avatarId);
+
+      await app.inject({
+        method: "PATCH",
+        url: `/v1/curricula/${curriculumId}`,
+        cookies: { avatrain_session: token },
+        payload: { programType: "CUSTOMER_EDUCATION" },
+      });
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/v1/curricula/${curriculumId}`,
+        cookies: { avatrain_session: token },
+        payload: { programType: null },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ programType: null });
+    });
+
+    it("403s for a MEMBER caller", async () => {
+      const { token } = await seedOrgWithSessionToken("Curriculum Patch Member Org", "MEMBER");
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/v1/curricula/${randomUUID()}`,
+        cookies: { avatrain_session: token },
+        payload: { title: "X" },
+      });
+      expect(response.statusCode).toBe(403);
+    });
+
+    it("404s for a curriculum in another org", async () => {
+      const orgA = await seedOrgWithSessionToken("Curriculum Patch Isolation Org A");
+      const orgB = await seedOrgWithSessionToken("Curriculum Patch Isolation Org B");
+      const avatarId = await seedAvatar(orgA.orgId, orgA.userId);
+      const curriculumId = await createCurriculum(orgA.token, avatarId);
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/v1/curricula/${curriculumId}`,
+        cookies: { avatrain_session: orgB.token },
+        payload: { title: "Hijacked" },
+      });
+      expect(response.statusCode).toBe(404);
+    });
   });
 
   describe("GET/PUT/DELETE /v1/curricula/:curriculumId", () => {
