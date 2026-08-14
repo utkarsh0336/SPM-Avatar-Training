@@ -3,15 +3,27 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   ApiError,
+  createChecklist,
   createCurriculum,
+  deleteChecklist,
   deleteCurriculum,
+  getChecklist,
   getCurriculum,
   listActiveAvatars,
   listCurriculumProgress,
+  replaceChecklistItems,
   replaceCurriculumObjectives,
 } from "../../../lib/api-client";
-import type { AvatarSummary, CurriculumResult, ObjectiveInput, ObjectiveProgressEntry } from "@avatrain/shared/curriculum";
+import type {
+  AvatarSummary,
+  ChecklistItemInput,
+  ChecklistResult,
+  CurriculumResult,
+  ObjectiveInput,
+  ObjectiveProgressEntry,
+} from "@avatrain/shared/curriculum";
 import { ObjectiveList, type ObjectiveDraft } from "./ObjectiveList";
+import { ChecklistEditor, type ChecklistItemDraft } from "./ChecklistEditor";
 import { ProgressTable } from "./ProgressTable";
 import styles from "./page.module.css";
 
@@ -23,6 +35,15 @@ function toDrafts(curriculum: CurriculumResult): ObjectiveDraft[] {
     teachingContent: objective.teachingContent,
     checkQuestion: objective.checkQuestion,
     gradingCriteria: objective.gradingCriteria,
+  }));
+}
+
+function toChecklistDrafts(checklist: ChecklistResult): ChecklistItemDraft[] {
+  return checklist.items.map((item) => ({
+    key: item.id,
+    id: item.id,
+    title: item.title,
+    description: item.description ?? "",
   }));
 }
 
@@ -45,10 +66,16 @@ export function CurriculumEditor() {
   const [curriculum, setCurriculum] = useState<CurriculumResult | null>(null);
   const [objectives, setObjectives] = useState<ObjectiveDraft[]>([]);
   const [progress, setProgress] = useState<ObjectiveProgressEntry[]>([]);
+  const [checklist, setChecklist] = useState<ChecklistResult | null>(null);
+  const [checklistItems, setChecklistItems] = useState<ChecklistItemDraft[]>([]);
   const [newCurriculumTitle, setNewCurriculumTitle] = useState("");
+  const [newChecklistTitle, setNewChecklistTitle] = useState("");
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [creatingChecklist, setCreatingChecklist] = useState(false);
+  const [savingChecklist, setSavingChecklist] = useState(false);
+  const [deletingChecklist, setDeletingChecklist] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refreshAvatars = useCallback(async () => {
@@ -67,13 +94,16 @@ export function CurriculumEditor() {
   const selectedAvatar = avatars.find((avatar) => avatar.id === selectedAvatarId) ?? null;
 
   const loadCurriculumFor = useCallback(async (curriculumId: string) => {
-    const [loadedCurriculum, loadedProgress] = await Promise.all([
+    const [loadedCurriculum, loadedProgress, loadedChecklist] = await Promise.all([
       getCurriculum(curriculumId),
       listCurriculumProgress(curriculumId),
+      getChecklist(curriculumId),
     ]);
     setCurriculum(loadedCurriculum);
     setObjectives(toDrafts(loadedCurriculum));
     setProgress(loadedProgress.progress);
+    setChecklist(loadedChecklist);
+    setChecklistItems(loadedChecklist ? toChecklistDrafts(loadedChecklist) : []);
   }, []);
 
   useEffect(() => {
@@ -82,12 +112,16 @@ export function CurriculumEditor() {
       setCurriculum(null);
       setObjectives([]);
       setProgress([]);
+      setChecklist(null);
+      setChecklistItems([]);
       return;
     }
     if (!selectedAvatar.curriculumId) {
       setCurriculum(null);
       setObjectives([]);
       setProgress([]);
+      setChecklist(null);
+      setChecklistItems([]);
       return;
     }
     void loadCurriculumFor(selectedAvatar.curriculumId).catch((err: unknown) => setError(humanizeError(err)));
@@ -153,6 +187,58 @@ export function CurriculumEditor() {
       setError(humanizeError(err));
     } finally {
       setDeleting(false);
+    }
+  }
+
+  async function handleCreateChecklist(): Promise<void> {
+    if (!curriculum || !newChecklistTitle.trim()) return;
+    setCreatingChecklist(true);
+    setError(null);
+    try {
+      const created = await createChecklist(curriculum.id, newChecklistTitle.trim());
+      setNewChecklistTitle("");
+      setChecklist({ id: created.id, curriculumId: created.curriculumId, title: created.title, items: [], createdAt: "", updatedAt: "" });
+      setChecklistItems([]);
+    } catch (err) {
+      setError(humanizeError(err));
+    } finally {
+      setCreatingChecklist(false);
+    }
+  }
+
+  async function handleSaveChecklistItems(): Promise<void> {
+    if (!curriculum) return;
+    setSavingChecklist(true);
+    setError(null);
+    try {
+      const input: ChecklistItemInput[] = checklistItems.map((draft) => ({
+        id: draft.id,
+        title: draft.title,
+        description: draft.description.trim() ? draft.description : undefined,
+      }));
+      const result = await replaceChecklistItems(curriculum.id, input);
+      setChecklistItems(
+        result.items.map((item) => ({ key: item.id, id: item.id, title: item.title, description: item.description ?? "" })),
+      );
+    } catch (err) {
+      setError(humanizeError(err));
+    } finally {
+      setSavingChecklist(false);
+    }
+  }
+
+  async function handleDeleteChecklist(): Promise<void> {
+    if (!curriculum) return;
+    setDeletingChecklist(true);
+    setError(null);
+    try {
+      await deleteChecklist(curriculum.id);
+      setChecklist(null);
+      setChecklistItems([]);
+    } catch (err) {
+      setError(humanizeError(err));
+    } finally {
+      setDeletingChecklist(false);
     }
   }
 
@@ -224,6 +310,54 @@ export function CurriculumEditor() {
           <button type="button" className={styles.primaryButton} disabled={saving} onClick={() => void handleSaveObjectives()}>
             {saving ? "Saving…" : "Save Objectives"}
           </button>
+
+          {!checklist && (
+            <div className={styles.createCard}>
+              <p className={styles.createLabel}>This curriculum has no induction checklist yet.</p>
+              <input
+                type="text"
+                className={styles.textInput}
+                placeholder="Checklist title, e.g. Day One Induction"
+                value={newChecklistTitle}
+                onChange={(e) => setNewChecklistTitle(e.target.value)}
+              />
+              <button
+                type="button"
+                className={styles.primaryButton}
+                disabled={creatingChecklist || !newChecklistTitle.trim()}
+                onClick={() => void handleCreateChecklist()}
+              >
+                {creatingChecklist ? "Creating…" : "Create Checklist"}
+              </button>
+            </div>
+          )}
+
+          {checklist && (
+            <>
+              <div className={styles.curriculumHeader}>
+                <h2 className={styles.curriculumTitle}>{checklist.title}</h2>
+                <button
+                  type="button"
+                  className={styles.dangerButton}
+                  disabled={deletingChecklist}
+                  onClick={() => void handleDeleteChecklist()}
+                >
+                  {deletingChecklist ? "Deleting…" : "Delete Checklist"}
+                </button>
+              </div>
+
+              <ChecklistEditor items={checklistItems} onChange={setChecklistItems} />
+
+              <button
+                type="button"
+                className={styles.primaryButton}
+                disabled={savingChecklist}
+                onClick={() => void handleSaveChecklistItems()}
+              >
+                {savingChecklist ? "Saving…" : "Save Checklist Items"}
+              </button>
+            </>
+          )}
 
           <ProgressTable progress={progress} />
         </>
