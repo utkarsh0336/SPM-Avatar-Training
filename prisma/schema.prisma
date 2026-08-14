@@ -182,6 +182,9 @@ model Organization {
   curricula           Curriculum[]
   objectives          Objective[]
   objectiveProgresses ObjectiveProgress[]
+  inductionChecklists InductionChecklist[]
+  checklistItems      ChecklistItem[]
+  checklistItemProgresses ChecklistItemProgress[]
 
   @@map("organizations")
 }
@@ -237,6 +240,7 @@ model User {
   sessions            Session[]
   oauthAccounts       OAuthAccount[]
   objectiveProgresses ObjectiveProgress[]
+  checklistItemProgresses ChecklistItemProgress[]
 
   @@map("users")
 }
@@ -460,6 +464,7 @@ model Curriculum {
   organization Organization @relation(fields: [orgId], references: [id])
   avatar       Avatar       @relation(fields: [avatarId], references: [id])
   objectives   Objective[]
+  checklist    InductionChecklist?
 
   @@index([orgId])
   @@index([orgId, programType])
@@ -517,4 +522,73 @@ model ObjectiveProgress {
   @@index([orgId])
   @@index([learnerId])
   @@map("objective_progress")
+}
+
+/// Tenant-scoped. org_id + RLS policy required — see .claude/rules/tenancy.md. Owned by
+/// .claude/specs/induction-checklist.md. One optional checklist per Curriculum (nullable 1:1,
+/// mirroring Curriculum's own 1:1-per-Avatar shape) — a structured, non-conversational set of
+/// tasks a learner checks off directly, distinct from Objective's AI-graded checkpoints. Not the
+/// same concept as .claude/specs/onboarding.md's trainer-facing avatar-configuration wizard.
+model InductionChecklist {
+  id           String   @id @default(uuid()) @db.Uuid
+  orgId        String   @map("org_id") @db.Uuid
+  curriculumId String   @unique @map("curriculum_id") @db.Uuid
+  createdById  String   @map("created_by_id") @db.Uuid
+  title        String
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [orgId], references: [id])
+  curriculum   Curriculum   @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
+  items        ChecklistItem[]
+
+  @@index([orgId])
+  @@map("induction_checklists")
+}
+
+/// Tenant-scoped. org_id + RLS policy required — see .claude/rules/tenancy.md. Owned by
+/// .claude/specs/induction-checklist.md. orgId denormalized from InductionChecklist, same
+/// reasoning as Objective. One discrete, self-attested task within a checklist.
+model ChecklistItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  orgId       String   @map("org_id") @db.Uuid
+  checklistId String   @map("checklist_id") @db.Uuid
+  order       Int
+  title       String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  organization Organization         @relation(fields: [orgId], references: [id])
+  checklist    InductionChecklist   @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  progress     ChecklistItemProgress[]
+
+  @@unique([checklistId, order])
+  @@index([orgId])
+  @@index([checklistId])
+  @@map("checklist_items")
+}
+
+/// Tenant-scoped. org_id + RLS policy required — see .claude/rules/tenancy.md. Owned by
+/// .claude/specs/induction-checklist.md. Self-attested completion — the learner clicking "done",
+/// not a server-graded verdict like ObjectiveProgress — so completedAt is written by a plain
+/// authenticated endpoint, never the serverOnly tool-call machinery record_progress uses.
+/// completedAt null means not completed; set means completed. One row per (item, learner).
+model ChecklistItemProgress {
+  id          String    @id @default(uuid()) @db.Uuid
+  orgId       String    @map("org_id") @db.Uuid
+  itemId      String    @map("item_id") @db.Uuid
+  learnerId   String    @map("learner_id") @db.Uuid
+  completedAt DateTime? @map("completed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  organization Organization  @relation(fields: [orgId], references: [id])
+  item         ChecklistItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  learner      User          @relation(fields: [learnerId], references: [id])
+
+  @@unique([itemId, learnerId])
+  @@index([orgId])
+  @@index([learnerId])
+  @@map("checklist_item_progress")
 }

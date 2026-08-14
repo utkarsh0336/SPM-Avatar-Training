@@ -11,6 +11,8 @@ interface ConversationSessionContextValue {
   captionText: string;
   amplitude: number;
   avatarContainerRef: RefObject<HTMLDivElement>;
+  /** Passed straight through from the provider's own prop — see .claude/specs/induction-checklist.md's ChecklistPanel. */
+  avatarId?: string | null;
 }
 
 const ConversationSessionContext = createContext<ConversationSessionContextValue | null>(null);
@@ -40,7 +42,7 @@ export function ConversationSessionProvider({
   const session = useConversationSession({ trainingSessionId, topic, containerRef: avatarContainerRef, muted, avatarId });
 
   return (
-    <ConversationSessionContext.Provider value={{ ...session, avatarContainerRef }}>
+    <ConversationSessionContext.Provider value={{ ...session, avatarContainerRef, avatarId }}>
       {children}
     </ConversationSessionContext.Provider>
   );

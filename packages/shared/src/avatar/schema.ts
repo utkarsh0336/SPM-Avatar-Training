@@ -45,6 +45,12 @@ export const avatarRecordSchema = z.object({
   // prisma/schema.prisma's AvatarStatus.ARCHIVED doc comment.
   status: z.enum(["DRAFT", "ACTIVE", "ARCHIVED"]),
   simliFaceId: z.string().nullable(),
+  // Only populated by GET /v1/avatars/:avatarId — resolves this avatar's
+  // Curriculum for .claude/specs/induction-checklist.md's ChecklistPanel
+  // (a rehearsal session only knows its avatarId, not a curriculumId).
+  // Optional so getMyAvatars/listOrgAvatars' plain findMany responses
+  // (which don't fetch the curriculum relation) still validate.
+  curriculumId: z.string().uuid().nullable().optional(),
 });
 export type AvatarRecord = z.infer<typeof avatarRecordSchema>;
 

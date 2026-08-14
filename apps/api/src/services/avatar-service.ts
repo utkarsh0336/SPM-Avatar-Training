@@ -105,11 +105,15 @@ export async function listOrgAvatars(orgId: string): Promise<AvatarRecord[]> {
  * avatars (not scoped to the caller's createdById — a session or a future
  * persona picker needs to resolve avatars other than "my own"). RLS still
  * enforces org isolation; withOrg is what makes that enforceable here.
+ * Includes curriculumId (unlike getMyAvatars/listOrgAvatars) — a live
+ * rehearsal session only knows its avatarId, and
+ * .claude/specs/induction-checklist.md's ChecklistPanel needs to resolve
+ * the curriculum from it.
  */
 export async function getAvatarById(orgId: string, avatarId: string): Promise<AvatarRecord | null> {
   return withOrg(orgId, async (tx) => {
-    const avatar = await tx.avatar.findFirst({ where: { orgId, id: avatarId } });
-    return avatar ? toAvatarRecord(avatar) : null;
+    const avatar = await tx.avatar.findFirst({ where: { orgId, id: avatarId }, include: { curriculum: true } });
+    return avatar ? { ...toAvatarRecord(avatar), curriculumId: avatar.curriculum?.id ?? null } : null;
   });
 }
 

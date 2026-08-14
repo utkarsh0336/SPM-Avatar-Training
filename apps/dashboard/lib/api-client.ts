@@ -28,17 +28,26 @@ import {
   type UploadKnowledgeDocumentVersionResponse,
 } from "@avatrain/shared/knowledge";
 import {
+  checklistResultSchema,
+  completeChecklistItemResponseSchema,
+  createChecklistResponseSchema,
   createCurriculumResponseSchema,
   curriculumSchema,
   listAvatarsResponseSchema,
   listCurriculumProgressResponseSchema,
+  replaceChecklistItemsResponseSchema,
   replaceCurriculumObjectivesResponseSchema,
+  type ChecklistItemInput,
+  type ChecklistResult,
+  type CompleteChecklistItemResponse,
+  type CreateChecklistResponse,
   type CreateCurriculumRequest,
   type CreateCurriculumResponse,
   type CurriculumResult,
   type ListAvatarsResponse,
   type ListCurriculumProgressResponse,
   type ObjectiveInput,
+  type ReplaceChecklistItemsResponse,
   type ReplaceCurriculumObjectivesResponse,
   type UpdateCurriculumRequest,
 } from "@avatrain/shared/curriculum";
@@ -477,6 +486,65 @@ export async function deleteCurriculum(curriculumId: string): Promise<void> {
     const body = (await response.json().catch(() => ({ error: "unknown_error" }))) as ApiErrorBody;
     throw new ApiError(response.status, body);
   }
+}
+
+/**
+ * GET /v1/curricula/:id/checklist — any authenticated org member. Returns
+ * null (not a thrown ApiError) for the common "no checklist authored yet"
+ * case, so callers get a single truthiness check, same convention as
+ * curriculum-service.ts's own getCurriculumForAvatar. See
+ * .claude/specs/induction-checklist.md.
+ */
+export async function getChecklist(curriculumId: string): Promise<ChecklistResult | null> {
+  try {
+    const result = await apiFetch<unknown>(`/curricula/${curriculumId}/checklist`, { method: "GET" });
+    return checklistResultSchema.parse(result);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+/** POST /v1/curricula/:id/checklist — OWNER only. 409s if one already exists. */
+export async function createChecklist(curriculumId: string, title: string): Promise<CreateChecklistResponse> {
+  const result = await apiFetch<unknown>(`/curricula/${curriculumId}/checklist`, {
+    method: "POST",
+    body: JSON.stringify({ title }),
+  });
+  return createChecklistResponseSchema.parse(result);
+}
+
+/** PUT /v1/curricula/:id/checklist/items — OWNER only. Replace-the-whole-list semantics. */
+export async function replaceChecklistItems(
+  curriculumId: string,
+  items: ChecklistItemInput[],
+): Promise<ReplaceChecklistItemsResponse> {
+  const result = await apiFetch<unknown>(`/curricula/${curriculumId}/checklist/items`, {
+    method: "PUT",
+    body: JSON.stringify({ items }),
+  });
+  return replaceChecklistItemsResponseSchema.parse(result);
+}
+
+/**
+ * DELETE /v1/curricula/:id/checklist — OWNER only. 204 No Content. Bypasses
+ * apiFetch, same reasoning as deleteCurriculum.
+ */
+export async function deleteChecklist(curriculumId: string): Promise<void> {
+  const response = await fetch(`/api/curricula/${curriculumId}/checklist`, { method: "DELETE" });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({ error: "unknown_error" }))) as ApiErrorBody;
+    throw new ApiError(response.status, body);
+  }
+}
+
+/** PATCH /v1/checklist-items/:itemId/complete — any authenticated org member, own progress only. */
+export async function completeChecklistItem(itemId: string, completed: boolean): Promise<CompleteChecklistItemResponse> {
+  const result = await apiFetch<unknown>(`/checklist-items/${itemId}/complete`, {
+    method: "PATCH",
+    body: JSON.stringify({ completed }),
+  });
+  return completeChecklistItemResponseSchema.parse(result);
 }
 
 /** GET /v1/curricula/:id/progress */
