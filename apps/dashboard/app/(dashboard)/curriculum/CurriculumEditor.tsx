@@ -115,6 +115,7 @@ function OwnerCurriculumEditor() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [savingProgramType, setSavingProgramType] = useState(false);
+  const [savingAdaptiveOrdering, setSavingAdaptiveOrdering] = useState(false);
   const [creatingChecklist, setCreatingChecklist] = useState(false);
   const [savingChecklist, setSavingChecklist] = useState(false);
   const [deletingChecklist, setDeletingChecklist] = useState(false);
@@ -206,6 +207,20 @@ function OwnerCurriculumEditor() {
       setError(humanizeError(err));
     } finally {
       setSavingProgramType(false);
+    }
+  }
+
+  async function handleChangeAdaptiveOrdering(next: boolean): Promise<void> {
+    if (!curriculum) return;
+    setSavingAdaptiveOrdering(true);
+    setError(null);
+    try {
+      const updated = await updateCurriculum(curriculum.id, { adaptiveOrderingEnabled: next });
+      setCurriculum(updated);
+    } catch (err) {
+      setError(humanizeError(err));
+    } finally {
+      setSavingAdaptiveOrdering(false);
     }
   }
 
@@ -393,6 +408,23 @@ function OwnerCurriculumEditor() {
             >
               {deleting ? "Deleting…" : "Delete Curriculum"}
             </button>
+          </div>
+
+          <div className={styles.adaptiveOrderingRow}>
+            <label className={styles.checkboxLabel}>
+              <input
+                type="checkbox"
+                checked={curriculum.adaptiveOrderingEnabled}
+                disabled={savingAdaptiveOrdering}
+                onChange={(e) => void handleChangeAdaptiveOrdering(e.target.checked)}
+              />
+              Adaptive ordering
+            </label>
+            <p className={styles.helperText}>
+              Reorders objectives per learner — needs-review first, then unattempted, then already
+              mastered. Only enable if these objectives don&apos;t depend on being taught in a strict
+              sequence.
+            </p>
           </div>
 
           <ObjectiveList objectives={objectives} onChange={setObjectives} />

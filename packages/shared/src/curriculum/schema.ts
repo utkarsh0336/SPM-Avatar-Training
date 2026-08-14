@@ -57,6 +57,10 @@ export const curriculumSchema = z.object({
   // Nullable, not optional — "uncategorized" is a real, displayable state
   // (see .claude/specs/training-catalog.md), not an absent field.
   programType: programTypeSchema.nullable(),
+  // Trainer opt-in: when true, session.start presents this curriculum's objectives to each
+  // learner in mastery-weighted order instead of strict authored order. Default false. See
+  // .claude/specs/adaptive-learning-paths.md.
+  adaptiveOrderingEnabled: z.boolean(),
   objectives: z.array(objectiveSchema),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -90,6 +94,7 @@ export type CurriculumIdParam = z.infer<typeof curriculumIdParamSchema>;
 export const updateCurriculumRequestSchema = z.object({
   title: z.string().min(1).optional(),
   programType: programTypeSchema.nullable().optional(),
+  adaptiveOrderingEnabled: z.boolean().optional(),
 });
 export type UpdateCurriculumRequest = z.infer<typeof updateCurriculumRequestSchema>;
 

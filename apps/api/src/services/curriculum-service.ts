@@ -57,6 +57,7 @@ function toCurriculumResult(
     avatarId: curriculum.avatarId,
     title: curriculum.title,
     programType: curriculum.programType,
+    adaptiveOrderingEnabled: curriculum.adaptiveOrderingEnabled,
     objectives: [...objectives]
       .sort((a, b) => a.order - b.order)
       .map((o) => toObjectiveResult(o, scenarioStepsByObjectiveId.get(o.id))),
@@ -210,6 +211,9 @@ export async function updateCurriculum(
       data: {
         ...(patch.title !== undefined ? { title: patch.title } : {}),
         ...(patch.programType !== undefined ? { programType: patch.programType } : {}),
+        ...(patch.adaptiveOrderingEnabled !== undefined
+          ? { adaptiveOrderingEnabled: patch.adaptiveOrderingEnabled }
+          : {}),
       },
     });
     const objectives = await tx.objective.findMany({ where: { curriculumId, orgId } });
@@ -319,6 +323,18 @@ export interface SessionCurriculum {
 }
 
 /**
+ * Sort weight for getCurriculumForAvatar's mastery-based reweighting, used only when the
+ * curriculum's adaptiveOrderingEnabled is true. Array.prototype.sort is stable, so objectives
+ * sharing a tier keep their authored relative order — this reweights the existing sequence
+ * rather than replacing it. See .claude/specs/adaptive-learning-paths.md.
+ */
+const MASTERY_TIER: Record<ObjectiveMasteryStatus, number> = {
+  NEEDS_REVIEW: 0,
+  NOT_STARTED: 1,
+  MASTERED: 2,
+};
+
+/**
  * Internal lookup for conversation-service.ts's session.start handler — not
  * a REST endpoint (no notFound/404: a missing curriculum is a normal,
  * silent "teach without checkpoints" case, not an error). Returns null
@@ -332,6 +348,11 @@ export interface SessionCurriculum {
  * (anonymous/embed sessions, which per .claude/rules/tenancy.md never have
  * ObjectiveProgress rows to begin with) skips the progress query entirely
  * and returns every objective NOT_STARTED — today's behavior, unchanged.
+ *
+ * When curriculum.adaptiveOrderingEnabled is set, the returned objectives are additionally
+ * reweighted by mastery tier (NEEDS_REVIEW, then NOT_STARTED, then MASTERED) rather than left in
+ * strict authored order — see .claude/specs/adaptive-learning-paths.md. Off by default, so an
+ * unset curriculum returns objectives in authored order exactly as before this field existed.
  */
 export async function getCurriculumForAvatar(
   orgId: string,
@@ -365,27 +386,31 @@ export async function getCurriculumForAvatar(
   >();
   for (const row of progressRows) progressByObjectiveId.set(row.objectiveId, row);
 
+  const annotatedObjectives = objectives.map((o) => {
+    const progress = progressByObjectiveId.get(o.id);
+    const status: ObjectiveMasteryStatus = !progress
+      ? "NOT_STARTED"
+      : progress.verdict === "PASS"
+        ? "MASTERED"
+        : "NEEDS_REVIEW";
+    return {
+      id: o.id,
+      title: o.title,
+      teachingContent: o.teachingContent,
+      checkQuestion: o.checkQuestion,
+      gradingCriteria: o.gradingCriteria,
+      scenarioSteps: scenarioStepsByObjectiveId.get(o.id) ?? [],
+      status,
+      ...(status === "NEEDS_REVIEW" ? { lastFeedback: progress!.feedback, attempts: progress!.attempts } : {}),
+      ...(status === "MASTERED" ? { attempts: progress!.attempts } : {}),
+    };
+  });
+
   return {
     curriculumId: curriculum.id,
-    objectives: objectives.map((o) => {
-      const progress = progressByObjectiveId.get(o.id);
-      const status: ObjectiveMasteryStatus = !progress
-        ? "NOT_STARTED"
-        : progress.verdict === "PASS"
-          ? "MASTERED"
-          : "NEEDS_REVIEW";
-      return {
-        id: o.id,
-        title: o.title,
-        teachingContent: o.teachingContent,
-        checkQuestion: o.checkQuestion,
-        gradingCriteria: o.gradingCriteria,
-        scenarioSteps: scenarioStepsByObjectiveId.get(o.id) ?? [],
-        status,
-        ...(status === "NEEDS_REVIEW" ? { lastFeedback: progress!.feedback, attempts: progress!.attempts } : {}),
-        ...(status === "MASTERED" ? { attempts: progress!.attempts } : {}),
-      };
-    }),
+    objectives: curriculum.adaptiveOrderingEnabled
+      ? [...annotatedObjectives].sort((a, b) => MASTERY_TIER[a.status] - MASTERY_TIER[b.status])
+      : annotatedObjectives,
   };
 }
 

@@ -466,6 +466,11 @@ model Curriculum {
   // "uncategorized", the same state every curriculum created before this
   // field existed is in; never backfilled.
   programType ProgramType? @map("program_type")
+  // Trainer opt-in: when true, getCurriculumForAvatar presents this curriculum's objectives to
+  // each learner in mastery-weighted order instead of strict authored `order`. Default false so
+  // every curriculum created before this field existed keeps today's behavior unchanged — see
+  // .claude/specs/adaptive-learning-paths.md.
+  adaptiveOrderingEnabled Boolean @default(false) @map("adaptive_ordering_enabled")
   createdAt   DateTime     @default(now()) @map("created_at")
   updatedAt   DateTime     @updatedAt @map("updated_at")
 
