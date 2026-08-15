@@ -3,6 +3,7 @@ import { getMe } from "../../../lib/server-api";
 import { UsageAnalyticsSummary } from "./UsageAnalyticsSummary";
 import { TrainingAnalyticsSummary } from "./TrainingAnalyticsSummary";
 import { PerformanceAnalyticsSummary } from "./PerformanceAnalyticsSummary";
+import { SatisfactionAnalyticsSummary } from "./SatisfactionAnalyticsSummary";
 import styles from "./page.module.css";
 
 export const metadata = {
@@ -28,16 +29,18 @@ export default async function AnalyticsPage() {
           Active users, conversations, and session duration reflect dashboard rehearsal activity in{" "}
           {me.org.name} — trainers testing their own avatars, not learners on your embedded widget. Knowledge
           area access reflects real usage across both. Participant counts, completion rates, and knowledge
-          gaps below reflect the same dashboard rehearsal activity, not real end-learners. AI Performance,
-          further below, is different: turn latency, grounded-reply rate, and knowledge-utilization trend are
-          all real, org-wide numbers from both your embedded widget and dashboard rehearsal — but
+          gaps below reflect the same dashboard rehearsal activity, not real end-learners. AI Performance and
+          User Satisfaction, further below, are different: turn latency, grounded-reply rate,
+          knowledge-utilization trend, and learner ratings are all real, org-wide numbers from your embedded
+          widget (ratings specifically come only from there, not dashboard rehearsal) — but
           &quot;grounded-reply rate&quot; measures whether a reply cited your uploaded material, not whether it
-          was factually correct, and user-satisfaction data isn&apos;t available yet.
+          was factually correct.
         </p>
       </div>
       <UsageAnalyticsSummary />
       <TrainingAnalyticsSummary />
       <PerformanceAnalyticsSummary />
+      <SatisfactionAnalyticsSummary />
     </div>
   );
 }

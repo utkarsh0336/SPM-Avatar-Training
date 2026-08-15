@@ -28,9 +28,29 @@ function readEmbedKey(): string {
 export function App() {
   const [embedKey] = useState(readEmbedKey);
   const [muted, setMuted] = useState(false);
+  // Local to this component, not the session hook — see .claude/specs/user-satisfaction.md's
+  // Overview: apps/widget had no "end session" affordance at all before this, so "Leave" opening
+  // this prompt (rather than disconnecting immediately) is what gives the rating somewhere to go.
+  const [showRatingPrompt, setShowRatingPrompt] = useState(false);
+  const [selectedRating, setSelectedRating] = useState<number | null>(null);
+  const [comment, setComment] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
-  const { status, captionText, amplitude, errorMessage } = useEmbedSession({ embedKey, containerRef, muted });
+  const { status, captionText, amplitude, errorMessage, endSession } = useEmbedSession({
+    embedKey,
+    containerRef,
+    muted,
+  });
+
+  function submitRating(): void {
+    endSession(selectedRating ?? undefined, comment.trim() || undefined);
+    setShowRatingPrompt(false);
+  }
+
+  function skipRating(): void {
+    endSession();
+    setShowRatingPrompt(false);
+  }
 
   // Tells the parent frame we're up. "*" as the targetOrigin is correct
   // here, not a shortcut: the widget legitimately can't know its embedding
@@ -66,6 +86,7 @@ export function App() {
   }
 
   const isSpeaking = status === "speaking";
+  const isLive = status === "connecting" || status === "listening" || status === "thinking" || status === "speaking";
 
   return (
     <main className={styles.root} ref={rootRef}>
@@ -84,18 +105,65 @@ export function App() {
         </p>
       )}
 
-      <div className={styles.controls}>
-        <span className={styles.statusPill}>{STATUS_LABEL[status] ?? status}</span>
-        <button
-          type="button"
-          className={muted ? styles.micButtonMuted : styles.micButton}
-          onClick={() => setMuted((m) => !m)}
-          aria-pressed={muted}
-          aria-label={muted ? "Unmute microphone" : "Mute microphone"}
-        >
-          {muted ? "Unmute" : "Mute"}
-        </button>
-      </div>
+      {showRatingPrompt ? (
+        <div className={styles.ratingPrompt} role="dialog" aria-label="Rate this session">
+          <p className={styles.ratingPromptTitle}>How was this session?</p>
+          <div className={styles.ratingStars} role="radiogroup" aria-label="Rating, 1 to 5 stars">
+            {[1, 2, 3, 4, 5].map((value) => (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={selectedRating === value}
+                aria-label={`${value} star${value === 1 ? "" : "s"}`}
+                className={styles.ratingStar}
+                onClick={() => setSelectedRating(value)}
+              >
+                {selectedRating !== null && value <= selectedRating ? "★" : "☆"}
+              </button>
+            ))}
+          </div>
+          <textarea
+            className={styles.ratingComment}
+            placeholder="Anything else you'd like to share? (optional)"
+            value={comment}
+            onChange={(event) => setComment(event.target.value)}
+            maxLength={500}
+            rows={2}
+          />
+          <div className={styles.ratingActions}>
+            <button type="button" className={styles.ratingSkipButton} onClick={skipRating}>
+              Skip
+            </button>
+            <button
+              type="button"
+              className={styles.ratingSubmitButton}
+              onClick={submitRating}
+              disabled={selectedRating === null}
+            >
+              Submit
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className={styles.controls}>
+          <span className={styles.statusPill}>{STATUS_LABEL[status] ?? status}</span>
+          <button
+            type="button"
+            className={muted ? styles.micButtonMuted : styles.micButton}
+            onClick={() => setMuted((m) => !m)}
+            aria-pressed={muted}
+            aria-label={muted ? "Unmute microphone" : "Mute microphone"}
+          >
+            {muted ? "Unmute" : "Mute"}
+          </button>
+          {isLive && (
+            <button type="button" className={styles.leaveButton} onClick={() => setShowRatingPrompt(true)}>
+              Leave
+            </button>
+          )}
+        </div>
+      )}
     </main>
   );
 }

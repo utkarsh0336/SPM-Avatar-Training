@@ -44,7 +44,7 @@ import {
 } from "./curriculum-service.js";
 import { getAvatarById } from "./avatar-service.js";
 import { persistTrainingSessionMessage } from "./training-session-service.js";
-import { recordKnowledgeAccess, recordTurnMetric } from "./analytics-service.js";
+import { recordKnowledgeAccess, recordSatisfactionRating, recordTurnMetric } from "./analytics-service.js";
 import {
   defaultTurnLatencyCircuitBreaker,
   startTurnLatencyWatchdog,
@@ -168,6 +168,13 @@ export interface ConversationHandlerDeps {
    * .claude/specs/ai-performance-analytics.md.
    */
   recordTurnMetric?: typeof recordTurnMetric;
+  /**
+   * Injectable for tests; defaults to the real ./analytics-service.js. Called fire-and-forget
+   * (`void`), never awaited, from the new "session.rate" case below. Like recordKnowledgeAccess
+   * and recordTurnMetric, fires regardless of trainingSessionId — see
+   * .claude/specs/user-satisfaction.md.
+   */
+  recordSatisfactionRating?: typeof recordSatisfactionRating;
   /**
    * Injectable for tests; defaults to the shared module-level singleton in
    * turn-latency-guard.ts, which must persist across connections/turns —
@@ -330,6 +337,7 @@ export function createConversationHandler(
   const persistMessage = deps.persistTrainingSessionMessage ?? persistTrainingSessionMessage;
   const recordAccess = deps.recordKnowledgeAccess ?? recordKnowledgeAccess;
   const recordMetric = deps.recordTurnMetric ?? recordTurnMetric;
+  const recordRating = deps.recordSatisfactionRating ?? recordSatisfactionRating;
   const messages: LLMMessage[] = [];
 
   /**
@@ -360,6 +368,16 @@ export function createConversationHandler(
     for (const source of sources) {
       void recordAccess(claims.orgId, source.documentId, trainingSessionId);
     }
+  }
+
+  /**
+   * Fire-and-forget, same posture as recordAccessedKnowledge above and for the same reason
+   * (.claude/rules/realtime.md: never block the audio path). Deliberately does NOT skip when
+   * trainingSessionId is null — an anonymous apps/widget embed session's rating is exactly the
+   * real usage .claude/specs/user-satisfaction.md's SatisfactionRating exists to capture.
+   */
+  function recordRatingSubmission(rating: number, comment: string | null): void {
+    void recordRating(claims.orgId, trainingSessionId, rating, comment);
   }
 
   let llm: LLMProvider | null = null;
@@ -1005,6 +1023,9 @@ ${step.branches.map((branch, index) => `${letters[index]}) ${branch.matchCriteri
           currentAbortController?.abort();
           send({ type: "turn.cancelled", utteranceId: message.utteranceId });
         }
+        break;
+      case "session.rate":
+        recordRatingSubmission(message.rating, message.comment ?? null);
         break;
       case "session.end":
         socket.close();

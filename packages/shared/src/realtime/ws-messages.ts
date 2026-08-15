@@ -80,12 +80,24 @@ export const sessionEndMessageSchema = z.object({
 });
 export type SessionEndMessage = z.infer<typeof sessionEndMessageSchema>;
 
+// Learner-submitted satisfaction rating for the session that's about to end — see
+// .claude/specs/user-satisfaction.md. Sent once, before session.end, over the same
+// ticket-authenticated connection rather than a new public HTTP route (no new auth path). No
+// server->client ack; fire-and-forget from the client, same posture as barge_in/session.end.
+export const sessionRateMessageSchema = z.object({
+  type: z.literal("session.rate"),
+  rating: z.number().int().min(1).max(5),
+  comment: z.string().max(500).optional(),
+});
+export type SessionRateMessage = z.infer<typeof sessionRateMessageSchema>;
+
 export const clientMessageSchema = z.discriminatedUnion("type", [
   sessionStartMessageSchema,
   audioChunkMessageSchema,
   textFallbackMessageSchema,
   bargeInMessageSchema,
   sessionEndMessageSchema,
+  sessionRateMessageSchema,
 ]);
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
 

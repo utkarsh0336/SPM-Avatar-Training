@@ -1,7 +1,10 @@
 import {
+  redact,
   withOrg,
   type KnowledgeArea,
   type PerformanceAnalyticsResponse,
+  type RatingDistributionPoint,
+  type SatisfactionAnalyticsResponse,
   type TrainingAnalyticsResponse,
   type UsageAnalyticsResponse,
 } from "@avatrain/shared";
@@ -352,5 +355,73 @@ export async function getPerformanceAnalytics(
     },
     groundedReplyRate: turnCount === 0 ? null : groundedCount / turnCount,
     knowledgeUtilizationTrend,
+  };
+}
+
+/**
+ * Fire-and-forget from conversation-service.ts's new "session.rate" WS message handler — see
+ * .claude/specs/user-satisfaction.md. Same try/catch-and-log-only posture as recordTurnMetric:
+ * never awaited by the caller, never throws. Unlike recordTurnMetric this is client-initiated
+ * (a learner's own submission), not a server-computed pipeline event, but the nullable-
+ * trainingSessionId/never-no-op posture is identical — an anonymous apps/widget embed session's
+ * rating is exactly the real usage this table exists to capture. `comment` is passed through
+ * redact() before insert, same convention as Message.content (.claude/rules/tenancy.md: "Redact
+ * PII before insert, never on read").
+ */
+export async function recordSatisfactionRating(
+  orgId: string,
+  trainingSessionId: string | null,
+  rating: number,
+  comment: string | null,
+): Promise<void> {
+  try {
+    await withOrg(orgId, (tx) =>
+      tx.satisfactionRating.create({
+        data: { orgId, trainingSessionId, rating, comment: comment ? redact(comment) : null },
+      }),
+    );
+  } catch (error) {
+    console.error("recordSatisfactionRating failed", { orgId }, error);
+  }
+}
+
+const RATING_VALUES = [1, 2, 3, 4, 5] as const;
+
+/**
+ * GET /v1/analytics/satisfaction — see .claude/specs/user-satisfaction.md. Uses Prisma's native
+ * groupBy on the `rating` Int column for the distribution (no raw SQL needed, unlike
+ * knowledgeUtilizationTrend's per-day bucketing above) — zero-filled for any rating value with no
+ * rows in the window, never omitted, same convention knowledgeUtilizationTrend's doc comment
+ * established. Every row this aggregates today comes from the public apps/widget embed (no
+ * dashboard rehearsal surface sends session.rate — see the spec's Overview), so this is real,
+ * org-wide data like getPerformanceAnalytics's fields, unlike getUsageAnalytics's/
+ * getTrainingAnalytics's TrainingSession/ObjectiveProgress-derived fields.
+ */
+export async function getSatisfactionAnalytics(
+  orgId: string,
+  windowDays: 7 | 30 | 90 = DEFAULT_WINDOW_DAYS,
+): Promise<SatisfactionAnalyticsResponse> {
+  const cutoff = windowStart(windowDays);
+  const where = { orgId, createdAt: { gte: cutoff } };
+
+  const [aggregate, grouped] = await withOrg(orgId, (tx) =>
+    Promise.all([
+      tx.satisfactionRating.aggregate({ where, _avg: { rating: true }, _count: true }),
+      tx.satisfactionRating.groupBy({ by: ["rating"], where, _count: true }),
+    ]),
+  );
+
+  const countByRating = new Map(grouped.map((row) => [row.rating, row._count]));
+  const ratingDistribution: RatingDistributionPoint[] = RATING_VALUES.map((rating) => ({
+    rating,
+    count: countByRating.get(rating) ?? 0,
+  }));
+
+  return {
+    windowDays,
+    generatedAt: new Date().toISOString(),
+    ratingCount: aggregate._count,
+    avgRating: aggregate._count === 0 ? null : aggregate._avg.rating,
+    ratingDistribution,
   };
 }

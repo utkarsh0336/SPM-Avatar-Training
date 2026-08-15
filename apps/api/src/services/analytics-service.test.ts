@@ -3,9 +3,11 @@ import { afterAll, describe, expect, it } from "vitest";
 import { prisma, setAuthContext, withAuthContext } from "@avatrain/shared";
 import {
   getPerformanceAnalytics,
+  getSatisfactionAnalytics,
   getTrainingAnalytics,
   getUsageAnalytics,
   recordKnowledgeAccess,
+  recordSatisfactionRating,
   recordTurnMetric,
 } from "./analytics-service.js";
 import { createCurriculum, replaceObjectives } from "./curriculum-service.js";
@@ -16,6 +18,7 @@ const createdUserIds: string[] = [];
 async function cleanup(): Promise<void> {
   for (const orgId of createdOrgIds) {
     await withAuthContext({ orgId }, async (tx) => {
+      await tx.satisfactionRating.deleteMany({ where: { orgId } });
       await tx.turnMetric.deleteMany({ where: { orgId } });
       await tx.knowledgeAccessEvent.deleteMany({ where: { orgId } });
       await tx.knowledgeDocument.deleteMany({ where: { orgId } });
@@ -499,6 +502,102 @@ describe("analytics-service", () => {
       const result = await getPerformanceAnalytics(orgA.orgId, 30);
       expect(result.turnCount).toBe(0);
       expect(result.groundedReplyRate).toBeNull();
+    });
+  });
+
+  describe("recordSatisfactionRating", () => {
+    it("writes a rating row when trainingSessionId is null (anonymous embed session) — does not no-op", async () => {
+      const { orgId } = await seedOrgAndUser("Record Satisfaction Rating Embed Org");
+
+      await recordSatisfactionRating(orgId, null, 5, "Loved it!");
+
+      const rows = await withAuthContext({ orgId }, (tx) => tx.satisfactionRating.findMany({ where: { orgId } }));
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ trainingSessionId: null, rating: 5, comment: "Loved it!" });
+    });
+
+    it("writes a rating row for a rehearsal session (trainingSessionId set)", async () => {
+      const { orgId, userId } = await seedOrgAndUser("Record Satisfaction Rating Rehearsal Org");
+      const session = await seedTrainingSession(orgId, userId);
+
+      await recordSatisfactionRating(orgId, session.id, 4, null);
+
+      const rows = await withAuthContext({ orgId }, (tx) => tx.satisfactionRating.findMany({ where: { orgId } }));
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ trainingSessionId: session.id, rating: 4, comment: null });
+    });
+
+    it("stores a null comment as null, not an empty string", async () => {
+      const { orgId } = await seedOrgAndUser("Record Satisfaction Rating No Comment Org");
+
+      await recordSatisfactionRating(orgId, null, 2, null);
+
+      const rows = await withAuthContext({ orgId }, (tx) => tx.satisfactionRating.findMany({ where: { orgId } }));
+      expect(rows[0]).toMatchObject({ comment: null });
+    });
+
+    it("swallows a write failure rather than throwing (never fails the realtime turn)", async () => {
+      const { orgId } = await seedOrgAndUser("Record Satisfaction Rating Failure Org");
+
+      await expect(recordSatisfactionRating(orgId, randomUUID(), 3, null)).resolves.toBeUndefined();
+    });
+  });
+
+  describe("getSatisfactionAnalytics", () => {
+    it("returns zeros, null avgRating, and a zero-filled 1-5 distribution for an org with no ratings", async () => {
+      const { orgId } = await seedOrgAndUser("Satisfaction Analytics Empty Org");
+
+      const result = await getSatisfactionAnalytics(orgId, 30);
+      expect(result.ratingCount).toBe(0);
+      expect(result.avgRating).toBeNull();
+      expect(result.ratingDistribution).toEqual([
+        { rating: 1, count: 0 },
+        { rating: 2, count: 0 },
+        { rating: 3, count: 0 },
+        { rating: 4, count: 0 },
+        { rating: 5, count: 0 },
+      ]);
+    });
+
+    it("averages ratings and buckets the distribution correctly", async () => {
+      const { orgId } = await seedOrgAndUser("Satisfaction Analytics Avg Org");
+      await recordSatisfactionRating(orgId, null, 5, null);
+      await recordSatisfactionRating(orgId, null, 5, null);
+      await recordSatisfactionRating(orgId, null, 1, null);
+
+      const result = await getSatisfactionAnalytics(orgId, 30);
+      expect(result.ratingCount).toBe(3);
+      expect(result.avgRating).toBeCloseTo(11 / 3, 5);
+      expect(result.ratingDistribution).toEqual([
+        { rating: 1, count: 1 },
+        { rating: 2, count: 0 },
+        { rating: 3, count: 0 },
+        { rating: 4, count: 0 },
+        { rating: 5, count: 2 },
+      ]);
+    });
+
+    it("excludes a rating recorded outside the window", async () => {
+      const { orgId } = await seedOrgAndUser("Satisfaction Analytics Window Org");
+      const outsideWindow = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+      await withAuthContext({ orgId }, (tx) =>
+        tx.satisfactionRating.create({ data: { orgId, rating: 5, createdAt: outsideWindow } }),
+      );
+      await recordSatisfactionRating(orgId, null, 2, null);
+
+      const result = await getSatisfactionAnalytics(orgId, 7);
+      expect(result.ratingCount).toBe(1);
+      expect(result.avgRating).toBe(2);
+    });
+
+    it("never includes another org's SatisfactionRating rows in the aggregate (two-org isolation)", async () => {
+      const orgA = await seedOrgAndUser("Satisfaction Analytics Isolation Org A");
+      const orgB = await seedOrgAndUser("Satisfaction Analytics Isolation Org B");
+      await recordSatisfactionRating(orgB.orgId, null, 5, null);
+
+      const result = await getSatisfactionAnalytics(orgA.orgId, 30);
+      expect(result.ratingCount).toBe(0);
+      expect(result.avgRating).toBeNull();
     });
   });
 });

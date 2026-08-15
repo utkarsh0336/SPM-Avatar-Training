@@ -94,3 +94,92 @@
   background: rgba(255, 255, 255, 0.1);
   color: #f4f4f6;
 }
+
+.leaveButton {
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: transparent;
+  color: #c7c9d9;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ratingPrompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 280px;
+  padding: 16px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ratingPromptTitle {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.ratingStars {
+  display: flex;
+  gap: 4px;
+}
+
+.ratingStar {
+  border: none;
+  background: transparent;
+  color: #7c5cff;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px;
+}
+
+.ratingComment {
+  box-sizing: border-box;
+  width: 100%;
+  resize: none;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.2);
+  color: #f4f4f6;
+  font-size: 12.5px;
+  font-family: inherit;
+}
+
+.ratingActions {
+  display: flex;
+  gap: 8px;
+  align-self: stretch;
+}
+
+.ratingSkipButton,
+.ratingSubmitButton {
+  flex: 1;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ratingSkipButton {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f4f4f6;
+}
+
+.ratingSubmitButton {
+  background: #7c5cff;
+  color: #fff;
+}
+
+.ratingSubmitButton:disabled {
+  background: rgba(124, 92, 255, 0.35);
+  cursor: not-allowed;
+}

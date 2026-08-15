@@ -90,9 +90,11 @@ import {
 } from "@avatrain/shared/training-session";
 import {
   performanceAnalyticsResponseSchema,
+  satisfactionAnalyticsResponseSchema,
   trainingAnalyticsResponseSchema,
   usageAnalyticsResponseSchema,
   type PerformanceAnalyticsResponse,
+  type SatisfactionAnalyticsResponse,
   type TrainingAnalyticsResponse,
   type UsageAnalyticsResponse,
 } from "@avatrain/shared/analytics";
@@ -720,6 +722,15 @@ export async function getTrainingAnalytics(): Promise<TrainingAnalyticsResponse>
 export async function getPerformanceAnalytics(days?: 7 | 30 | 90): Promise<PerformanceAnalyticsResponse> {
   const result = await apiFetch<unknown>(`/analytics/performance${days ? `?days=${days}` : ""}`, { method: "GET" });
   return performanceAnalyticsResponseSchema.parse(result);
+}
+
+/**
+ * GET /v1/analytics/satisfaction — OWNER-only. See .claude/specs/user-satisfaction.md. Windowed
+ * like getUsageAnalytics/getPerformanceAnalytics (SatisfactionRating volume is unbounded).
+ */
+export async function getSatisfactionAnalytics(days?: 7 | 30 | 90): Promise<SatisfactionAnalyticsResponse> {
+  const result = await apiFetch<unknown>(`/analytics/satisfaction${days ? `?days=${days}` : ""}`, { method: "GET" });
+  return satisfactionAnalyticsResponseSchema.parse(result);
 }
 
 /**

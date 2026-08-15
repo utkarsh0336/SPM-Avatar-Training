@@ -112,6 +112,13 @@ export interface ConnectConversationSessionOptions {
 }
 
 export interface ConversationSessionHandle {
+  /**
+   * Sends the learner's post-session satisfaction rating over the still-open socket — see
+   * .claude/specs/user-satisfaction.md. Must be called before disconnect() (which closes the
+   * socket); send() itself is a no-op once the socket isn't open, so a call after disconnect()
+   * silently does nothing rather than throwing.
+   */
+  rateSession(rating: number, comment?: string): void;
   disconnect(): void;
 }
 
@@ -450,6 +457,9 @@ export async function connectConversationSession(
   });
 
   return {
+    rateSession(rating: number, comment?: string): void {
+      send({ type: "session.rate", rating, ...(comment ? { comment } : {}) });
+    },
     disconnect(): void {
       ended = true;
       vad.stop();
