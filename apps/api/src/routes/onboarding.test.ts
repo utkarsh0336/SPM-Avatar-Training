@@ -1,6 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it } from "vitest";
-import { generateOpaqueToken, prisma, setAuthContext, sha256Hex, withAuthContext } from "@avatrain/shared";
+import {
+  generateOpaqueToken,
+  onboardingDraftResponseSchema,
+  prisma,
+  setAuthContext,
+  sha256Hex,
+  withAuthContext,
+} from "@avatrain/shared";
 import { buildApp } from "../app.js";
 
 function uniqueEmail(label: string): string {
@@ -98,6 +105,17 @@ describe("onboarding routes", () => {
       });
     });
 
+    it("returns a body that validates against onboardingDraftResponseSchema — the exact shape apps/dashboard's api-client.ts parses", async () => {
+      const { token } = await seedOrgWithSessionToken("Onboarding Schema Org");
+      const response = await app.inject({
+        method: "GET",
+        url: "/v1/onboarding",
+        cookies: { avatrain_session: token },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(() => onboardingDraftResponseSchema.parse(response.json())).not.toThrow();
+    });
+
     it("is idempotent — a second GET returns the same draft, not a new one", async () => {
       const { token } = await seedOrgWithSessionToken("Onboarding Idempotent Org");
       const first = await app.inject({
@@ -186,6 +204,20 @@ describe("onboarding routes", () => {
       });
       expect(response.statusCode).toBe(200);
       expect(response.json()).toMatchObject({ preferredLanguage: "SPANISH" });
+    });
+
+    it("round-trips readingLevel and keeps the response schema-valid", async () => {
+      const { token } = await seedOrgWithSessionToken("Onboarding Reading Level Org");
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/v1/onboarding",
+        cookies: { avatrain_session: token },
+        payload: { readingLevel: "ADVANCED" },
+      });
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body).toMatchObject({ readingLevel: "ADVANCED" });
+      expect(() => onboardingDraftResponseSchema.parse(body)).not.toThrow();
     });
   });
 

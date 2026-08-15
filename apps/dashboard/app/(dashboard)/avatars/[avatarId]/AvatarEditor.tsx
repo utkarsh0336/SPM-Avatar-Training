@@ -43,6 +43,17 @@ import {
   type VoiceTone,
 } from "../../../onboarding/types";
 import styles from "./AvatarEditor.module.css";
+// SelectionCard/PhotoOptionCard/SwatchPicker/PillPicker/RowOptionCard above
+// are onboarding-scoped components — their CSS modules read --ob-* custom
+// properties that only onboarding/layout.tsx normally defines (via this same
+// tokens.module.css). (dashboard)/layout.tsx only ever re-spreads the 3
+// --ob-accent-* branding vars (see org-theme.ts's orgAccentStyle doc
+// comment), never the base --ob-panel-bg/--ob-border/--ob-text-* palette —
+// so every "selected" style in those 5 components (bare var(--ob-accent-violet)
+// etc, no fallback) silently resolved to nothing here. Mounting the same
+// .tokens class this editor's onboarding counterparts already sit under
+// fixes all 5 at once without touching their CSS.
+import obTokens from "../../../onboarding/tokens.module.css";
 
 const STYLE_OPTIONS: { value: AvatarStyle; title: string; subtitle: string; Icon: IconComponent }[] = [
   { value: "REALISTIC", title: "Realistic", subtitle: "Photo-realistic AI avatar", Icon: CameraIcon },
@@ -280,7 +291,7 @@ export function AvatarEditor({ avatarId }: AvatarEditorProps) {
   if (!avatar) return null;
 
   return (
-    <div className={styles.layout}>
+    <div className={`${obTokens.tokens} ${styles.layout}`}>
       <div className={styles.previewColumn}>
         <button type="button" className={styles.backLink} onClick={() => router.push("/avatars")}>
           ← Back to Avatars

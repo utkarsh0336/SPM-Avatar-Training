@@ -1,6 +1,7 @@
 import { synthesize } from "echogarden";
 import type { TTSProvider, TTSSynthesizeOptions } from "./types.js";
 import { ProviderError } from "./provider-error.js";
+import { runNativeOnnxSerialized } from "./native-onnx-lock.js";
 
 export interface EchogardenTTSOptions {
   /** Injectable for tests; defaults to echogarden's real synthesize(). */
@@ -30,8 +31,9 @@ export interface EchogardenTTSOptions {
 // session on every synthesize() call (no session reuse/caching across
 // calls), and two overlapping loads reliably segfault the whole process
 // (confirmed live via a macOS crash report: SIGSEGV in
-// InferenceSessionWrap::LoadModel). This is a real risk, not a theoretical
-// one: conversation-service.ts's enqueueSentence() deliberately fires TTS
+// InferenceSessionWrap::LoadModel, and separately SIGBUS in
+// InferenceSession::Run). This is a real risk, not a theoretical one:
+// conversation-service.ts's enqueueSentence() deliberately fires TTS
 // synthesis for every sentence concurrently (a latency optimization, not a
 // bug) as each sentence boundary streams in from the LLM, and constructs a
 // FRESH provider per sentence — so the lock has to be process-wide (module
@@ -39,16 +41,14 @@ export interface EchogardenTTSOptions {
 // wouldn't share it. Only the native call itself is serialized; sentence
 // chunking, LLM streaming, and the msedge-tts failover candidate are
 // unaffected and stay fully concurrent.
-let synthesisQueue: Promise<void> = Promise.resolve();
-
-function runSerialized<T>(fn: () => Promise<T>): Promise<T> {
-  const result = synthesisQueue.then(fn, fn);
-  synthesisQueue = result.then(
-    () => undefined,
-    () => undefined,
-  );
-  return result;
-}
+//
+// The queue itself lives in native-onnx-lock.ts, shared with
+// embedding-local.ts — retrieval-service.ts's per-turn query embedding also
+// calls onnxruntime-node's native Run() in this same process, and the two
+// consumers crashing into each other (not just echogarden overlapping
+// itself) is the exact race a live crash reproduced. See that file's doc
+// comment.
+const runSerialized = runNativeOnnxSerialized;
 
 export function createEchogardenTTSProvider(options?: EchogardenTTSOptions): TTSProvider {
   const synthesizeImpl = options?.synthesizeImpl ?? synthesize;

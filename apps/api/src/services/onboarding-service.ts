@@ -17,6 +17,7 @@ export interface OnboardingDraftResult {
   ageGroup: Avatar["ageGroup"];
   region: Avatar["region"];
   preferredLanguage: Avatar["preferredLanguage"];
+  readingLevel: Avatar["readingLevel"];
   status: Avatar["status"];
   lastVisitedStep: number;
   previewProvider: Avatar["previewProvider"];
@@ -41,6 +42,7 @@ function toDraftResult(avatar: Avatar): OnboardingDraftResult {
     ageGroup: avatar.ageGroup,
     region: avatar.region,
     preferredLanguage: avatar.preferredLanguage,
+    readingLevel: avatar.readingLevel,
     status: avatar.status,
     lastVisitedStep: avatar.lastVisitedStep,
     previewProvider: avatar.previewProvider,

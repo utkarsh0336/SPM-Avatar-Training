@@ -1,5 +1,6 @@
 import { pipeline } from "@xenova/transformers";
 import type { EmbeddingProvider } from "./types.js";
+import { runNativeOnnxSerialized } from "./native-onnx-lock.js";
 
 // Apache-2.0, 384-dim, CPU-only, no API key — the free/self-hosted default
 // per .claude/specs/knowledge-management.md's Dependencies section. Must
@@ -50,7 +51,13 @@ export function createLocalEmbeddingProvider(options: LocalEmbeddingProviderOpti
     async embed(texts: string[]): Promise<number[][]> {
       if (texts.length === 0) return [];
       const extractor = await loadExtractor();
-      const output = await extractor(texts, { pooling: "mean", normalize: true });
+      // Runs through the same process-wide lock tts-echogarden.ts uses —
+      // this and echogarden's VITS synthesis are two independent
+      // onnxruntime-node native sessions, and letting their Run() calls
+      // overlap (this fires once per turn from retrieval-service.ts, TTS
+      // fires per sentence) reliably crashes the whole process. See
+      // native-onnx-lock.ts's doc comment.
+      const output = await runNativeOnnxSerialized(() => extractor(texts, { pooling: "mean", normalize: true }));
       return output.tolist();
     },
   };
