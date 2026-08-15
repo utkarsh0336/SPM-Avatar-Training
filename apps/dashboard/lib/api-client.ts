@@ -88,7 +88,12 @@ import {
   type TrainingSessionKind,
   type TrainingSessionResult,
 } from "@avatrain/shared/training-session";
-import { usageAnalyticsResponseSchema, type UsageAnalyticsResponse } from "@avatrain/shared/analytics";
+import {
+  trainingAnalyticsResponseSchema,
+  usageAnalyticsResponseSchema,
+  type TrainingAnalyticsResponse,
+  type UsageAnalyticsResponse,
+} from "@avatrain/shared/analytics";
 
 export interface AuthUser {
   id: string;
@@ -694,6 +699,16 @@ export async function getCurriculumEffectiveness(curriculumId: string): Promise<
 export async function getUsageAnalytics(days?: 7 | 30 | 90): Promise<UsageAnalyticsResponse> {
   const result = await apiFetch<unknown>(`/analytics/usage${days ? `?days=${days}` : ""}`, { method: "GET" });
   return usageAnalyticsResponseSchema.parse(result);
+}
+
+/**
+ * GET /v1/analytics/training — OWNER-only. See .claude/specs/training-analytics.md. No query
+ * params — unwindowed, unlike getUsageAnalytics (ObjectiveProgress is bounded by objective count
+ * × rehearsing-staff count, not open-ended event volume).
+ */
+export async function getTrainingAnalytics(): Promise<TrainingAnalyticsResponse> {
+  const result = await apiFetch<unknown>("/analytics/training", { method: "GET" });
+  return trainingAnalyticsResponseSchema.parse(result);
 }
 
 /**

@@ -38,3 +38,33 @@ export const usageAnalyticsResponseSchema = z.object({
   topKnowledgeAreas: z.array(knowledgeAreaSchema),
 });
 export type UsageAnalyticsResponse = z.infer<typeof usageAnalyticsResponseSchema>;
+
+// GET /v1/analytics/training — see .claude/specs/training-analytics.md. Objectives with
+// attemptedLearnerCount >= MIN_ATTEMPTS (2), ranked by passRate ascending, capped at 10 — see
+// getTrainingAnalytics's module constants in analytics-service.ts.
+export const knowledgeGapSchema = z.object({
+  objectiveId: z.string().uuid(),
+  objectiveTitle: z.string(),
+  curriculumId: z.string().uuid(),
+  curriculumTitle: z.string(),
+  attemptedLearnerCount: z.number().int().nonnegative(),
+  passRate: z.number().min(0).max(1),
+});
+export type KnowledgeGap = z.infer<typeof knowledgeGapSchema>;
+
+// avgCompletionRate is the mean of PER-CURRICULUM completionRate (same definition
+// curriculumEffectivenessSchema's completionRate uses — a learner counts as "completed" only
+// once they've passed every current objective in that curriculum), averaged across curricula
+// with >=1 ObjectiveProgress row only; null when no curriculum has any activity.
+// avgTimeToCompetencySeconds is a flat mean across every PASS row org-wide, no per-curriculum
+// averaging. Every field here shares ObjectiveProgress's dashboard-rehearsal-only limitation —
+// see training-analytics.md's Scope-defining finding.
+export const trainingAnalyticsResponseSchema = z.object({
+  generatedAt: z.string(),
+  participantCount: z.number().int().nonnegative(),
+  curriculumsWithActivityCount: z.number().int().nonnegative(),
+  avgCompletionRate: z.number().min(0).max(1).nullable(),
+  avgTimeToCompetencySeconds: z.number().nullable(),
+  knowledgeGaps: z.array(knowledgeGapSchema),
+});
+export type TrainingAnalyticsResponse = z.infer<typeof trainingAnalyticsResponseSchema>;
