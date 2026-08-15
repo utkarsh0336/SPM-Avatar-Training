@@ -1412,6 +1412,232 @@ describe("createConversationHandler", () => {
     });
   });
 
+  describe("language", () => {
+    it("resolves language from the avatar record for a non-pinned session, overriding the client-sent message.language", async () => {
+      const socket = new FakeSocket();
+      const createTTS = fakeTTS("success");
+      const createSTT = fakeSTT("success");
+      const getAvatarById = vi.fn(async () => ({
+        id: "33333333-3333-3333-3333-333333333333",
+        name: "Nancy",
+        style: "REALISTIC" as const,
+        gender: "FEMALE" as const,
+        skinTone: "TONE_2" as const,
+        hairStyle: "MEDIUM" as const,
+        hairColor: "AUBURN" as const,
+        outfit: "BUSINESS_FORMAL" as const,
+        expertise: "HR_LEAVE_POLICY" as const,
+        voice: "WARM" as const,
+        ageGroup: null,
+        region: null,
+        preferredLanguage: "SPANISH" as const,
+        readingLevel: null,
+        status: "ACTIVE" as const,
+        simliFaceId: null,
+      }));
+      createConversationHandler(socket as never, claims, {
+        createLLM: fakeLLM("success", ["Hola. "]),
+        createSTT,
+        createTTS,
+        getAvatarById,
+        ...noRetrieval,
+      });
+      // sessionStartBase omits `language`, which defaults to "English" — the
+      // avatar's SPANISH preferredLanguage must win anyway.
+      socket.emitMessage({ ...sessionStartBase, avatarId: "33333333-3333-3333-3333-333333333333" });
+      await vi.waitFor(() => expect(socket.sent).toContainEqual({ type: "session.ready" }));
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+
+      expect(createTTS).toHaveBeenCalledWith("WARM", "FEMALE", "Spanish", process.env, expect.anything());
+      const sttInstance = (createSTT as unknown as { mock: { results: { value: STTProvider }[] } }).mock.results[0]!
+        .value;
+      expect(sttInstance.transcribe).toHaveBeenCalledWith(
+        expect.any(Uint8Array),
+        "audio/wav",
+        expect.objectContaining({ language: "es" }),
+      );
+    });
+
+    it("resolves HINDI from the avatar record the same way (regression)", async () => {
+      const socket = new FakeSocket();
+      const createTTS = fakeTTS("success");
+      const createSTT = fakeSTT("success");
+      const getAvatarById = vi.fn(async () => ({
+        id: "33333333-3333-3333-3333-333333333333",
+        name: "Nancy",
+        style: "REALISTIC" as const,
+        gender: "FEMALE" as const,
+        skinTone: "TONE_2" as const,
+        hairStyle: "MEDIUM" as const,
+        hairColor: "AUBURN" as const,
+        outfit: "BUSINESS_FORMAL" as const,
+        expertise: "HR_LEAVE_POLICY" as const,
+        voice: "WARM" as const,
+        ageGroup: null,
+        region: null,
+        preferredLanguage: "HINDI" as const,
+        readingLevel: null,
+        status: "ACTIVE" as const,
+        simliFaceId: null,
+      }));
+      createConversationHandler(socket as never, claims, {
+        createLLM: fakeLLM("success", ["ठीक है। "]),
+        createSTT,
+        createTTS,
+        getAvatarById,
+        ...noRetrieval,
+      });
+      socket.emitMessage({ ...sessionStartBase, avatarId: "33333333-3333-3333-3333-333333333333" });
+      await vi.waitFor(() => expect(socket.sent).toContainEqual({ type: "session.ready" }));
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+
+      expect(createTTS).toHaveBeenCalledWith("WARM", "FEMALE", "Hindi", process.env, expect.anything());
+      const sttInstance = (createSTT as unknown as { mock: { results: { value: STTProvider }[] } }).mock.results[0]!
+        .value;
+      expect(sttInstance.transcribe).toHaveBeenCalledWith(
+        expect.any(Uint8Array),
+        "audio/wav",
+        expect.objectContaining({ language: "hi" }),
+      );
+    });
+
+    it("falls back to message.language when the avatar has no preferredLanguage set", async () => {
+      const socket = new FakeSocket();
+      const createSTT = fakeSTT("success");
+      const getAvatarById = vi.fn(async () => ({
+        id: "33333333-3333-3333-3333-333333333333",
+        name: "Nancy",
+        style: "REALISTIC" as const,
+        gender: "FEMALE" as const,
+        skinTone: "TONE_2" as const,
+        hairStyle: "MEDIUM" as const,
+        hairColor: "AUBURN" as const,
+        outfit: "BUSINESS_FORMAL" as const,
+        expertise: "HR_LEAVE_POLICY" as const,
+        voice: "WARM" as const,
+        ageGroup: null,
+        region: null,
+        preferredLanguage: null,
+        readingLevel: null,
+        status: "ACTIVE" as const,
+        simliFaceId: null,
+      }));
+      createConversationHandler(socket as never, claims, {
+        createLLM: fakeLLM("success", ["ठीक है। "]),
+        createSTT,
+        createTTS: fakeTTS("success"),
+        getAvatarById,
+        ...noRetrieval,
+      });
+      socket.emitMessage({
+        ...sessionStartBase,
+        avatarId: "33333333-3333-3333-3333-333333333333",
+        language: "Hindi",
+      });
+      await vi.waitFor(() => expect(socket.sent).toContainEqual({ type: "session.ready" }));
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+
+      const sttInstance = (createSTT as unknown as { mock: { results: { value: STTProvider }[] } }).mock.results[0]!
+        .value;
+      expect(sttInstance.transcribe).toHaveBeenCalledWith(
+        expect.any(Uint8Array),
+        "audio/wav",
+        expect.objectContaining({ language: "hi" }),
+      );
+    });
+
+    it("resolves language from the pinned avatar (embed session), ignoring a spoofed client-sent language", async () => {
+      const socket = new FakeSocket();
+      const createTTS = fakeTTS("success");
+      const createSTT = fakeSTT("success");
+      const getAvatarById = vi.fn(async () => ({
+        id: "avatar-1",
+        name: "Pinned Persona",
+        style: "REALISTIC" as const,
+        gender: "MALE" as const,
+        skinTone: "TONE_3" as const,
+        hairStyle: "SHORT" as const,
+        hairColor: "BLACK" as const,
+        outfit: "BUSINESS_CASUAL" as const,
+        expertise: "SALES_NEGOTIATION" as const,
+        voice: "DEEP" as const,
+        ageGroup: null,
+        region: null,
+        preferredLanguage: "SPANISH" as const,
+        readingLevel: null,
+        status: "ACTIVE" as const,
+        simliFaceId: null,
+      }));
+      const embedClaims = { orgId: "org-1", userId: null, pinnedAvatarId: "avatar-1" };
+      createConversationHandler(socket as never, embedClaims, {
+        createLLM: fakeLLM("success", ["Hola. "]),
+        createSTT,
+        createTTS,
+        getAvatarById,
+        ...noRetrieval,
+      });
+      // A malicious/misbehaving embed page spoofs "Hindi" — the pinned
+      // avatar's SPANISH preferredLanguage must win regardless.
+      socket.emitMessage({
+        ...sessionStartBase,
+        language: "Hindi",
+        avatarId: "22222222-2222-2222-2222-222222222222",
+      });
+      await vi.waitFor(() => expect(socket.sent).toContainEqual({ type: "session.ready" }));
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+
+      expect(createTTS).toHaveBeenCalledWith("DEEP", "MALE", "Spanish", process.env, expect.anything());
+      const sttInstance = (createSTT as unknown as { mock: { results: { value: STTProvider }[] } }).mock.results[0]!
+        .value;
+      expect(sttInstance.transcribe).toHaveBeenCalledWith(
+        expect.any(Uint8Array),
+        "audio/wav",
+        expect.objectContaining({ language: "es" }),
+      );
+    });
+
+    it("a session with no avatar at all falls back to message.language / English unchanged", async () => {
+      const socket = new FakeSocket();
+      const createSTT = fakeSTT("success");
+      createConversationHandler(socket as never, claims, {
+        createLLM: fakeLLM("success", ["Hi. "]),
+        createSTT,
+        createTTS: fakeTTS("success"),
+        ...noRetrieval,
+      });
+      socket.emitMessage(sessionStartBase);
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+
+      const sttInstance = (createSTT as unknown as { mock: { results: { value: STTProvider }[] } }).mock.results[0]!
+        .value;
+      expect(sttInstance.transcribe).toHaveBeenCalledWith(
+        expect.any(Uint8Array),
+        "audio/wav",
+        expect.objectContaining({ language: "en" }),
+      );
+    });
+  });
+
   describe("embed sessions (claims.pinnedAvatarId)", () => {
     it("resolves persona fields server-side from the pinned avatar, ignoring client-sent session.start fields", async () => {
       const socket = new FakeSocket();

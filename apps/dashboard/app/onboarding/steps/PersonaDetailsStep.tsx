@@ -25,14 +25,16 @@ const AVATAR_REGION_OPTIONS: readonly AvatarRegion[] = [
   "MIDDLE_EAST",
   "APAC",
 ];
-const AVATAR_LANGUAGE_OPTIONS: readonly AvatarLanguage[] = ["ENGLISH", "HINDI"];
+const AVATAR_LANGUAGE_OPTIONS: readonly AvatarLanguage[] = ["ENGLISH", "HINDI", "SPANISH"];
 const READING_LEVEL_OPTIONS: readonly ReadingLevel[] = ["SIMPLE", "STANDARD", "ADVANCED"];
 
 /**
  * SOW §3.1 "various age groups" / "regional and language-specific avatars" —
  * a single combined step (not three) to avoid growing the wizard by more
- * than one screen. Metadata only, same as NameExpertiseStep's expertise
- * field: never fed into resolveReplicaId, never completion-required.
+ * than one screen. Never fed into resolveReplicaId, never completion-required
+ * — but unlike ageGroup/region (pure metadata), preferredLanguage IS actually
+ * consumed: resolved server-side into the session's Language whenever this
+ * avatar is used. See .claude/specs/multi-language-support.md.
  */
 export function PersonaDetailsStep() {
   const { state, update } = useOnboarding();

@@ -30,9 +30,11 @@ export type Expertise =
 export type VoiceTone = "DEEP" | "NEUTRAL" | "WARM";
 export type AgeGroup = "YOUNG_ADULT" | "MIDDLE_AGED" | "SENIOR";
 export type AvatarRegion = "GLOBAL" | "INDIA" | "NORTH_AMERICA" | "EUROPE" | "MIDDLE_EAST" | "APAC";
-export type AvatarLanguage = "ENGLISH" | "HINDI";
-// Unlike AgeGroup/AvatarRegion/AvatarLanguage above (metadata only), this one is actually
-// consumed by buildSystemPrompt — see prisma/schema.prisma's ReadingLevel doc comment.
+// Unlike AgeGroup/AvatarRegion above (metadata only), this one is actually consumed — resolved
+// server-side into the session's Language, see prisma/schema.prisma's AvatarLanguage doc comment.
+export type AvatarLanguage = "ENGLISH" | "HINDI" | "SPANISH";
+// Also actually consumed, like AvatarLanguage above (not metadata-only) — see
+// prisma/schema.prisma's ReadingLevel doc comment.
 export type ReadingLevel = "SIMPLE" | "STANDARD" | "ADVANCED";
 
 // Additive — see .claude/specs/avatar-builder-customization.md. NONE is the
@@ -207,6 +209,7 @@ export const AVATAR_REGION_LABELS: Record<AvatarRegion, string> = {
 export const AVATAR_LANGUAGE_LABELS: Record<AvatarLanguage, string> = {
   ENGLISH: "English",
   HINDI: "Hindi",
+  SPANISH: "Spanish",
 };
 
 export const READING_LEVEL_LABELS: Record<ReadingLevel, string> = {

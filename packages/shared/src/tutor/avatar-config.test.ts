@@ -17,6 +17,7 @@ import {
   avatarRegionSchema,
   avatarLanguageSchema,
   readingLevelSchema,
+  resolveSessionLanguage,
 } from "./avatar-config.js";
 
 // Hardcoded snapshot of apps/dashboard/app/onboarding/types.ts's literal
@@ -50,7 +51,7 @@ const WIZARD_SKIN_TONES = ["TONE_1", "TONE_2", "TONE_3", "TONE_4", "TONE_5", "TO
 const WIZARD_HAIR_COLORS = ["BLACK", "AUBURN", "COPPER", "BLONDE", "PLATINUM", "RED", "PURPLE", "BLUE"];
 const WIZARD_AGE_GROUPS = ["YOUNG_ADULT", "MIDDLE_AGED", "SENIOR"];
 const WIZARD_AVATAR_REGIONS = ["GLOBAL", "INDIA", "NORTH_AMERICA", "EUROPE", "MIDDLE_EAST", "APAC"];
-const WIZARD_AVATAR_LANGUAGES = ["ENGLISH", "HINDI"];
+const WIZARD_AVATAR_LANGUAGES = ["ENGLISH", "HINDI", "SPANISH"];
 const WIZARD_READING_LEVELS = ["SIMPLE", "STANDARD", "ADVANCED"];
 
 describe("avatar-config drift guard", () => {
@@ -114,6 +115,14 @@ describe("SKIN_TONE_HEX / HAIR_COLOR_HEX", () => {
     for (const token of HAIR_COLOR_TOKENS) {
       expect(HAIR_COLOR_HEX[token]).toMatch(/^#[0-9A-Fa-f]{6}$/);
     }
+  });
+});
+
+describe("resolveSessionLanguage", () => {
+  it("maps ENGLISH, HINDI, and SPANISH to their Language equivalents", () => {
+    expect(resolveSessionLanguage("ENGLISH")).toBe("English");
+    expect(resolveSessionLanguage("HINDI")).toBe("Hindi");
+    expect(resolveSessionLanguage("SPANISH")).toBe("Spanish");
   });
 });
 

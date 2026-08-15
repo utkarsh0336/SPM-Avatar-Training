@@ -12,6 +12,7 @@ import {
   classifyEmotion,
   clientMessageSchema,
   expertiseTopicTitle,
+  resolveSessionLanguage,
   resolveVoiceGender,
   resolveWhisperLanguageCode,
   serverMessageSchema,
@@ -849,8 +850,9 @@ ${step.branches.map((branch, index) => `${letters[index]}) ${branch.matchCriteri
         let effectiveAvatarId = message.avatarId;
         // Trainer policy, not learner preference — resolved server-side only from the Avatar
         // record, same trust posture as avatarName/expertise/voiceTone/gender below. Unlike those
-        // four (embed-only override), readingLevel is resolved whenever an avatarId is known at
-        // all, including plain dashboard-rehearsal sessions, since it's never meant to be
+        // four (embed-only override), readingLevel — and, per the same reasoning, `language` below
+        // (see .claude/specs/multi-language-support.md) — is resolved whenever an avatarId is known
+        // at all, including plain dashboard-rehearsal sessions, since neither is meant to be
         // client-suppliable in any session kind. See
         // .claude/specs/adaptive-learning-personalization.md.
         let readingLevel: ReadingLevel | undefined;
@@ -876,6 +878,7 @@ ${step.branches.map((branch, index) => `${letters[index]}) ${branch.matchCriteri
             resolvedVoiceTone = pinned.voice ?? resolvedVoiceTone;
             resolvedGender = pinned.gender ?? resolvedGender;
             readingLevel = pinned.readingLevel ?? undefined;
+            language = pinned.preferredLanguage ? resolveSessionLanguage(pinned.preferredLanguage) : language;
           }
           effectiveAvatarId = claims.pinnedAvatarId;
         } else if (effectiveAvatarId) {
@@ -884,6 +887,7 @@ ${step.branches.map((branch, index) => `${letters[index]}) ${branch.matchCriteri
             AVATAR_LOOKUP_TIMEOUT_MS,
           );
           readingLevel = avatar?.readingLevel ?? undefined;
+          language = avatar?.preferredLanguage ? resolveSessionLanguage(avatar.preferredLanguage) : language;
         }
 
         systemPrompt = buildSystemPrompt({ avatarName, expertise, language, readingLevel });
