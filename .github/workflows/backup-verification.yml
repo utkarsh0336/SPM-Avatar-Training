@@ -1,0 +1,59 @@
+name: Backup Verification
+
+# Restores the latest Fly Managed Postgres backup to a scratch instance,
+# sanity-checks it, tears it down. This is the actual disaster-recovery
+# test — a documented backup policy nobody has ever restored is not
+# disaster recovery. See docs/runbooks/postgres-restore.md, which this
+# workflow must stay in lockstep with (same restore steps, human-readable).
+#
+# IMPORTANT — the exact `fly mpg` backup/restore subcommands below were
+# never confirmed against a live Fly account (`fly mpg --help`) as of this
+# writing; feature/auto-scaling already flagged Fly Managed Postgres's
+# backup/PITR capabilities as unconfirmed (.claude/specs/auto-scaling.md,
+# infra/README.md), and this workflow inherits that same open item. Treat
+# every `fly mpg ...` line here as a best-effort placeholder to verify and
+# correct against real `flyctl` output before first relying on this
+# workflow — do not assume it is correct as written.
+on:
+  schedule:
+    - cron: "0 4 * * 0" # weekly, Sunday 04:00 UTC
+  workflow_dispatch:
+
+jobs:
+  verify-backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Restore latest backup to a scratch instance
+        id: restore
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          # TODO(confirm at provisioning time): exact restore-to-new-cluster
+          # syntax per `fly mpg --help` / `fly mpg backup --help`. See this
+          # file's header comment.
+          SCRATCH_NAME="avatrain-backup-verify-$(date +%s)"
+          echo "scratch_name=$SCRATCH_NAME" >> "$GITHUB_OUTPUT"
+          fly mpg backup restore --org avatrain --name "$SCRATCH_NAME" --latest
+
+      - name: Sanity-check restored data
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          # A restore that "succeeds" but produced an empty/corrupt database
+          # is a false sense of safety — assert real rows exist in a table
+          # that should never legitimately be empty on a live system.
+          fly mpg connect --app "${{ steps.restore.outputs.scratch_name }}" \
+            --command "SELECT count(*) FROM organizations;" | grep -qv "^0$"
+
+      - name: Tear down scratch instance
+        if: always()
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          fly mpg destroy "${{ steps.restore.outputs.scratch_name }}" --org avatrain -y || true

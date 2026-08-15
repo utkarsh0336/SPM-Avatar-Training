@@ -1,6 +1,7 @@
 import { preloadLocalEmbeddingModel } from "@avatrain/shared";
 import { installOutboundRequestGuard } from "./lib/outbound-request-guard.js";
 import { createIngestionWorker } from "./lib/ingestion-queue.js";
+import { createUptimeRetentionQueue, createUptimeRetentionWorker } from "./lib/uptime-retention-job.js";
 import { ingestStoredDocument } from "./services/knowledge-service.js";
 
 // Same ordering reasoning as index.ts: must run before any provider is
@@ -23,11 +24,20 @@ const worker = createIngestionWorker(
   { concurrency: Number(process.env.INGESTION_WORKER_CONCURRENCY ?? 2) },
 );
 
-console.log("worker: listening for knowledge-ingestion jobs");
+const uptimeRetentionWorker = createUptimeRetentionWorker();
+// Idempotent upsert, safe to call on every worker-process boot — see
+// createUptimeRetentionQueue's doc comment.
+void createUptimeRetentionQueue()
+  .ensureScheduled()
+  .catch((err) => {
+    console.error("worker: failed to schedule uptime-retention job:", err);
+  });
+
+console.log("worker: listening for knowledge-ingestion and uptime-retention jobs");
 
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
   console.log(`worker: received ${signal}, closing`);
-  await worker.close();
+  await Promise.all([worker.close(), uptimeRetentionWorker.close()]);
   process.exit(0);
 }
 

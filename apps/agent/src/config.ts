@@ -45,6 +45,10 @@ const agentConfigSchema = z.object({
    * block) — not a value this codebase invented.
    */
   METRICS_PORT: z.coerce.number().int().positive().default(9091),
+
+  /** Sentry DSN. Optional — see packages/shared/src/observability/sentry.ts; stays a true no-op when unset. */
+  SENTRY_DSN: z.string().url().optional(),
+  LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
 });
 
 export type AgentConfig = z.infer<typeof agentConfigSchema>;

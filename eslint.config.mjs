@@ -28,6 +28,10 @@ export default tseslint.config(
       globals: {
         console: "readonly",
         process: "readonly",
+        // Node 20 (ci.yml's node-version) globals — scripts/report-uptime-check.mjs
+        // is the first script here to make an HTTP call.
+        fetch: "readonly",
+        AbortSignal: "readonly",
       },
     },
   },

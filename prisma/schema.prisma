@@ -309,6 +309,61 @@ model OAuthAccount {
   @@map("oauth_accounts")
 }
 
+enum UptimeCheckStatus {
+  UP
+  DOWN
+}
+
+enum IncidentSeverity {
+  MINOR
+  MAJOR
+  CRITICAL
+}
+
+enum IncidentStatus {
+  INVESTIGATING
+  IDENTIFIED
+  MONITORING
+  RESOLVED
+}
+
+/// Platform infrastructure state, not tenant business data — same reasoning
+/// as User/OAuthAccount. Exempt from RLS; see scripts/verify-rls.mjs
+/// EXEMPT_TABLES. Written by the synthetic-check GitHub Actions workflow via
+/// POST /v1/internal/uptime-checks (.claude/specs/reliability-uptime-disaster-recovery.md),
+/// read by GET /v1/status and GET /status.
+model UptimeCheck {
+  id        String            @id @default(uuid()) @db.Uuid
+  region    DataRegion
+  // Free string ("api" | "agent" today), not an enum — a new deployable
+  // service shouldn't need a schema migration to start reporting checks.
+  service   String
+  status    UptimeCheckStatus
+  latencyMs Int?              @map("latency_ms")
+  checkedAt DateTime          @default(now()) @map("checked_at")
+
+  @@index([service, region, checkedAt])
+  @@index([checkedAt])
+  @@map("uptime_checks")
+}
+
+/// Platform infrastructure state, not tenant business data. Exempt from RLS;
+/// see scripts/verify-rls.mjs EXEMPT_TABLES. Written/updated via
+/// POST/PATCH /v1/internal/incidents, read by GET /v1/status and GET /status.
+model StatusIncident {
+  id              String           @id @default(uuid()) @db.Uuid
+  title           String
+  severity        IncidentSeverity
+  status          IncidentStatus   @default(INVESTIGATING)
+  affectedRegions DataRegion[]     @map("affected_regions")
+  body            String           @db.Text
+  startedAt       DateTime         @default(now()) @map("started_at")
+  resolvedAt      DateTime?        @map("resolved_at")
+
+  @@index([status, startedAt])
+  @@map("status_incidents")
+}
+
 /// Tenant-scoped. org_id + RLS policy required — see prisma/migrations and
 /// .claude/rules/tenancy.md.
 model Membership {

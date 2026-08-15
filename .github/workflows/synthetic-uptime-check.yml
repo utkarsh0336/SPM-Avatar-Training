@@ -1,0 +1,23 @@
+name: Synthetic Uptime Check
+
+# Runs from GitHub's infra, deliberately outside Avatrain's own — a check
+# that only ran from inside our infra couldn't detect a full-region (or
+# full-platform) outage. See scripts/report-uptime-check.mjs for exactly
+# what's checked (apps/api's two regions; apps/agent isn't externally
+# reachable — see that script's header comment) and how results reach
+# POST /v1/internal/uptime-checks.
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Report uptime checks
+        env:
+          INTERNAL_OPS_TOKEN: ${{ secrets.INTERNAL_OPS_TOKEN }}
+        run: node scripts/report-uptime-check.mjs

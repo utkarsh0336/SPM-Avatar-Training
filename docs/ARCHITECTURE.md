@@ -146,3 +146,37 @@ should be written up properly before Phase 2:
 - ADR-0003 iframe isolation rather than Shadow-DOM-only embedding
 - ADR-0004 Postgres + pgvector rather than a dedicated vector database
 - ADR-0005 Server-only tools for grading and progress
+
+ADR-0006 (`docs/adr/0006-autoscaling-strategy.md`) and ADR-0007
+(`docs/adr/0007-reliability-alerting-strategy.md`) are already written — new decisions, not backfills
+of the list above.
+
+---
+
+## 8. Reliability, alerting, and status
+
+Full rationale: `docs/adr/0007-reliability-alerting-strategy.md`. Operational reference:
+`infra/README.md`'s "Reliability, alerting, and backups" section and `docs/runbooks/`.
+
+- **Structured logging + error tracking**: Pino (via Fastify's own `logger` option in `apps/api`,
+  and `packages/shared/src/observability/logger.ts` in `apps/agent`) and `@sentry/node`
+  (`packages/shared/src/observability/sentry.ts`), both optional — a true no-op with no `SENTRY_DSN`
+  set, so local dev/CI need no config changes. Confined to `apps/api`/`apps/agent`; never in
+  `apps/widget`/`packages/embed` (Phase 4's `≤10KB gzipped, zero dependencies` embed budget).
+- **Alerting**: one pipeline — Sentry's own issue-alert rules (email, this pass). Both application
+  errors and synthetic-check failures report through the same `Sentry.captureException`/
+  `captureMessage` call sites, not two separate systems.
+- **Status page**: `GET /status` (human) / `GET /v1/status` (JSON), served directly by `apps/api`,
+  reflecting `UptimeCheck`/`StatusIncident` — both global, RLS-exempt Prisma models (platform state,
+  not tenant data, same reasoning as `User`/`OAuthAccount`). Self-hosted rather than a third-party
+  vendor; unreachable only if both `apps/api` regions are down simultaneously (see §6 above — they
+  are genuinely independent Fly apps, so a single-region outage doesn't take the page down).
+- **Synthetic checks**: `.github/workflows/synthetic-uptime-check.yml`, running from outside
+  Avatrain's own infra. Covers `apps/api`'s two regions only — `apps/agent` has no public HTTP
+  surface to check from the outside; its liveness stays covered by the existing internal Prometheus
+  scrape feeding `fly-autoscaler` (§5 above), unchanged by this section.
+- **Backup/DR**: `.github/workflows/backup-verification.yml` restores the latest Fly Managed
+  Postgres backup to a scratch instance and sanity-checks it, on a schedule — a policy nobody has
+  restored isn't disaster recovery. Per §6's region pinning, a restore always stays within its
+  source region; there is no cross-region failover for tenant data, by design, documented in
+  `docs/runbooks/region-failover.md`.
