@@ -22,6 +22,11 @@ const RESTRICTED_IMPORTS = {
   officeparser: ["apps/api/src/lib/document-parsers/pptx.ts"],
   xlsx: ["apps/api/src/lib/document-parsers/xlsx.ts"],
   bullmq: ["apps/api/src/lib/ingestion-queue.ts", "apps/api/src/lib/ingestion-queue.test.ts"],
+  ioredis: [
+    "packages/shared/src/scaling/concurrency-counter.ts",
+    "packages/shared/src/scaling/concurrency-counter.test.ts",
+    "packages/shared/src/scaling/redis-ping.ts",
+  ],
   "livekit-server-sdk": ["apps/api/src/lib/livekit.ts", "apps/api/src/lib/livekit.test.ts"],
   "simli-client": [
     "apps/api/src/lib/simli.ts",

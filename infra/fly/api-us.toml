@@ -1,0 +1,41 @@
+# apps/api — US region. A separate Fly *app* per region (not a `regions`
+# list on one app) is deliberate: it's the only way to guarantee every
+# machine is created with an explicit region, never scheduler-placed —
+# required by docs/ARCHITECTURE.md §6 ("an EU-pinned org's sessions must
+# bootstrap against the EU API... and its transcripts must never transit US
+# infrastructure"). See infra/README.md.
+#
+# Deploy: fly deploy . --config infra/fly/api-us.toml --dockerfile apps/api/Dockerfile --region iad
+
+app = "avatrain-api-us"
+primary_region = "iad"
+
+[env]
+  PORT = "4000"
+  DATA_REGION = "US"
+
+# CPU/memory-based scaling doesn't apply here — apps/api is stateless
+# (docs/ARCHITECTURE.md §5), so it scales on live request concurrency per
+# machine instead, which is Fly's native http_service autoscaling
+# mechanism (no external autoscaler needed, unlike apps/agent).
+[http_service]
+  internal_port = 4000
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 2
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+[[http_service.checks]]
+  grace_period = "10s"
+  interval = "15s"
+  method = "GET"
+  timeout = "5s"
+  path = "/readyz"
+
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "512mb"

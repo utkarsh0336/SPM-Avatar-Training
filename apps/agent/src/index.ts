@@ -1,9 +1,20 @@
 import { fileURLToPath } from "node:url";
 import { cli, ServerOptions } from "@livekit/agents";
-import { LIVEKIT_AGENT_NAME } from "@avatrain/shared";
+import { LIVEKIT_AGENT_NAME, createRedisConcurrencyCounter } from "@avatrain/shared";
 import { loadAgentConfig } from "./config.js";
+import { createMetricsServer } from "./metrics-server.js";
 
 const config = loadAgentConfig();
+
+// One counter/server per Fly Machine (this process), independent of the
+// per-job child processes @livekit/agents spawns below — see
+// metrics-server.ts's doc comment for why every machine reporting the same
+// fleet-wide count is expected, not a bug.
+createMetricsServer({
+  port: config.METRICS_PORT,
+  workerCapacity: config.WORKER_CAPACITY,
+  counter: createRedisConcurrencyCounter(),
+});
 
 cli.runApp(
   new ServerOptions({

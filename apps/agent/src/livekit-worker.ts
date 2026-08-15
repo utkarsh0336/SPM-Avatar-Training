@@ -7,12 +7,23 @@ import {
   type RemoteTrack,
 } from "@livekit/rtc-node";
 import { defineAgent, type JobContext } from "@livekit/agents";
+import { createRedisConcurrencyCounter } from "@avatrain/shared";
 import { loadAgentConfig } from "./config.js";
 import { CostGateTimeoutError, waitForHumanParticipant } from "./cost-gate.js";
 import { createJobHandler } from "./job-handler.js";
 import { createAvatarRelay } from "./avatar-relay.js";
 import { createTeardownWatcher, type TeardownReason } from "./teardown.js";
 import { emitUsage } from "./metrics.js";
+
+/**
+ * Padding on top of AGENT_MAX_SESSION_MS for the concurrency counter's TTL
+ * — the entry must outlive the hard session cap so a normal teardown always
+ * gets to call release() itself; the TTL is only the fallback for a crashed
+ * process (see @avatrain/shared's createRedisConcurrencyCounter doc
+ * comment for why a bounded TTL, not a required release(), is the safety
+ * net here).
+ */
+const CONCURRENCY_TTL_BUFFER_MS = 30_000;
 
 /**
  * The agent-definition module @livekit/agents' worker framework dynamically
@@ -95,6 +106,15 @@ export const avatrainLiveKitAgent = defineAgent({
       throw err;
     }
 
+    // Counted from here, not from job dispatch — this is the point a
+    // session actually starts consuming a paid provider connection, the
+    // same moment emit()'s billableMs clock (see startedAt above, and the
+    // cost-gate boundary comment below) treats as the session's real start.
+    // Acquired against AGENT_MAX_SESSION_MS + a buffer, not released only
+    // on crash — see the module doc comment on CONCURRENCY_TTL_BUFFER_MS.
+    const concurrencyCounter = createRedisConcurrencyCounter();
+    await concurrencyCounter.acquire(trainingSessionId, config.AGENT_MAX_SESSION_MS + CONCURRENCY_TTL_BUFFER_MS);
+
     const agentParticipant = ctx.agent;
     if (!agentParticipant) {
       throw new Error("ctx.agent is undefined after ctx.connect() — cannot publish the avatar relay's tracks");
@@ -129,6 +149,8 @@ export const avatrainLiveKitAgent = defineAgent({
         jobHandler.stop();
         await relay.stop();
         emit(reason);
+        await concurrencyCounter.release(trainingSessionId);
+        await concurrencyCounter.close();
         ctx.shutdown(reason);
       },
     });

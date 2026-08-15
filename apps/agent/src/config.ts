@@ -29,6 +29,22 @@ const agentConfigSchema = z.object({
   AGENT_MAX_SESSION_MS: z.coerce.number().int().positive().default(30 * 60_000),
   /** Grace period after the last human leaves, to tolerate a brief reconnect before tearing down. */
   LAST_HUMAN_GRACE_MS: z.coerce.number().int().positive().default(15_000),
+  /**
+   * Max concurrent sessions one worker process can hold — the denominator
+   * in docs/ARCHITECTURE.md §4's "scale on sessions_concurrent /
+   * worker_capacity, not CPU". The external autoscaler (infra/) reads this
+   * alongside the live sessions_concurrent count; it is not enforced by
+   * this process itself (@livekit/agents' own job dispatch already stops
+   * handing this worker new jobs once it's at capacity).
+   */
+  WORKER_CAPACITY: z.coerce.number().int().positive().default(1),
+  /**
+   * Port for the /metrics endpoint (metrics-server.ts) that reports
+   * sessions_concurrent and worker_capacity as Prometheus gauges. 9091 is
+   * Fly.io's documented default scrape port (see infra/fly's `[metrics]`
+   * block) — not a value this codebase invented.
+   */
+  METRICS_PORT: z.coerce.number().int().positive().default(9091),
 });
 
 export type AgentConfig = z.infer<typeof agentConfigSchema>;

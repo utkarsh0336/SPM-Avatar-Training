@@ -39,6 +39,12 @@ Four swappable interfaces (`LLMProvider`, `STTProvider`, `TTSProvider`, `AvatarP
 - **No persisted sessions** — transcripts live in memory for the life of a browser tab/WS connection, matching the existing mock session list's behavior. A page refresh loses the conversation.
 - **Dashboard, saved conversations, notifications, and settings** are out of scope for this pipeline pass per the brief.
 
+## Deployment
+
+Production deployment (Fly.io, containerized `apps/api`/`apps/agent`, region-pinned per
+`Organization.dataRegion`, custom-metric autoscaling for the agent worker pool) is documented in
+`infra/README.md` — see `docs/adr/0006-autoscaling-strategy.md` for why Fly.io over Kubernetes.
+
 ## Commands
 
 ```bash

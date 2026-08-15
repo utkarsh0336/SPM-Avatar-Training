@@ -1,0 +1,24 @@
+# Config for github.com/superfly/fly-autoscaler — mirrors autoscaler-agent-us.yml
+# exactly except app-name/query app labels. See that file's header comment
+# for the schema-verification note and the rest of the rationale.
+#
+# Run: fly-autoscaler eval --config infra/fly/autoscaler-agent-eu.yml
+
+app-name: "avatrain-agent-eu"
+process-group: "app"
+interval: "15s"
+
+metric-collectors:
+  - type: "prometheus"
+    metric-name: "sessions_concurrent"
+    address: "https://api.fly.io/prometheus/REPLACE_WITH_ORG_SLUG"
+    query: "max(avatrain_sessions_concurrent{app=\"avatrain-agent-eu\"})"
+
+  - type: "prometheus"
+    metric-name: "worker_capacity"
+    address: "https://api.fly.io/prometheus/REPLACE_WITH_ORG_SLUG"
+    query: "avg(avatrain_worker_capacity{app=\"avatrain-agent-eu\"})"
+
+started-machine-count: "ceil((sessions_concurrent / worker_capacity) / 0.7)"
+min_started_machine_count: 1
+max_started_machine_count: 20
