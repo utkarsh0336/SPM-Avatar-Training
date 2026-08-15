@@ -5,14 +5,15 @@ import * as analyticsService from "../services/analytics-service.js";
 
 /**
  * Org-wide usage analytics (see .claude/specs/dashboard-analytics.md), org-wide training-outcomes
- * analytics (.claude/specs/training-analytics.md), and, since
- * .claude/specs/ai-performance-analytics.md, org-wide AI turn-performance analytics
- * (latency, grounded-reply rate, knowledge-utilization trend). Its own route file rather than
- * folded into org.ts (org-config only) or curriculum.ts (curriculum-scoped): these read across
- * TrainingSession/KnowledgeDocument, Objective/ObjectiveProgress/Curriculum, and TurnMetric, none
- * of which this file owns. OWNER-only, same gate as PATCH /v1/org/branding — org-wide numbers are
- * business-sensitive the same way branding is, and PARTNER (scoped to its own
- * PARTNER_ENABLEMENT curricula) has no reason to see them.
+ * analytics (.claude/specs/training-analytics.md), org-wide AI turn-performance analytics
+ * (latency, grounded-reply rate, knowledge-utilization trend, since
+ * .claude/specs/ai-performance-analytics.md), and, since .claude/specs/user-satisfaction.md,
+ * org-wide learner satisfaction ratings. Its own route file rather than folded into org.ts
+ * (org-config only) or curriculum.ts (curriculum-scoped): these read across
+ * TrainingSession/KnowledgeDocument, Objective/ObjectiveProgress/Curriculum, TurnMetric, and
+ * SatisfactionRating, none of which this file owns. OWNER-only, same gate as PATCH
+ * /v1/org/branding — org-wide numbers are business-sensitive the same way branding is, and
+ * PARTNER (scoped to its own PARTNER_ENABLEMENT curricula) has no reason to see them.
  */
 export function registerAnalyticsRoutes(app: FastifyInstance): void {
   const gate = { preHandler: [app.authenticate, requireRole("OWNER")] };
@@ -34,6 +35,15 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
   app.get("/v1/analytics/performance", gate, async (request, reply) => {
     const { days } = usageAnalyticsQuerySchema.parse(request.query);
     const result = await analyticsService.getPerformanceAnalytics(request.authContext!.orgId, days);
+    reply.status(200).send(result);
+  });
+
+  // See .claude/specs/user-satisfaction.md. Reuses usageAnalyticsQuerySchema's exact `days`
+  // shape — SatisfactionRating volume is unbounded like TurnMetric, so it needs the same
+  // bounded-range guard.
+  app.get("/v1/analytics/satisfaction", gate, async (request, reply) => {
+    const { days } = usageAnalyticsQuerySchema.parse(request.query);
+    const result = await analyticsService.getSatisfactionAnalytics(request.authContext!.orgId, days);
     reply.status(200).send(result);
   });
 }

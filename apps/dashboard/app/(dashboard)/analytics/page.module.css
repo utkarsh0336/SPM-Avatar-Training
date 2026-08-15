@@ -137,3 +137,44 @@
   color: var(--vc-text-primary);
   border-bottom: 1px solid var(--vc-border-soft);
 }
+
+.ratingDistribution {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ratingBarRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+}
+
+.ratingBarLabel {
+  width: 34px;
+  flex-shrink: 0;
+  color: var(--vc-text-secondary);
+}
+
+.ratingBarTrack {
+  flex: 1;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--vc-panel-bg);
+  border: 1px solid var(--vc-border-soft);
+  overflow: hidden;
+}
+
+.ratingBarFill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--vc-accent-violet);
+}
+
+.ratingBarCount {
+  width: 28px;
+  flex-shrink: 0;
+  text-align: right;
+  color: var(--vc-text-muted);
+}

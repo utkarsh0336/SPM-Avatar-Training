@@ -507,6 +507,93 @@ describe("createConversationHandler", () => {
     });
   });
 
+  describe("session.rate", () => {
+    it("calls recordSatisfactionRating with the rating and comment, and does not close the socket", () => {
+      const socket = new FakeSocket();
+      const recordSatisfactionRating = vi.fn(async () => {});
+      createConversationHandler(socket as never, claims, {
+        createLLM: fakeLLM("success"),
+        createSTT: fakeSTT("success"),
+        createTTS: fakeTTS("success"),
+        recordSatisfactionRating,
+        ...noRetrieval,
+      });
+      socket.emitMessage(sessionStartBase);
+      socket.emitMessage({ type: "session.rate", rating: 5, comment: "Great session!" });
+
+      expect(recordSatisfactionRating).toHaveBeenCalledWith("org-1", null, 5, "Great session!");
+      expect(socket.closeCalls).toBe(0);
+    });
+
+    it("passes null when comment is omitted", () => {
+      const socket = new FakeSocket();
+      const recordSatisfactionRating = vi.fn(async () => {});
+      createConversationHandler(socket as never, claims, {
+        createLLM: fakeLLM("success"),
+        createSTT: fakeSTT("success"),
+        createTTS: fakeTTS("success"),
+        recordSatisfactionRating,
+        ...noRetrieval,
+      });
+      socket.emitMessage(sessionStartBase);
+      socket.emitMessage({ type: "session.rate", rating: 3 });
+
+      expect(recordSatisfactionRating).toHaveBeenCalledWith("org-1", null, 3, null);
+    });
+
+    // Deliberately the opposite of persistTrainingSessionMessage's no-op-when-null contract — an
+    // anonymous apps/widget embed session's rating is exactly the real usage
+    // .claude/specs/user-satisfaction.md's SatisfactionRating exists to capture.
+    it("still fires when trainingSessionId is omitted (anonymous embed sessions) — does not no-op", () => {
+      const socket = new FakeSocket();
+      const recordSatisfactionRating = vi.fn(async () => {});
+      createConversationHandler(socket as never, claims, {
+        createLLM: fakeLLM("success"),
+        createSTT: fakeSTT("success"),
+        createTTS: fakeTTS("success"),
+        recordSatisfactionRating,
+        ...noRetrieval,
+      });
+      socket.emitMessage(sessionStartBase);
+      socket.emitMessage({ type: "session.rate", rating: 4 });
+
+      expect(recordSatisfactionRating).toHaveBeenCalledWith("org-1", null, 4, null);
+    });
+
+    it("uses the connection's real trainingSessionId for a rehearsal session", () => {
+      const socket = new FakeSocket();
+      const recordSatisfactionRating = vi.fn(async () => {});
+      createConversationHandler(socket as never, claims, {
+        createLLM: fakeLLM("success"),
+        createSTT: fakeSTT("success"),
+        createTTS: fakeTTS("success"),
+        trainingSessionId: "ts-1",
+        recordSatisfactionRating,
+        ...noRetrieval,
+      });
+      socket.emitMessage(sessionStartBase);
+      socket.emitMessage({ type: "session.rate", rating: 2 });
+
+      expect(recordSatisfactionRating).toHaveBeenCalledWith("org-1", "ts-1", 2, null);
+    });
+
+    it("never blocks even when the injected recordSatisfactionRating hangs forever", () => {
+      const socket = new FakeSocket();
+      const recordSatisfactionRating = vi.fn(() => new Promise<void>(() => {})); // never resolves
+      expect(() => {
+        createConversationHandler(socket as never, claims, {
+          createLLM: fakeLLM("success"),
+          createSTT: fakeSTT("success"),
+          createTTS: fakeTTS("success"),
+          recordSatisfactionRating,
+          ...noRetrieval,
+        });
+        socket.emitMessage(sessionStartBase);
+        socket.emitMessage({ type: "session.rate", rating: 1 });
+      }).not.toThrow();
+    });
+  });
+
   describe("turn-latency SLA gate", () => {
     it("sends latency.budget_exceeded once when TTS runs past the TTFA budget, and the turn still completes", async () => {
       vi.useFakeTimers();

@@ -93,9 +93,9 @@ export type KnowledgeUtilizationTrendPoint = z.infer<typeof knowledgeUtilization
 
 // groundedReplyRate measures whether a reply was grounded in retrieved knowledge-base content
 // (sources.length > 0 in conversation-service.ts) versus the ungrounded Priority-3 fallback —
-// it is NOT a factual-accuracy judgment. Never label it "accuracy" in code or UI copy. There is
-// no user-satisfaction field: no capture mechanism for it exists yet, and this spec does not add
-// one — see ai-performance-analytics.md's Overview.
+// it is NOT a factual-accuracy judgment. Never label it "accuracy" in code or UI copy. This spec
+// deliberately did not add a user-satisfaction field — see satisfactionAnalyticsResponseSchema
+// below, added by .claude/specs/user-satisfaction.md, for that.
 export const performanceAnalyticsResponseSchema = z.object({
   windowDays: z.union([z.literal(7), z.literal(30), z.literal(90)]),
   generatedAt: z.string(),
@@ -105,3 +105,27 @@ export const performanceAnalyticsResponseSchema = z.object({
   knowledgeUtilizationTrend: z.array(knowledgeUtilizationTrendPointSchema),
 });
 export type PerformanceAnalyticsResponse = z.infer<typeof performanceAnalyticsResponseSchema>;
+
+// GET /v1/analytics/satisfaction — see .claude/specs/user-satisfaction.md. Every row this can
+// aggregate today comes from the public apps/widget embed (trainingSessionId always null in
+// practice — no dashboard rehearsal surface sends session.rate) — real, org-wide data, same
+// labeling convention as performanceAnalyticsResponseSchema's fields above, unlike
+// usageAnalyticsResponseSchema/trainingAnalyticsResponseSchema's TrainingSession/ObjectiveProgress-
+// derived fields.
+export const ratingDistributionPointSchema = z.object({
+  rating: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
+  count: z.number().int().nonnegative(),
+});
+export type RatingDistributionPoint = z.infer<typeof ratingDistributionPointSchema>;
+
+// ratingDistribution always has exactly 5 entries, rating 1..5 in order — a rating with zero
+// submissions is included with count: 0, not omitted (same "zero-filled, not omitted" convention
+// knowledgeUtilizationTrendPointSchema's doc comment already established).
+export const satisfactionAnalyticsResponseSchema = z.object({
+  windowDays: z.union([z.literal(7), z.literal(30), z.literal(90)]),
+  generatedAt: z.string(),
+  ratingCount: z.number().int().nonnegative(),
+  avgRating: z.number().min(1).max(5).nullable(),
+  ratingDistribution: z.array(ratingDistributionPointSchema),
+});
+export type SatisfactionAnalyticsResponse = z.infer<typeof satisfactionAnalyticsResponseSchema>;

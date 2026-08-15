@@ -13,6 +13,7 @@ const createdUserIds: string[] = [];
 async function cleanup(): Promise<void> {
   for (const orgId of createdOrgIds) {
     await withAuthContext({ orgId }, async (tx) => {
+      await tx.satisfactionRating.deleteMany({ where: { orgId } });
       await tx.turnMetric.deleteMany({ where: { orgId } });
       await tx.knowledgeAccessEvent.deleteMany({ where: { orgId } });
       await tx.knowledgeDocument.deleteMany({ where: { orgId } });
@@ -331,5 +332,79 @@ describe("GET /v1/analytics/performance", () => {
     });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ turnCount: 0, groundedReplyRate: null });
+  });
+});
+
+async function seedSatisfactionRating(orgId: string, rating: number) {
+  return withAuthContext({ orgId }, (tx) => tx.satisfactionRating.create({ data: { orgId, rating } }));
+}
+
+describe("GET /v1/analytics/satisfaction", () => {
+  it("requires authentication", async () => {
+    const response = await app.inject({ method: "GET", url: "/v1/analytics/satisfaction" });
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("403s for a MEMBER caller", async () => {
+    const { token } = await seedOrgWithSessionToken("Satisfaction Analytics Member Org", "MEMBER");
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/analytics/satisfaction",
+      cookies: { avatrain_session: token },
+    });
+    expect(response.statusCode).toBe(403);
+  });
+
+  it("403s for a PARTNER caller", async () => {
+    const { token } = await seedOrgWithSessionToken("Satisfaction Analytics Partner Org", "PARTNER");
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/analytics/satisfaction",
+      cookies: { avatrain_session: token },
+    });
+    expect(response.statusCode).toBe(403);
+  });
+
+  it("200s for OWNER with the expected shape", async () => {
+    const { token, orgId } = await seedOrgWithSessionToken("Satisfaction Analytics Owner Org");
+    await seedSatisfactionRating(orgId, 5);
+    await seedSatisfactionRating(orgId, 3);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/analytics/satisfaction",
+      cookies: { avatrain_session: token },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      windowDays: 30,
+      ratingCount: 2,
+      avgRating: 4,
+    });
+    expect(response.json().ratingDistribution).toHaveLength(5);
+  });
+
+  it("400s on an invalid days value", async () => {
+    const { token } = await seedOrgWithSessionToken("Satisfaction Analytics Invalid Days Org");
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/analytics/satisfaction?days=14",
+      cookies: { avatrain_session: token },
+    });
+    expect(response.statusCode).toBe(400);
+  });
+
+  it("never includes another org's ratings in the aggregate (two-org isolation)", async () => {
+    const orgA = await seedOrgWithSessionToken("Satisfaction Analytics Isolation Org A");
+    const orgB = await seedOrgWithSessionToken("Satisfaction Analytics Isolation Org B");
+    await seedSatisfactionRating(orgB.orgId, 5);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/analytics/satisfaction",
+      cookies: { avatrain_session: orgA.token },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ ratingCount: 0, avgRating: null });
   });
 });

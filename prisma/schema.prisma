@@ -215,6 +215,7 @@ model Organization {
   trainingSessionPins     TrainingSessionPin[]
   knowledgeAccessEvents   KnowledgeAccessEvent[]
   turnMetrics             TurnMetric[]
+  satisfactionRatings     SatisfactionRating[]
 
   @@map("organizations")
 }
@@ -766,6 +767,7 @@ model TrainingSession {
   pins                  TrainingSessionPin[]
   knowledgeAccessEvents KnowledgeAccessEvent[]
   turnMetrics           TurnMetric[]
+  satisfactionRatings   SatisfactionRating[]
 
   @@unique([orgId, clientRequestId])
   @@index([orgId, kind, status])
@@ -877,4 +879,29 @@ model TrainingSessionPin {
   @@unique([userId, trainingSessionId])
   @@index([orgId])
   @@map("training_session_pins")
+}
+
+/// Tenant-scoped. org_id + RLS policy required — see .claude/rules/tenancy.md. Written from
+/// conversation-service.ts's new "session.rate" WS message handler (client-initiated, not a
+/// server-computed pipeline event like TurnMetric/KnowledgeAccessEvent), fire-and-forget, same
+/// try/catch-and-log posture. trainingSessionId nullable, `onDelete: SetNull` — identical
+/// convention to TurnMetric/KnowledgeAccessEvent; null for anonymous apps/widget embed sessions,
+/// which is the only path that sends this message today (see .claude/specs/user-satisfaction.md's
+/// Overview for why dashboard rehearsal surfaces don't). `rating` (1-5) is validated at the Zod
+/// message boundary (sessionRateMessageSchema), not a DB CHECK constraint — no other table in this
+/// schema uses one. `comment` passed through redact() before insert, same convention as
+/// Message.content. Owned by .claude/specs/user-satisfaction.md.
+model SatisfactionRating {
+  id                String   @id @default(uuid()) @db.Uuid
+  orgId             String   @map("org_id") @db.Uuid
+  trainingSessionId String?  @map("training_session_id") @db.Uuid
+  rating            Int
+  comment           String?  @db.Text
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  organization    Organization     @relation(fields: [orgId], references: [id])
+  trainingSession TrainingSession? @relation(fields: [trainingSessionId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, createdAt])
+  @@map("satisfaction_ratings")
 }

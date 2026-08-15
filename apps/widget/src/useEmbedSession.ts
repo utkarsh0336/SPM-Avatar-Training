@@ -28,6 +28,13 @@ interface UseEmbedSessionResult {
   captionText: string;
   amplitude: number;
   errorMessage: string | null;
+  /**
+   * Sends the learner's satisfaction rating (if the session ever connected) and disconnects — see
+   * .claude/specs/user-satisfaction.md. Call rateSession() first (optional — pass nothing to skip
+   * straight to ending), it just delegates to the connected handle's own rateSession/disconnect;
+   * ending before a connection exists is a silent no-op, same posture as the handle's send().
+   */
+  endSession(rating?: number, comment?: string): void;
 }
 
 const DEFAULT_WS_BASE = "ws://localhost:4000";
@@ -51,6 +58,9 @@ export function useEmbedSession({ embedKey, containerRef, muted }: UseEmbedSessi
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const micTrackRef = useRef<MediaStreamTrack | null>(null);
   const mutedRef = useRef(muted);
+  // Mirrors the effect-local `handle` below so endSession() (called from outside the effect, in
+  // response to a user click) can reach it — see endSession's own doc comment.
+  const handleRef = useRef<Awaited<ReturnType<typeof connectConversationSession>> | null>(null);
 
   useEffect(() => {
     mutedRef.current = muted;
@@ -59,7 +69,7 @@ export function useEmbedSession({ embedKey, containerRef, muted }: UseEmbedSessi
 
   useEffect(() => {
     let cancelled = false;
-    let handle: { disconnect(): void } | null = null;
+    let handle: Awaited<ReturnType<typeof connectConversationSession>> | null = null;
     let avatarProvider: AvatarProvider | null = null;
 
     async function start(): Promise<void> {
@@ -150,6 +160,7 @@ export function useEmbedSession({ embedKey, containerRef, muted }: UseEmbedSessi
             console.error("[useEmbedSession] turn error:", message);
           },
         });
+        if (!cancelled) handleRef.current = handle;
       } catch (err) {
         console.error("[useEmbedSession] failed to connect:", err);
         if (!cancelled) {
@@ -164,11 +175,20 @@ export function useEmbedSession({ embedKey, containerRef, muted }: UseEmbedSessi
     return () => {
       cancelled = true;
       handle?.disconnect();
+      handleRef.current = null;
       micTrackRef.current?.stop();
       micTrackRef.current = null;
       avatarProvider?.stop();
     };
   }, [embedKey, containerRef]);
 
-  return { status, messages, captionText, amplitude, errorMessage };
+  function endSession(rating?: number, comment?: string): void {
+    const handle = handleRef.current;
+    if (!handle) return;
+    if (rating !== undefined) handle.rateSession(rating, comment);
+    handle.disconnect();
+    handleRef.current = null;
+  }
+
+  return { status, messages, captionText, amplitude, errorMessage, endSession };
 }

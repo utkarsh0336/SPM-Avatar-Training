@@ -660,6 +660,38 @@ describe("connectConversationSession", () => {
     expect(onStatusChange).toHaveBeenCalledWith("ended");
   });
 
+  it("rateSession() sends session.rate with the given rating and comment, without closing the socket", async () => {
+    const { connectPromise, ws } = setupHarness();
+    const handle = await connectPromise;
+
+    handle.rateSession(5, "Great session!");
+
+    expect(ws.sent).toContainEqual({ type: "session.rate", rating: 5, comment: "Great session!" });
+    expect(ws.readyState).toBe(1);
+  });
+
+  it("rateSession() omits comment from the wire message when not given", async () => {
+    const { connectPromise, ws } = setupHarness();
+    const handle = await connectPromise;
+
+    handle.rateSession(3);
+
+    expect(ws.sent).toContainEqual({ type: "session.rate", rating: 3 });
+  });
+
+  it("rateSession() sent before disconnect() is delivered before the socket closes", async () => {
+    const { connectPromise, ws } = setupHarness();
+    const handle = await connectPromise;
+
+    handle.rateSession(4);
+    handle.disconnect();
+
+    const rateIndex = ws.sent.findIndex((m) => (m as { type?: string }).type === "session.rate");
+    const endIndex = ws.sent.findIndex((m) => (m as { type?: string }).type === "session.end");
+    expect(rateIndex).toBeGreaterThanOrEqual(0);
+    expect(rateIndex).toBeLessThan(endIndex);
+  });
+
   it("ignores a malformed server message instead of throwing", async () => {
     const { connectPromise, ws } = setupHarness();
     await connectPromise;

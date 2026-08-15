@@ -80,6 +80,31 @@ describe("clientMessageSchema", () => {
     expect(clientMessageSchema.safeParse({ type: "session.end" }).success).toBe(true);
   });
 
+  it("accepts a valid session.rate message with an optional comment", () => {
+    expect(clientMessageSchema.safeParse({ type: "session.rate", rating: 5, comment: "Great session!" }).success).toBe(
+      true,
+    );
+  });
+
+  it("accepts session.rate with comment omitted", () => {
+    expect(clientMessageSchema.safeParse({ type: "session.rate", rating: 3 }).success).toBe(true);
+  });
+
+  it("rejects session.rate with a rating outside 1-5", () => {
+    expect(clientMessageSchema.safeParse({ type: "session.rate", rating: 0 }).success).toBe(false);
+    expect(clientMessageSchema.safeParse({ type: "session.rate", rating: 6 }).success).toBe(false);
+  });
+
+  it("rejects session.rate with a non-integer rating", () => {
+    expect(clientMessageSchema.safeParse({ type: "session.rate", rating: 3.5 }).success).toBe(false);
+  });
+
+  it("rejects session.rate with a comment over 500 characters", () => {
+    expect(
+      clientMessageSchema.safeParse({ type: "session.rate", rating: 4, comment: "x".repeat(501) }).success,
+    ).toBe(false);
+  });
+
   it("rejects an unknown message type", () => {
     expect(clientMessageSchema.safeParse({ type: "not.a.real.type" }).success).toBe(false);
   });
