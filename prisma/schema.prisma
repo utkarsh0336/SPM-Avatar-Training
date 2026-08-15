@@ -214,6 +214,7 @@ model Organization {
   messages                Message[]
   trainingSessionPins     TrainingSessionPin[]
   knowledgeAccessEvents   KnowledgeAccessEvent[]
+  turnMetrics             TurnMetric[]
 
   @@map("organizations")
 }
@@ -764,6 +765,7 @@ model TrainingSession {
   messages              Message[]
   pins                  TrainingSessionPin[]
   knowledgeAccessEvents KnowledgeAccessEvent[]
+  turnMetrics           TurnMetric[]
 
   @@unique([orgId, clientRequestId])
   @@index([orgId, kind, status])
@@ -819,6 +821,35 @@ model KnowledgeAccessEvent {
   @@index([orgId, documentId])
   @@index([orgId, createdAt])
   @@map("knowledge_access_events")
+}
+
+/// Tenant-scoped. org_id + RLS policy required — see .claude/rules/tenancy.md. Written
+/// fire-and-forget from conversation-service.ts right after tracker.finish() computes the turn's
+/// TurnLatencyBreakdown — one row per real conversational turn, both dashboard-rehearsal and
+/// anonymous apps/widget embed sessions (trainingSessionId null for the latter, same nullability
+/// convention as KnowledgeAccessEvent.trainingSessionId). `grounded` mirrors the same
+/// sources.length > 0 check that decides whether the transcript message includes `sources` — see
+/// conversation-service.ts's processTurn. Owned by .claude/specs/ai-performance-analytics.md.
+model TurnMetric {
+  id                String   @id @default(uuid()) @db.Uuid
+  orgId             String   @map("org_id") @db.Uuid
+  trainingSessionId String?  @map("training_session_id") @db.Uuid
+  turnId            String   @map("turn_id")
+
+  sttMs           Int? @map("stt_ms")
+  retrievalMs     Int? @map("retrieval_ms")
+  llmFirstTokenMs Int? @map("llm_first_token_ms")
+  ttsFirstChunkMs Int? @map("tts_first_chunk_ms")
+  totalMs         Int  @map("total_ms")
+  grounded        Boolean
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  organization    Organization     @relation(fields: [orgId], references: [id])
+  trainingSession TrainingSession? @relation(fields: [trainingSessionId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, createdAt])
+  @@map("turn_metrics")
 }
 
 /// Tenant-scoped. org_id + RLS policy required — see .claude/rules/tenancy.md. Per-(user,

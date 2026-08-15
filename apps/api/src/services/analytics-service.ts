@@ -1,6 +1,7 @@
 import {
   withOrg,
   type KnowledgeArea,
+  type PerformanceAnalyticsResponse,
   type TrainingAnalyticsResponse,
   type UsageAnalyticsResponse,
 } from "@avatrain/shared";
@@ -9,9 +10,18 @@ const DEFAULT_WINDOW_DAYS = 30;
 const TOP_KNOWLEDGE_AREAS_LIMIT = 10;
 const MIN_ATTEMPTS = 2;
 const KNOWLEDGE_GAPS_LIMIT = 10;
+// Fixed window for knowledgeUtilizationTrend, independent of the days query param — see
+// getPerformanceAnalytics's doc comment and .claude/specs/ai-performance-analytics.md's Database
+// Changes for why this is bounded, indexed count() calls rather than a groupBy.
+const TREND_DAYS = 14;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 function windowStart(windowDays: number): Date {
   return new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
+}
+
+function startOfUtcDay(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
 
 function average(values: number[]): number | null {
@@ -237,5 +247,110 @@ export async function getTrainingAnalytics(orgId: string): Promise<TrainingAnaly
     avgCompletionRate,
     avgTimeToCompetencySeconds,
     knowledgeGaps,
+  };
+}
+
+export interface TurnMetricInput {
+  turnId: string;
+  sttMs?: number;
+  retrievalMs?: number;
+  llmFirstTokenMs?: number;
+  ttsFirstChunkMs?: number;
+  totalMs: number;
+  grounded: boolean;
+}
+
+/**
+ * Fire-and-forget from conversation-service.ts's turn-completion path (never awaited, never
+ * throws into the caller — same posture as recordKnowledgeAccess above, for the same
+ * .claude/rules/realtime.md "never block the audio path" reason). Unlike
+ * persistTrainingSessionMessage, does NOT no-op when trainingSessionId is null — an anonymous
+ * apps/widget embed session's turn is exactly the real usage this table exists to capture. See
+ * .claude/specs/ai-performance-analytics.md's Realtime Changes.
+ */
+export async function recordTurnMetric(
+  orgId: string,
+  trainingSessionId: string | null,
+  metric: TurnMetricInput,
+): Promise<void> {
+  try {
+    await withOrg(orgId, (tx) =>
+      tx.turnMetric.create({
+        data: {
+          orgId,
+          trainingSessionId,
+          turnId: metric.turnId,
+          sttMs: metric.sttMs ?? null,
+          retrievalMs: metric.retrievalMs ?? null,
+          llmFirstTokenMs: metric.llmFirstTokenMs ?? null,
+          ttsFirstChunkMs: metric.ttsFirstChunkMs ?? null,
+          totalMs: metric.totalMs,
+          grounded: metric.grounded,
+        },
+      }),
+    );
+  } catch (error) {
+    console.error("recordTurnMetric failed", { orgId, turnId: metric.turnId }, error);
+  }
+}
+
+/**
+ * GET /v1/analytics/performance — see .claude/specs/ai-performance-analytics.md. turnCount,
+ * avgLatencyMs, and groundedReplyRate use Prisma's native count/aggregate (not a full-row fetch),
+ * the same "TurnMetric volume is unbounded like KnowledgeAccessEvent" reasoning
+ * getUsageAnalytics's topKnowledgeAreas already established — `_avg` ignores null hop values
+ * automatically (a turn that skipped a hop, e.g. no retrieval call made), which is exactly the
+ * wanted behavior with no manual null-filtering.
+ *
+ * knowledgeUtilizationTrend buckets KnowledgeAccessEvent by day over a FIXED TREND_DAYS window,
+ * independent of the `days` selector above: Prisma's groupBy cannot express a
+ * date_trunc('day', ...) grouping without raw SQL, so this issues TREND_DAYS bounded, indexed
+ * (org_id, created_at) count() calls instead — small and constant-cost regardless of org size.
+ * Every field this function returns is real, org-wide production data (unlike
+ * getUsageAnalytics's TrainingSession-derived fields): the turn pipeline runs identically for
+ * dashboard rehearsal and the public apps/widget embed. groundedReplyRate is NOT a
+ * factual-accuracy judgment — see the spec's Overview.
+ */
+export async function getPerformanceAnalytics(
+  orgId: string,
+  windowDays: 7 | 30 | 90 = DEFAULT_WINDOW_DAYS,
+): Promise<PerformanceAnalyticsResponse> {
+  const cutoff = windowStart(windowDays);
+  const turnWhere = { orgId, createdAt: { gte: cutoff } };
+  const todayUtc = startOfUtcDay(new Date());
+
+  const [turnCount, groundedCount, latencyAgg, knowledgeUtilizationTrend] = await withOrg(orgId, (tx) =>
+    Promise.all([
+      tx.turnMetric.count({ where: turnWhere }),
+      tx.turnMetric.count({ where: { ...turnWhere, grounded: true } }),
+      tx.turnMetric.aggregate({
+        where: turnWhere,
+        _avg: { sttMs: true, retrievalMs: true, llmFirstTokenMs: true, ttsFirstChunkMs: true, totalMs: true },
+      }),
+      Promise.all(
+        Array.from({ length: TREND_DAYS }, (_, i) => {
+          const dayStart = new Date(todayUtc.getTime() - (TREND_DAYS - 1 - i) * DAY_MS);
+          const dayEnd = new Date(dayStart.getTime() + DAY_MS);
+          return tx.knowledgeAccessEvent
+            .count({ where: { orgId, createdAt: { gte: dayStart, lt: dayEnd } } })
+            .then((accessCount) => ({ date: dayStart.toISOString().slice(0, 10), accessCount }));
+        }),
+      ),
+    ]),
+  );
+
+  return {
+    windowDays,
+    generatedAt: new Date().toISOString(),
+    turnCount,
+    avgLatencyMs: {
+      stt: latencyAgg._avg.sttMs,
+      retrieval: latencyAgg._avg.retrievalMs,
+      llmFirstToken: latencyAgg._avg.llmFirstTokenMs,
+      ttsFirstChunk: latencyAgg._avg.ttsFirstChunkMs,
+      total: latencyAgg._avg.totalMs,
+    },
+    groundedReplyRate: turnCount === 0 ? null : groundedCount / turnCount,
+    knowledgeUtilizationTrend,
   };
 }

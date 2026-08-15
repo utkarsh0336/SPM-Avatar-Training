@@ -44,7 +44,7 @@ import {
 } from "./curriculum-service.js";
 import { getAvatarById } from "./avatar-service.js";
 import { persistTrainingSessionMessage } from "./training-session-service.js";
-import { recordKnowledgeAccess } from "./analytics-service.js";
+import { recordKnowledgeAccess, recordTurnMetric } from "./analytics-service.js";
 import {
   defaultTurnLatencyCircuitBreaker,
   startTurnLatencyWatchdog,
@@ -161,6 +161,13 @@ export interface ConversationHandlerDeps {
    * .claude/specs/dashboard-analytics.md.
    */
   recordKnowledgeAccess?: typeof recordKnowledgeAccess;
+  /**
+   * Injectable for tests; defaults to the real ./analytics-service.js. Called fire-and-forget
+   * (`void`), never awaited, right after tracker.finish() — see recordTurnMetric below. Like
+   * recordKnowledgeAccess, fires regardless of trainingSessionId — see
+   * .claude/specs/ai-performance-analytics.md.
+   */
+  recordTurnMetric?: typeof recordTurnMetric;
   /**
    * Injectable for tests; defaults to the shared module-level singleton in
    * turn-latency-guard.ts, which must persist across connections/turns —
@@ -322,6 +329,7 @@ export function createConversationHandler(
   const trainingSessionId = deps.trainingSessionId ?? null;
   const persistMessage = deps.persistTrainingSessionMessage ?? persistTrainingSessionMessage;
   const recordAccess = deps.recordKnowledgeAccess ?? recordKnowledgeAccess;
+  const recordMetric = deps.recordTurnMetric ?? recordTurnMetric;
   const messages: LLMMessage[] = [];
 
   /**
@@ -890,6 +898,20 @@ ${step.branches.map((branch, index) => `${letters[index]}) ${branch.matchCriteri
       ttsFirstChunkMs: latency.ttsFirstChunkMs,
       totalMs: latency.totalMs,
       servedBy: latency.servedBy,
+    });
+
+    // Fire-and-forget, after the turn has already fully completed and sent its latency/turn.ended
+    // messages — same posture and timing as recordAccessedKnowledge above, for the same
+    // .claude/rules/realtime.md reason. Does NOT no-op when trainingSessionId is null — see
+    // .claude/specs/ai-performance-analytics.md.
+    void recordMetric(claims.orgId, trainingSessionId, {
+      turnId: latency.turnId,
+      sttMs: latency.sttMs,
+      retrievalMs: latency.retrievalMs,
+      llmFirstTokenMs: latency.llmFirstTokenMs,
+      ttsFirstChunkMs: latency.ttsFirstChunkMs,
+      totalMs: latency.totalMs,
+      grounded: sources.length > 0,
     });
   }
 

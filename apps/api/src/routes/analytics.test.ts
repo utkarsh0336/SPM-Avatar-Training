@@ -13,6 +13,7 @@ const createdUserIds: string[] = [];
 async function cleanup(): Promise<void> {
   for (const orgId of createdOrgIds) {
     await withAuthContext({ orgId }, async (tx) => {
+      await tx.turnMetric.deleteMany({ where: { orgId } });
       await tx.knowledgeAccessEvent.deleteMany({ where: { orgId } });
       await tx.knowledgeDocument.deleteMany({ where: { orgId } });
       await tx.message.deleteMany({ where: { orgId } });
@@ -247,5 +248,88 @@ describe("GET /v1/analytics/training", () => {
     });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ participantCount: 0, curriculumsWithActivityCount: 0, knowledgeGaps: [] });
+  });
+});
+
+async function seedTurnMetric(orgId: string, overrides: { grounded?: boolean; totalMs?: number } = {}) {
+  return withAuthContext({ orgId }, (tx) =>
+    tx.turnMetric.create({
+      data: {
+        orgId,
+        turnId: randomUUID(),
+        totalMs: overrides.totalMs ?? 500,
+        grounded: overrides.grounded ?? true,
+      },
+    }),
+  );
+}
+
+describe("GET /v1/analytics/performance", () => {
+  it("requires authentication", async () => {
+    const response = await app.inject({ method: "GET", url: "/v1/analytics/performance" });
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("403s for a MEMBER caller", async () => {
+    const { token } = await seedOrgWithSessionToken("Performance Analytics Member Org", "MEMBER");
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/analytics/performance",
+      cookies: { avatrain_session: token },
+    });
+    expect(response.statusCode).toBe(403);
+  });
+
+  it("403s for a PARTNER caller", async () => {
+    const { token } = await seedOrgWithSessionToken("Performance Analytics Partner Org", "PARTNER");
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/analytics/performance",
+      cookies: { avatrain_session: token },
+    });
+    expect(response.statusCode).toBe(403);
+  });
+
+  it("200s for OWNER with the expected shape", async () => {
+    const { token, orgId } = await seedOrgWithSessionToken("Performance Analytics Owner Org");
+    await seedTurnMetric(orgId, { grounded: true, totalMs: 400 });
+    await seedTurnMetric(orgId, { grounded: false, totalMs: 600 });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/analytics/performance",
+      cookies: { avatrain_session: token },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      windowDays: 30,
+      turnCount: 2,
+      groundedReplyRate: 0.5,
+    });
+    expect(response.json().knowledgeUtilizationTrend).toHaveLength(14);
+  });
+
+  it("400s on an invalid days value", async () => {
+    const { token } = await seedOrgWithSessionToken("Performance Analytics Invalid Days Org");
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/analytics/performance?days=14",
+      cookies: { avatrain_session: token },
+    });
+    expect(response.statusCode).toBe(400);
+  });
+
+  it("never includes another org's turn metrics in the aggregate (two-org isolation)", async () => {
+    const orgA = await seedOrgWithSessionToken("Performance Analytics Isolation Org A");
+    const orgB = await seedOrgWithSessionToken("Performance Analytics Isolation Org B");
+    await seedTurnMetric(orgB.orgId);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/analytics/performance",
+      cookies: { avatrain_session: orgA.token },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ turnCount: 0, groundedReplyRate: null });
   });
 });

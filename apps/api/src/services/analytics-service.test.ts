@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it } from "vitest";
 import { prisma, setAuthContext, withAuthContext } from "@avatrain/shared";
-import { getTrainingAnalytics, getUsageAnalytics, recordKnowledgeAccess } from "./analytics-service.js";
+import {
+  getPerformanceAnalytics,
+  getTrainingAnalytics,
+  getUsageAnalytics,
+  recordKnowledgeAccess,
+  recordTurnMetric,
+} from "./analytics-service.js";
 import { createCurriculum, replaceObjectives } from "./curriculum-service.js";
 
 const createdOrgIds: string[] = [];
@@ -10,6 +16,7 @@ const createdUserIds: string[] = [];
 async function cleanup(): Promise<void> {
   for (const orgId of createdOrgIds) {
     await withAuthContext({ orgId }, async (tx) => {
+      await tx.turnMetric.deleteMany({ where: { orgId } });
       await tx.knowledgeAccessEvent.deleteMany({ where: { orgId } });
       await tx.knowledgeDocument.deleteMany({ where: { orgId } });
       await tx.message.deleteMany({ where: { orgId } });
@@ -376,6 +383,122 @@ describe("analytics-service", () => {
 
       const result = await getTrainingAnalytics(orgA.orgId);
       expect(result).toMatchObject({ participantCount: 0, curriculumsWithActivityCount: 0, knowledgeGaps: [] });
+    });
+  });
+
+  describe("recordTurnMetric", () => {
+    it("writes a metric row for a rehearsal session (trainingSessionId set)", async () => {
+      const { orgId, userId } = await seedOrgAndUser("Record Turn Metric Rehearsal Org");
+      const session = await seedTrainingSession(orgId, userId);
+
+      await recordTurnMetric(orgId, session.id, {
+        turnId: "turn-1",
+        sttMs: 100,
+        retrievalMs: 50,
+        llmFirstTokenMs: 300,
+        ttsFirstChunkMs: 400,
+        totalMs: 900,
+        grounded: true,
+      });
+
+      const rows = await withAuthContext({ orgId }, (tx) => tx.turnMetric.findMany({ where: { orgId } }));
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ trainingSessionId: session.id, totalMs: 900, grounded: true });
+    });
+
+    it("writes a metric row when trainingSessionId is null (anonymous embed session) — does not no-op", async () => {
+      const { orgId } = await seedOrgAndUser("Record Turn Metric Embed Org");
+
+      await recordTurnMetric(orgId, null, { turnId: "turn-2", totalMs: 500, grounded: false });
+
+      const rows = await withAuthContext({ orgId }, (tx) => tx.turnMetric.findMany({ where: { orgId } }));
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ trainingSessionId: null, grounded: false });
+    });
+
+    it("stores a skipped hop as null rather than 0", async () => {
+      const { orgId } = await seedOrgAndUser("Record Turn Metric Skipped Hop Org");
+
+      await recordTurnMetric(orgId, null, { turnId: "turn-3", totalMs: 200, grounded: false });
+
+      const rows = await withAuthContext({ orgId }, (tx) => tx.turnMetric.findMany({ where: { orgId } }));
+      expect(rows[0]).toMatchObject({ sttMs: null, retrievalMs: null, llmFirstTokenMs: null, ttsFirstChunkMs: null });
+    });
+
+    it("swallows a write failure rather than throwing (never fails the realtime turn)", async () => {
+      const { orgId } = await seedOrgAndUser("Record Turn Metric Failure Org");
+
+      await expect(
+        recordTurnMetric(orgId, randomUUID(), { turnId: "turn-4", totalMs: 100, grounded: false }),
+      ).resolves.toBeUndefined();
+    });
+  });
+
+  describe("getPerformanceAnalytics", () => {
+    it("returns zeros and nulls, never NaN, for an org with no turns", async () => {
+      const { orgId } = await seedOrgAndUser("Performance Analytics Empty Org");
+
+      const result = await getPerformanceAnalytics(orgId, 30);
+      expect(result.turnCount).toBe(0);
+      expect(result.groundedReplyRate).toBeNull();
+      expect(result.avgLatencyMs).toEqual({
+        stt: null,
+        retrieval: null,
+        llmFirstToken: null,
+        ttsFirstChunk: null,
+        total: null,
+      });
+      expect(result.knowledgeUtilizationTrend).toHaveLength(14);
+      expect(result.knowledgeUtilizationTrend.every((point) => point.accessCount === 0)).toBe(true);
+    });
+
+    it("averages latency across turns and ignores hops a turn skipped, without excluding that turn from turnCount", async () => {
+      const { orgId } = await seedOrgAndUser("Performance Analytics Avg Org");
+      await recordTurnMetric(orgId, null, { turnId: "t1", sttMs: 100, totalMs: 500, grounded: true });
+      await recordTurnMetric(orgId, null, { turnId: "t2", sttMs: 200, totalMs: 700, grounded: false });
+      // t3 has no sttMs at all — must not drag the stt average toward 0 or be excluded from turnCount.
+      await recordTurnMetric(orgId, null, { turnId: "t3", totalMs: 300, grounded: false });
+
+      const result = await getPerformanceAnalytics(orgId, 30);
+      expect(result.turnCount).toBe(3);
+      expect(result.avgLatencyMs.stt).toBeCloseTo(150, 5);
+      expect(result.avgLatencyMs.total).toBeCloseTo(500, 5);
+      expect(result.groundedReplyRate).toBeCloseTo(1 / 3, 5);
+    });
+
+    it("excludes a turn recorded outside the window", async () => {
+      const { orgId } = await seedOrgAndUser("Performance Analytics Window Org");
+      const outsideWindow = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+      await withAuthContext({ orgId }, (tx) =>
+        tx.turnMetric.create({
+          data: { orgId, turnId: "old", totalMs: 100, grounded: false, createdAt: outsideWindow },
+        }),
+      );
+      await recordTurnMetric(orgId, null, { turnId: "recent", totalMs: 200, grounded: false });
+
+      const result = await getPerformanceAnalytics(orgId, 7);
+      expect(result.turnCount).toBe(1);
+    });
+
+    it("buckets knowledgeUtilizationTrend by day, oldest first, over a fixed 14-day window independent of the days selector", async () => {
+      const { orgId, userId } = await seedOrgAndUser("Performance Analytics Trend Org");
+      const document = await seedKnowledgeDocument(orgId, userId, "Trend Doc");
+      await recordKnowledgeAccess(orgId, document.id, null);
+
+      const result = await getPerformanceAnalytics(orgId, 7);
+      expect(result.knowledgeUtilizationTrend).toHaveLength(14);
+      const today = new Date().toISOString().slice(0, 10);
+      expect(result.knowledgeUtilizationTrend[13]).toEqual({ date: today, accessCount: 1 });
+    });
+
+    it("never includes another org's TurnMetric rows in the aggregate (two-org isolation)", async () => {
+      const orgA = await seedOrgAndUser("Performance Analytics Isolation Org A");
+      const orgB = await seedOrgAndUser("Performance Analytics Isolation Org B");
+      await recordTurnMetric(orgB.orgId, null, { turnId: "b1", totalMs: 999, grounded: true });
+
+      const result = await getPerformanceAnalytics(orgA.orgId, 30);
+      expect(result.turnCount).toBe(0);
+      expect(result.groundedReplyRate).toBeNull();
     });
   });
 });
