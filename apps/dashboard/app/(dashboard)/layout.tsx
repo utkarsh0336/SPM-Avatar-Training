@@ -27,7 +27,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
   return (
     <div className={`${tokens.tokens} ${styles.shell}`} style={orgAccentStyle(me.org)}>
       <LocaleProvider initialLocale={resolveLocale(me.user.uiLocale)}>
-        <Sidebar org={me.org} />
+        <Sidebar org={me.org} role={me.role} />
         <div className={styles.content}>{children}</div>
       </LocaleProvider>
     </div>

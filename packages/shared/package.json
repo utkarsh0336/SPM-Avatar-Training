@@ -50,6 +50,10 @@
       "types": "./dist/training-session/index.d.ts",
       "default": "./dist/training-session/index.js"
     },
+    "./analytics": {
+      "types": "./dist/analytics/index.d.ts",
+      "default": "./dist/analytics/index.js"
+    },
     "./contracts": {
       "types": "./dist/contracts/index.d.ts",
       "default": "./dist/contracts/index.js"

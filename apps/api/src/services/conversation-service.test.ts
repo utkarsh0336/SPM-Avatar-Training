@@ -318,6 +318,100 @@ describe("createConversationHandler", () => {
     });
   });
 
+  describe("recordKnowledgeAccess hook", () => {
+    const chunk = { documentId: "8c9a6c1a-6d1a-4c2e-9c1a-6d1a4c2e9c1a", documentTitle: "Leave Policy", content: "20 days.", similarity: 0.9 };
+
+    // Same fire-and-forget regression guard as the persistTrainingSessionMessage test above —
+    // recordKnowledgeAccess is injected with a promise that never resolves, yet the turn still
+    // completes, proving the retrieval-path write is never awaited.
+    it("never blocks the turn even when the injected recordKnowledgeAccess hangs forever", async () => {
+      const socket = new FakeSocket();
+      const recordKnowledgeAccess = vi.fn(() => new Promise<void>(() => {})); // never resolves
+      createConversationHandler(socket as never, claims, {
+        createLLM: fakeLLM("success", ["Hello. "]),
+        createSTT: fakeSTT("success"),
+        createTTS: fakeTTS("success"),
+        trainingSessionId: "ts-1",
+        recordKnowledgeAccess,
+        retrieveContext: fakeRetrieveContext([chunk]),
+      });
+      socket.emitMessage(sessionStartBase);
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+
+      expect(recordKnowledgeAccess).toHaveBeenCalledWith("org-1", chunk.documentId, "ts-1");
+    });
+
+    // Deliberately the opposite of persistTrainingSessionMessage's no-op-when-null contract — an
+    // anonymous apps/widget embed session's retrieval is exactly the real usage
+    // .claude/specs/dashboard-analytics.md's KnowledgeAccessEvent exists to capture.
+    it("still fires when trainingSessionId is omitted (anonymous embed sessions) — does not no-op", async () => {
+      const socket = new FakeSocket();
+      const recordKnowledgeAccess = vi.fn(async () => {});
+      createConversationHandler(socket as never, claims, {
+        createLLM: fakeLLM("success", ["Hi. "]),
+        createSTT: fakeSTT("success"),
+        createTTS: fakeTTS("success"),
+        recordKnowledgeAccess,
+        retrieveContext: fakeRetrieveContext([chunk]),
+      });
+      socket.emitMessage(sessionStartBase);
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+
+      expect(recordKnowledgeAccess).toHaveBeenCalledWith("org-1", chunk.documentId, null);
+    });
+
+    it("calls once per distinct documentId, not once per chunk", async () => {
+      const socket = new FakeSocket();
+      const recordKnowledgeAccess = vi.fn(async () => {});
+      createConversationHandler(socket as never, claims, {
+        createLLM: fakeLLM("success", ["Hi. "]),
+        createSTT: fakeSTT("success"),
+        createTTS: fakeTTS("success"),
+        recordKnowledgeAccess,
+        retrieveContext: fakeRetrieveContext([
+          chunk,
+          { ...chunk, content: "a different chunk, same document" },
+        ]),
+      });
+      socket.emitMessage(sessionStartBase);
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+
+      expect(recordKnowledgeAccess).toHaveBeenCalledTimes(1);
+    });
+
+    it("never calls recordKnowledgeAccess when retrieval finds nothing", async () => {
+      const socket = new FakeSocket();
+      const recordKnowledgeAccess = vi.fn(async () => {});
+      createConversationHandler(socket as never, claims, {
+        createLLM: fakeLLM("success", ["Hi. "]),
+        createSTT: fakeSTT("success"),
+        createTTS: fakeTTS("success"),
+        recordKnowledgeAccess,
+        ...noRetrieval,
+      });
+      socket.emitMessage(sessionStartBase);
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+
+      expect(recordKnowledgeAccess).not.toHaveBeenCalled();
+    });
+  });
+
   describe("turn-latency SLA gate", () => {
     it("sends latency.budget_exceeded once when TTS runs past the TTFA budget, and the turn still completes", async () => {
       vi.useFakeTimers();

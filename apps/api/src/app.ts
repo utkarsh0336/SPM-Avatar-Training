@@ -16,6 +16,7 @@ import { registerScenarioRoutes } from "./routes/scenario.js";
 import { registerAvatarRoutes } from "./routes/avatars.js";
 import { registerApplicationRoutes } from "./routes/applications.js";
 import { registerEmbedRoutes } from "./routes/embed.js";
+import { registerAnalyticsRoutes } from "./routes/analytics.js";
 
 export function buildApp() {
   const app = Fastify({ logger: false });
@@ -48,6 +49,7 @@ export function buildApp() {
   registerAvatarRoutes(app);
   registerApplicationRoutes(app);
   registerEmbedRoutes(app);
+  registerAnalyticsRoutes(app);
 
   app.get("/healthz", async () => ({ status: "ok" }));
 

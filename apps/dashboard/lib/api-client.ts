@@ -88,6 +88,7 @@ import {
   type TrainingSessionKind,
   type TrainingSessionResult,
 } from "@avatrain/shared/training-session";
+import { usageAnalyticsResponseSchema, type UsageAnalyticsResponse } from "@avatrain/shared/analytics";
 
 export interface AuthUser {
   id: string;
@@ -684,6 +685,15 @@ export async function listCurriculumProgress(curriculumId: string): Promise<List
 export async function getCurriculumEffectiveness(curriculumId: string): Promise<CurriculumEffectiveness> {
   const result = await apiFetch<unknown>(`/curricula/${curriculumId}/effectiveness`, { method: "GET" });
   return curriculumEffectivenessSchema.parse(result);
+}
+
+/**
+ * GET /v1/analytics/usage — OWNER-only. See .claude/specs/dashboard-analytics.md. `days` defaults
+ * server-side to 30 when omitted.
+ */
+export async function getUsageAnalytics(days?: 7 | 30 | 90): Promise<UsageAnalyticsResponse> {
+  const result = await apiFetch<unknown>(`/analytics/usage${days ? `?days=${days}` : ""}`, { method: "GET" });
+  return usageAnalyticsResponseSchema.parse(result);
 }
 
 /**

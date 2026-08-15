@@ -213,6 +213,7 @@ model Organization {
   trainingSessions        TrainingSession[]
   messages                Message[]
   trainingSessionPins     TrainingSessionPin[]
+  knowledgeAccessEvents   KnowledgeAccessEvent[]
 
   @@map("organizations")
 }
@@ -450,8 +451,9 @@ model KnowledgeDocument {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  organization Organization     @relation(fields: [orgId], references: [id])
-  chunks       KnowledgeChunk[]
+  organization          Organization           @relation(fields: [orgId], references: [id])
+  chunks                KnowledgeChunk[]
+  knowledgeAccessEvents KnowledgeAccessEvent[]
 
   @@unique([lineageId, version])
   @@index([orgId])
@@ -496,22 +498,22 @@ model KnowledgeChunk {
 /// Multi-curriculum-per-avatar and avatar-agnostic curricula are deferred — see the spec's
 /// "Scope decisions".
 model Curriculum {
-  id          String       @id @default(uuid()) @db.Uuid
-  orgId       String       @map("org_id") @db.Uuid
-  avatarId    String       @unique @map("avatar_id") @db.Uuid
-  createdById String       @map("created_by_id") @db.Uuid
-  title       String
+  id                      String       @id @default(uuid()) @db.Uuid
+  orgId                   String       @map("org_id") @db.Uuid
+  avatarId                String       @unique @map("avatar_id") @db.Uuid
+  createdById             String       @map("created_by_id") @db.Uuid
+  title                   String
   // Additive, nullable — see .claude/specs/training-catalog.md. null means
   // "uncategorized", the same state every curriculum created before this
   // field existed is in; never backfilled.
-  programType ProgramType? @map("program_type")
+  programType             ProgramType? @map("program_type")
   // Trainer opt-in: when true, getCurriculumForAvatar presents this curriculum's objectives to
   // each learner in mastery-weighted order instead of strict authored `order`. Default false so
   // every curriculum created before this field existed keeps today's behavior unchanged — see
   // .claude/specs/adaptive-learning-paths.md.
-  adaptiveOrderingEnabled Boolean @default(false) @map("adaptive_ordering_enabled")
-  createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt   DateTime     @updatedAt @map("updated_at")
+  adaptiveOrderingEnabled Boolean      @default(false) @map("adaptive_ordering_enabled")
+  createdAt               DateTime     @default(now()) @map("created_at")
+  updatedAt               DateTime     @updatedAt @map("updated_at")
 
   organization Organization        @relation(fields: [orgId], references: [id])
   avatar       Avatar              @relation(fields: [avatarId], references: [id])
@@ -724,10 +726,10 @@ enum MessageRole {
 /// client-generated slug (`session-${Date.now()}`/`voice-${Date.now()}`), which had no
 /// persisted-ownership record and was guarded only by an in-memory Map.
 model TrainingSession {
-  id              String                @id @default(uuid()) @db.Uuid
-  orgId           String                @map("org_id") @db.Uuid
-  createdByUserId String                @map("created_by_user_id") @db.Uuid
-  clientRequestId String                @map("client_request_id")
+  id              String @id @default(uuid()) @db.Uuid
+  orgId           String @map("org_id") @db.Uuid
+  createdByUserId String @map("created_by_user_id") @db.Uuid
+  clientRequestId String @map("client_request_id")
 
   kind   TrainingSessionKind
   status TrainingSessionStatus @default(ACTIVE)
@@ -736,7 +738,7 @@ model TrainingSession {
 
   // Exactly one of avatarId/voiceExpertId is set, matching kind — enforced at the service layer
   // (training-session-service.ts), not expressible as a direct Prisma/DB constraint.
-  avatarId String? @map("avatar_id") @db.Uuid
+  avatarId      String? @map("avatar_id") @db.Uuid
   // Not a FK — an id into packages/shared/src/training-session/voice-experts.ts's static catalog,
   // which is code, not tenant data (no VoiceExpert table exists).
   voiceExpertId String? @map("voice_expert_id")
@@ -744,8 +746,8 @@ model TrainingSession {
   // (name/role), server-side — never trusted from the client. VOICE_ONLY rows have no Avatar row
   // to join at read time, and this mirrors the denormalization convention already used by both
   // Milestone-1 mock fixtures this table replaces (listOwnerName/listCategory, expertName/expertRole).
-  personaName String @map("persona_name")
-  personaRole String @map("persona_role")
+  personaName   String  @map("persona_name")
+  personaRole   String  @map("persona_role")
 
   endReason String?   @map("end_reason")
   endedAt   DateTime? @map("ended_at")
@@ -756,11 +758,12 @@ model TrainingSession {
   // separate heartbeat mechanism.
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  organization  Organization         @relation(fields: [orgId], references: [id])
-  createdByUser User                 @relation(fields: [createdByUserId], references: [id])
-  avatar        Avatar?              @relation(fields: [avatarId], references: [id])
-  messages      Message[]
-  pins          TrainingSessionPin[]
+  organization          Organization           @relation(fields: [orgId], references: [id])
+  createdByUser         User                   @relation(fields: [createdByUserId], references: [id])
+  avatar                Avatar?                @relation(fields: [avatarId], references: [id])
+  messages              Message[]
+  pins                  TrainingSessionPin[]
+  knowledgeAccessEvents KnowledgeAccessEvent[]
 
   @@unique([orgId, clientRequestId])
   @@index([orgId, kind, status])
@@ -792,6 +795,30 @@ model Message {
   @@unique([trainingSessionId, sequence])
   @@index([orgId, trainingSessionId])
   @@map("messages")
+}
+
+/// Tenant-scoped. org_id + RLS policy required — see .claude/rules/tenancy.md. Written
+/// fire-and-forget from conversation-service.ts whenever retrieveContext returns >=1 chunk, one
+/// row per distinct documentId per turn (not per chunk). trainingSessionId is nullable and null
+/// for anonymous apps/widget embed sessions (same nullability reasoning as
+/// ConversationHandlerDeps.trainingSessionId) — that's expected, not an error state: retrieval runs
+/// on both the dashboard-rehearsal and embed paths, so this table's aggregate reflects real usage
+/// on both, unlike TrainingSession-derived metrics which only ever see rehearsal activity. Owned by
+/// .claude/specs/dashboard-analytics.md.
+model KnowledgeAccessEvent {
+  id                String   @id @default(uuid()) @db.Uuid
+  orgId             String   @map("org_id") @db.Uuid
+  documentId        String   @map("document_id") @db.Uuid
+  trainingSessionId String?  @map("training_session_id") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  organization    Organization      @relation(fields: [orgId], references: [id])
+  document        KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  trainingSession TrainingSession?  @relation(fields: [trainingSessionId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, documentId])
+  @@index([orgId, createdAt])
+  @@map("knowledge_access_events")
 }
 
 /// Tenant-scoped. org_id + RLS policy required — see .claude/rules/tenancy.md. Per-(user,
