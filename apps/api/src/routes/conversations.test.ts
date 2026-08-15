@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it } from "vitest";
 import { prisma, withAuthContext } from "@avatrain/shared";
 import { buildApp } from "../app.js";
-import { _resetKnownRoomsForTests } from "../lib/livekit.js";
 
 // Full DB-backed auth flows are covered by auth.test.ts's established
 // pattern; this only checks the parts of this route that don't require a
@@ -46,10 +45,16 @@ describe("conversation routes", () => {
 // and real LIVEKIT_* config, so they live in their own describe block below,
 // following routes/org.test.ts's two-org-isolation pattern. The 201 success
 // path (a real LiveKit room + token) is intentionally NOT exercised here —
-// it would require a live LiveKit deployment; that mint logic's own
-// cross-org room-ownership behavior is already unit-tested end to end in
-// lib/livekit.test.ts, and the full 201 flow is covered by this feature's
-// documented manual-verification step instead.
+// it would require a live LiveKit deployment; the full 201 flow is covered
+// by this feature's documented manual-verification step instead.
+// Cross-org session-ownership behavior (a second org addressing another
+// org's trainingSessionId) is covered by training-sessions.test.ts's
+// two-org isolation test instead — trainingSessionId is now a server-minted,
+// RLS-scoped TrainingSession.id, so ownership is enforced by the same
+// getTrainingSessionForConnect lookup (404 for another org's id) this route
+// and the WS preValidation hook both call; there is no separate
+// LiveKit-room-ownership concept to test anymore (see lib/livekit.ts's
+// createLiveKitRoom doc comment).
 describe("POST /v1/conversations/:trainingSessionId/livekit-connect — plan gating", () => {
   function uniqueEmail(label: string): string {
     return `${label}-${randomUUID()}@example.com`;
@@ -142,7 +147,6 @@ describe("POST /v1/conversations/:trainingSessionId/livekit-connect — plan gat
     process.env.LIVEKIT_URL = "wss://test.invalid";
     process.env.LIVEKIT_API_KEY = "test-key";
     process.env.LIVEKIT_API_SECRET = "test-secret";
-    _resetKnownRoomsForTests();
 
     const orgAToken = await signup("Org A Enterprise", uniqueEmail("orga"), "password123");
     const orgBToken = await signup("Org B Starter", uniqueEmail("orgb"), "password123");

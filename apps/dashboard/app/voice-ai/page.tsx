@@ -19,13 +19,23 @@ export default function VoiceAiPage() {
   const { addSession } = useVoiceSessions();
   const [selectedExpertId, setSelectedExpertId] = useState(SELECTABLE_VOICE_EXPERTS[0]!.id);
   const [language, setLanguage] = useState(LANGUAGE_OPTIONS[0]!);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const selectedExpert =
     SELECTABLE_VOICE_EXPERTS.find((expert) => expert.id === selectedExpertId) ?? SELECTABLE_VOICE_EXPERTS[0]!;
 
-  function handleStart() {
-    const created = addSession({ expertId: selectedExpert.id, language });
-    router.push(`/voice-ai/${created.id}`);
+  async function handleStart() {
+    if (pending) return;
+    setPending(true);
+    setError(null);
+    try {
+      const created = await addSession({ expertId: selectedExpert.id });
+      router.push(`/voice-ai/${created.id}?language=${encodeURIComponent(language)}`);
+    } catch {
+      setError("Could not start the session. Please try again.");
+      setPending(false);
+    }
   }
 
   return (
@@ -63,9 +73,15 @@ export default function VoiceAiPage() {
           ))}
         </div>
 
-        <button type="button" className={styles.startButton} onClick={handleStart}>
+        {error && (
+          <p className={styles.error} role="alert">
+            {error}
+          </p>
+        )}
+
+        <button type="button" className={styles.startButton} onClick={handleStart} disabled={pending}>
           <PlayIcon size={16} />
-          Start Voice Chat with {selectedExpert.name}
+          {pending ? "Starting…" : `Start Voice Chat with ${selectedExpert.name}`}
         </button>
 
         <button type="button" className={styles.customSetupLink} disabled>

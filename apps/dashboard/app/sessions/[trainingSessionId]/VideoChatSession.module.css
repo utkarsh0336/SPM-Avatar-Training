@@ -48,3 +48,42 @@
   cursor: pointer;
   text-decoration: none;
 }
+
+.endedTranscriptCard {
+  flex: 1;
+  min-height: 0;
+  border-radius: 18px;
+  background: var(--vc-panel-bg);
+  border: 1px solid var(--vc-border-soft);
+  display: flex;
+  flex-direction: column;
+  padding: 20px 24px;
+  gap: 14px;
+}
+
+.endedTranscriptHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.endedTranscriptTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--vc-text-primary);
+}
+
+.endedTranscriptBack {
+  font-size: 13px;
+  color: var(--vc-text-secondary);
+  text-decoration: none;
+}
+
+.emptyTranscript {
+  color: var(--vc-text-secondary);
+  font-size: 13px;
+  text-align: center;
+  padding: 24px 0;
+}

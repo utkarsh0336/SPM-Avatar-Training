@@ -13,13 +13,15 @@ import {
   WandIcon,
 } from "../sessions/icons";
 
-// Mock fixtures only carry a display string ("2h ago", "Yesterday", …), not a
-// real timestamp, so merging the two independently-ordered session lists into
-// one "recent activity" feed needs its own recency ranking rather than a
-// plain sort by field.
+// SessionsContext/VoiceSessionsContext expose formatRelativeTime(updatedAt) display strings
+// ("2h ago", "Yesterday", …), not raw timestamps, so merging the two independently-ordered
+// session lists into one "recent activity" feed needs its own recency ranking rather than a
+// plain sort by field. Kept in sync with lib/format-relative-time.ts's exact output formats.
 function recencyRank(relativeTime: string): number {
   const value = relativeTime.toLowerCase();
   if (value === "just now") return 0;
+  const minutes = value.match(/^(\d+)m ago$/);
+  if (minutes) return Number(minutes[1]);
   const hours = value.match(/^(\d+)h ago$/);
   if (hours) return 100 + Number(hours[1]);
   if (value === "yesterday") return 2000;

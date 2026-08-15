@@ -7,9 +7,9 @@ export const metadata = {
   title: "Avatrain Dashboard",
 };
 
-// SessionsProvider is global (in-memory state only, no side effects) so
-// both /sessions and /onboarding — separate top-level route trees — share
-// one instance. onboarding's VoiceReviewStep needs to call addSession() and
+// SessionsProvider is global so both /sessions and /onboarding — separate
+// top-level route trees — share one instance and its GET /v1/training-sessions
+// fetch. onboarding's VoiceReviewStep needs to call addSession() and
 // navigate straight to the new session, not just to the sessions hub.
 // VoiceSessionsProvider is global for the same reason: /voice-ai's picker
 // (Page 1) calls addSession() and navigates straight into /voice-ai/[id].

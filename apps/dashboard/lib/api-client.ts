@@ -75,6 +75,19 @@ import {
   type CreateApplicationRequest,
   type UpdateApplicationRequest,
 } from "@avatrain/shared/application";
+import {
+  createTrainingSessionResponseSchema,
+  endTrainingSessionResponseSchema,
+  getTrainingSessionResponseSchema,
+  listTrainingSessionMessagesResponseSchema,
+  listTrainingSessionsResponseSchema,
+  pinTrainingSessionResponseSchema,
+  type CreateTrainingSessionRequest,
+  type ListTrainingSessionMessagesResponse,
+  type ListTrainingSessionsResponse,
+  type TrainingSessionKind,
+  type TrainingSessionResult,
+} from "@avatrain/shared/training-session";
 
 export interface AuthUser {
   id: string;
@@ -245,6 +258,53 @@ export type LiveKitConnectResult = z.infer<typeof liveKitConnectResultSchema>;
 export async function mintLiveKitConnection(trainingSessionId: string): Promise<LiveKitConnectResult> {
   const result = await apiFetch<unknown>(`/conversations/${trainingSessionId}/livekit-connect`, { method: "POST" });
   return liveKitConnectResultSchema.parse(result);
+}
+
+/** POST /v1/training-sessions — backs both apps/dashboard/app/sessions (kind=VIDEO_CHAT) and
+ * apps/dashboard/app/voice-ai (kind=VOICE_ONLY). See .claude/specs/video-chat-session.md. */
+export async function createTrainingSession(input: CreateTrainingSessionRequest): Promise<TrainingSessionResult> {
+  const result = await apiFetch<unknown>("/training-sessions", { method: "POST", body: JSON.stringify(input) });
+  return createTrainingSessionResponseSchema.parse(result).trainingSession;
+}
+
+/** GET /v1/training-sessions?kind= — org-wide, split into pinned/recent. */
+export async function listTrainingSessions(kind: TrainingSessionKind): Promise<ListTrainingSessionsResponse> {
+  const result = await apiFetch<unknown>(`/training-sessions?kind=${kind}`, { method: "GET" });
+  return listTrainingSessionsResponseSchema.parse(result);
+}
+
+export async function getTrainingSession(trainingSessionId: string): Promise<TrainingSessionResult> {
+  const result = await apiFetch<unknown>(`/training-sessions/${trainingSessionId}`, { method: "GET" });
+  return getTrainingSessionResponseSchema.parse(result).trainingSession;
+}
+
+/** GET .../messages?after= — keyset pagination on sequence; omit `after` for the first page. */
+export async function listTrainingSessionMessages(
+  trainingSessionId: string,
+  after?: number,
+): Promise<ListTrainingSessionMessagesResponse> {
+  const query = after !== undefined ? `?after=${after}` : "";
+  const result = await apiFetch<unknown>(`/training-sessions/${trainingSessionId}/messages${query}`, {
+    method: "GET",
+  });
+  return listTrainingSessionMessagesResponseSchema.parse(result);
+}
+
+/** POST .../end — idempotent; ending an already-ENDED session just returns it. */
+export async function endTrainingSession(trainingSessionId: string, reason?: string): Promise<TrainingSessionResult> {
+  const result = await apiFetch<unknown>(`/training-sessions/${trainingSessionId}/end`, {
+    method: "POST",
+    body: JSON.stringify(reason ? { reason } : {}),
+  });
+  return endTrainingSessionResponseSchema.parse(result).trainingSession;
+}
+
+export async function setTrainingSessionPinned(trainingSessionId: string, pinned: boolean): Promise<boolean> {
+  const result = await apiFetch<unknown>(`/training-sessions/${trainingSessionId}/pin`, {
+    method: "PATCH",
+    body: JSON.stringify({ pinned }),
+  });
+  return pinTrainingSessionResponseSchema.parse(result).pinned;
 }
 
 /** GET /v1/onboarding — get-or-create semantics, always returns a draft. */

@@ -2,22 +2,24 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { WebSocket } from "ws";
 import { prisma, trainingSessionIdParamSchema } from "@avatrain/shared";
 import { checkRateLimit } from "../lib/rate-limit.js";
-import { conflict, forbidden, serviceUnavailable, unauthorized } from "../lib/http-errors.js";
+import { conflict, forbidden, notFound, serviceUnavailable, unauthorized } from "../lib/http-errors.js";
 import { isSimliConfigured, mintSimliSession } from "../lib/simli.js";
-import {
-  checkSessionNotEnded,
-  createLiveKitRoom,
-  isLiveKitConfigured,
-  mintLiveKitToken,
-  RoomOwnershipMismatchError,
-} from "../lib/livekit.js";
+import { createLiveKitRoom, isLiveKitConfigured, mintLiveKitToken } from "../lib/livekit.js";
 import { mintWsTicket, redeemWsTicket, type WsTicketClaims } from "../lib/ws-tickets.js";
 import { createConversationHandler } from "../services/conversation-service.js";
 import { getCallerSimliFaceId } from "../services/onboarding-service.js";
+import { getTrainingSessionForConnect } from "../services/training-session-service.js";
 
 declare module "fastify" {
   interface FastifyRequest {
     wsClaims?: WsTicketClaims;
+    /**
+     * Set by the WS route's preValidation hook (authenticated dashboard callers only — see
+     * .claude/specs/video-chat-session.md, Milestone 2) once trainingSessionId has been resolved
+     * against a real, org-owned TrainingSession row. Left unset for anonymous apps/widget embed
+     * connections (claims.pinnedAvatarId set), which have no persisted row to resolve.
+     */
+    resolvedTrainingSessionId?: string;
   }
 }
 
@@ -98,17 +100,16 @@ export function registerConversationRoutes(app: FastifyInstance): void {
       });
       if (org.plan !== "ENTERPRISE") throw forbidden("plan_not_enterprise");
 
-      try {
-        if (!(await checkSessionNotEnded(trainingSessionId, orgId))) throw conflict("session_ended");
-        const { roomName } = await createLiveKitRoom(trainingSessionId, orgId);
-        const { livekitUrl, roomToken } = await mintLiveKitToken({ roomName, orgId });
-        reply.status(201).send({ livekitUrl, roomToken, roomName });
-      } catch (err) {
-        if (err instanceof RoomOwnershipMismatchError) {
-          throw forbidden("training_session_owned_by_another_org");
-        }
-        throw err;
-      }
+      // Ownership/existence is the real TrainingSession row now, not an in-memory guess — a
+      // second org can't even address another org's id (RLS-backed, returns null here). See
+      // lib/livekit.ts's createLiveKitRoom doc comment.
+      const trainingSession = await getTrainingSessionForConnect(orgId, trainingSessionId);
+      if (!trainingSession) throw notFound("training_session_not_found");
+      if (trainingSession.status === "ENDED") throw conflict("session_ended");
+
+      const { roomName } = await createLiveKitRoom(trainingSessionId, orgId);
+      const { livekitUrl, roomToken } = await mintLiveKitToken({ roomName, orgId });
+      reply.status(201).send({ livekitUrl, roomToken, roomName });
     },
   );
 
@@ -120,15 +121,29 @@ export function registerConversationRoutes(app: FastifyInstance): void {
       // documented hook support), so an invalid/expired/reused ticket gets
       // a normal 401 response instead of an upgrade-then-immediately-close.
       preValidation: async (request: FastifyRequest) => {
-        trainingSessionIdParamSchema.parse(request.params);
+        const { trainingSessionId } = trainingSessionIdParamSchema.parse(request.params);
         const query = request.query as { ticket?: string };
         const claims = query.ticket ? redeemWsTicket(query.ticket) : null;
         if (!claims) throw unauthorized("invalid_ticket");
         request.wsClaims = claims;
+
+        // Anonymous apps/widget embed connections (claims.pinnedAvatarId set) have no persisted
+        // TrainingSession row to resolve against — same boundary the Authentication spec drew
+        // around apps/widget; skip entirely, leaving resolvedTrainingSessionId unset. An
+        // authenticated dashboard caller (video or voice tree — both hit this same route) must
+        // resolve to a real, org-owned, still-ACTIVE session.
+        if (!claims.pinnedAvatarId) {
+          const trainingSession = await getTrainingSessionForConnect(claims.orgId, trainingSessionId);
+          if (!trainingSession) throw notFound("training_session_not_found");
+          if (trainingSession.status === "ENDED") throw conflict("session_ended");
+          request.resolvedTrainingSessionId = trainingSession.id;
+        }
       },
     },
     (socket: WebSocket, request: FastifyRequest) => {
-      createConversationHandler(socket, request.wsClaims!);
+      createConversationHandler(socket, request.wsClaims!, {
+        trainingSessionId: request.resolvedTrainingSessionId ?? null,
+      });
     },
   );
 }

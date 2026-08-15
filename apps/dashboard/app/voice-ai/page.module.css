@@ -89,6 +89,18 @@
   color: #fff;
 }
 
+.error {
+  width: 100%;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+  font-size: 13px;
+  text-align: center;
+}
+
 .startButton {
   display: flex;
   align-items: center;

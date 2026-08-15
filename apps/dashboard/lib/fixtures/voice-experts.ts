@@ -3,8 +3,21 @@
 // working Mock/Simli avatar, not a decorative photo. SELECTABLE_VOICE_EXPERTS
 // is the picker shown on the "Start a Voice Session" screen (Page 1, 3
 // experts per the reference screenshot's gender set); the other entries only
-// back existing history items in mock-voice-sessions.ts.
+// back real persisted VOICE_ONLY TrainingSession rows created against them
+// (voiceExpertId) whose id isn't in SELECTABLE_VOICE_EXPERTS's picker subset.
 import type { AvatarStyle, Expertise, Gender, Outfit, VoiceTone } from "@avatrain/shared/tutor";
+// id/name/role come from the shared catalog (packages/shared/src/training-session/voice-experts.ts)
+// — the same trustworthy lookup POST /v1/training-sessions uses server-side to resolve a
+// VOICE_ONLY session's personaName/personaRole — so this file's ids/labels can't drift from what
+// the API actually persists. The avatar-rendering fields below (style/gender/skinTone/...) have no
+// server-side equivalent and stay dashboard-only.
+import { getVoiceExpertSummaryById, type VoiceExpertSummary } from "@avatrain/shared/training-session";
+
+function summary(id: string): VoiceExpertSummary {
+  const found = getVoiceExpertSummaryById(id);
+  if (!found) throw new Error(`voice-experts.ts: no shared VoiceExpertSummary for id "${id}"`);
+  return found;
+}
 
 export interface VoiceExpert {
   id: string;
@@ -26,9 +39,7 @@ export interface VoiceExpert {
 }
 
 const PRIYA: VoiceExpert = {
-  id: "priya",
-  name: "Priya",
-  role: "HR Expert",
+  ...summary("priya"),
   topic: "HR & Leave Policy",
   style: "REALISTIC",
   gender: "FEMALE",
@@ -42,9 +53,7 @@ const PRIYA: VoiceExpert = {
 };
 
 const MARCUS: VoiceExpert = {
-  id: "marcus",
-  name: "Marcus",
-  role: "Sales Coach",
+  ...summary("marcus"),
   topic: "Sales & Negotiation",
   style: "REALISTIC",
   gender: "MALE",
@@ -58,9 +67,7 @@ const MARCUS: VoiceExpert = {
 };
 
 const KIRAN: VoiceExpert = {
-  id: "kiran",
-  name: "Kiran",
-  role: "Product Specialist",
+  ...summary("kiran"),
   topic: "Product Training",
   style: "ANIMATED",
   gender: "NEUTRAL",
@@ -74,9 +81,7 @@ const KIRAN: VoiceExpert = {
 };
 
 const SHREYA: VoiceExpert = {
-  id: "shreya",
-  name: "Shreya",
-  role: "Compliance",
+  ...summary("shreya"),
   topic: "Compliance & Legal",
   style: "STYLIZED_3D",
   gender: "FEMALE",
@@ -90,9 +95,7 @@ const SHREYA: VoiceExpert = {
 };
 
 const ANANYA: VoiceExpert = {
-  id: "ananya",
-  name: "Ananya",
-  role: "Product",
+  ...summary("ananya"),
   topic: "Product Training",
   style: "REALISTIC",
   gender: "FEMALE",
@@ -106,9 +109,7 @@ const ANANYA: VoiceExpert = {
 };
 
 const DAVID: VoiceExpert = {
-  id: "david",
-  name: "David",
-  role: "Support",
+  ...summary("david"),
   topic: "Customer Support",
   style: "REALISTIC",
   gender: "MALE",

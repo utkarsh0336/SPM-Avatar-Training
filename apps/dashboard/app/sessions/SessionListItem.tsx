@@ -1,13 +1,15 @@
 import styles from "./SessionListColumn.module.css";
 import { ClockIcon, PinIcon } from "./icons";
-import type { MockTrainingSession } from "../../lib/fixtures/mock-training-sessions";
+import { useSessions, type SessionListItemView } from "./SessionsContext";
 
 interface SessionListItemProps {
-  session: MockTrainingSession;
+  session: SessionListItemView;
   active: boolean;
 }
 
 export function SessionListItem({ session, active }: SessionListItemProps) {
+  const { togglePinned } = useSessions();
+
   return (
     <a
       href={`/sessions/${session.id}`}
@@ -15,9 +17,18 @@ export function SessionListItem({ session, active }: SessionListItemProps) {
       aria-current={active ? "page" : undefined}
     >
       <span className={styles.itemTitleRow}>
-        <span className={styles.itemIcon}>
+        <button
+          type="button"
+          className={styles.itemIcon}
+          aria-label={session.pinned ? "Unpin session" : "Pin session"}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            togglePinned(session.id);
+          }}
+        >
           {session.pinned ? <PinIcon size={12} /> : <ClockIcon size={12} />}
-        </span>
+        </button>
         <span className={`${styles.itemTitle} ${active ? styles.itemTitleBold : ""}`}>
           {session.title}
         </span>

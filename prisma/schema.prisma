@@ -210,6 +210,9 @@ model Organization {
   inductionChecklists     InductionChecklist[]
   checklistItems          ChecklistItem[]
   checklistItemProgresses ChecklistItemProgress[]
+  trainingSessions        TrainingSession[]
+  messages                Message[]
+  trainingSessionPins     TrainingSessionPin[]
 
   @@map("organizations")
 }
@@ -280,6 +283,8 @@ model User {
   oauthAccounts           OAuthAccount[]
   objectiveProgresses     ObjectiveProgress[]
   checklistItemProgresses ChecklistItemProgress[]
+  trainingSessions        TrainingSession[]
+  trainingSessionPins     TrainingSessionPin[]
 
   @@map("users")
 }
@@ -399,9 +404,10 @@ model Avatar {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  organization Organization  @relation(fields: [orgId], references: [id])
-  curriculum   Curriculum?
-  applications Application[]
+  organization     Organization      @relation(fields: [orgId], references: [id])
+  curriculum       Curriculum?
+  applications     Application[]
+  trainingSessions TrainingSession[]
 
   @@index([orgId])
   @@index([orgId, createdById, status])
@@ -689,4 +695,128 @@ model ChecklistItemProgress {
   @@index([orgId])
   @@index([learnerId])
   @@map("checklist_item_progress")
+}
+
+/// Owned by .claude/specs/video-chat-session.md (Milestone 2). VIDEO_CHAT backs
+/// apps/dashboard/app/sessions; VOICE_ONLY backs apps/dashboard/app/voice-ai — both dashboard
+/// trees hit the identical GET /v1/conversations/:trainingSessionId/ws route, so one
+/// kind-discriminated model serves both instead of duplicating schema/RLS/CRUD.
+enum TrainingSessionKind {
+  VIDEO_CHAT
+  VOICE_ONLY
+}
+
+enum TrainingSessionStatus {
+  ACTIVE
+  ENDED
+}
+
+enum MessageRole {
+  USER
+  AVATAR
+  SYSTEM
+}
+
+/// Tenant-scoped. org_id + RLS policy required — see .claude/rules/tenancy.md. Owned by
+/// .claude/specs/video-chat-session.md (Milestone 2). Server-minted id — this IS the
+/// `trainingSessionId` apps/api/src/routes/conversations.ts's WS route and
+/// apps/api/src/lib/livekit.ts's room naming key off of, replacing the earlier
+/// client-generated slug (`session-${Date.now()}`/`voice-${Date.now()}`), which had no
+/// persisted-ownership record and was guarded only by an in-memory Map.
+model TrainingSession {
+  id              String                @id @default(uuid()) @db.Uuid
+  orgId           String                @map("org_id") @db.Uuid
+  createdByUserId String                @map("created_by_user_id") @db.Uuid
+  clientRequestId String                @map("client_request_id")
+
+  kind   TrainingSessionKind
+  status TrainingSessionStatus @default(ACTIVE)
+  title  String
+  topic  String?
+
+  // Exactly one of avatarId/voiceExpertId is set, matching kind — enforced at the service layer
+  // (training-session-service.ts), not expressible as a direct Prisma/DB constraint.
+  avatarId String? @map("avatar_id") @db.Uuid
+  // Not a FK — an id into packages/shared/src/training-session/voice-experts.ts's static catalog,
+  // which is code, not tenant data (no VoiceExpert table exists).
+  voiceExpertId String? @map("voice_expert_id")
+  // Denormalized at creation from the resolved Avatar (name/expertiseTopicTitle) or voice expert
+  // (name/role), server-side — never trusted from the client. VOICE_ONLY rows have no Avatar row
+  // to join at read time, and this mirrors the denormalization convention already used by both
+  // Milestone-1 mock fixtures this table replaces (listOwnerName/listCategory, expertName/expertRole).
+  personaName String @map("persona_name")
+  personaRole String @map("persona_role")
+
+  endReason String?   @map("end_reason")
+  endedAt   DateTime? @map("ended_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  // Bumped on every persisted Message too (see conversation-service.ts's
+  // persistTrainingSessionMessage) so "recent" list ordering reflects real activity with no
+  // separate heartbeat mechanism.
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  organization  Organization         @relation(fields: [orgId], references: [id])
+  createdByUser User                 @relation(fields: [createdByUserId], references: [id])
+  avatar        Avatar?              @relation(fields: [avatarId], references: [id])
+  messages      Message[]
+  pins          TrainingSessionPin[]
+
+  @@unique([orgId, clientRequestId])
+  @@index([orgId, kind, status])
+  @@index([orgId, kind, updatedAt])
+  @@map("training_sessions")
+}
+
+/// Tenant-scoped. org_id + RLS policy required — see .claude/rules/tenancy.md. One row per
+/// finalized conversation turn. Server-write-only — there is no public POST .../messages route;
+/// rows are inserted only from conversation-service.ts's trusted realtime pipeline
+/// (persistTrainingSessionMessage), matching this rule file's "record_progress/grade_answer are
+/// serverOnly, server re-checks entitlement rather than trusting model arguments" posture.
+/// content is passed through redact() (packages/shared/src/redact.ts) before insert — that
+/// function is still a no-op stub, flagged to security-reviewer, not silently shipped as if PII
+/// scrubbing were real.
+model Message {
+  id                String @id @default(uuid()) @db.Uuid
+  orgId             String @map("org_id") @db.Uuid
+  trainingSessionId String @map("training_session_id") @db.Uuid
+
+  role      MessageRole
+  content   String      @db.Text
+  sequence  Int
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  organization    Organization    @relation(fields: [orgId], references: [id])
+  trainingSession TrainingSession @relation(fields: [trainingSessionId], references: [id], onDelete: Cascade)
+
+  @@unique([trainingSessionId, sequence])
+  @@index([orgId, trainingSessionId])
+  @@map("messages")
+}
+
+/// Tenant-scoped. org_id + RLS policy required — see .claude/rules/tenancy.md. Per-(user,
+/// TrainingSession) pin; row existence = pinned, unpin deletes the row. Deliberately NOT a
+/// `pinned` boolean column on TrainingSession itself — the session list is org-wide (matches
+/// listCurricula/listApplications's convention), so a column there would make one trainer's pin
+/// globally visible/toggleable by every other org member, which is wrong; pin is genuinely
+/// per-(user, session). Replaces .claude/specs/video-chat-session.md's draft
+/// `UserSessionPreference` — that model's other fields (lastMuted/lastCameraOff/lastLanguage/
+/// transcriptVisible) are pure client-side useState in TrainingSessionContext.tsx/
+/// VoiceSessionUiContext.tsx today, never sent to the server anywhere in this codebase, so only
+/// the field that's actually needed is built.
+model TrainingSessionPin {
+  id                String @id @default(uuid()) @db.Uuid
+  orgId             String @map("org_id") @db.Uuid
+  userId            String @map("user_id") @db.Uuid
+  trainingSessionId String @map("training_session_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  organization    Organization    @relation(fields: [orgId], references: [id])
+  user            User            @relation(fields: [userId], references: [id])
+  trainingSession TrainingSession @relation(fields: [trainingSessionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, trainingSessionId])
+  @@index([orgId])
+  @@map("training_session_pins")
 }

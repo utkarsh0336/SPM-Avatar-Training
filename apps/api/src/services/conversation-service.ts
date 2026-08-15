@@ -25,6 +25,7 @@ import {
   type LLMProvider,
   type LLMStreamEvent,
   type AvatarRecord,
+  type MessageRole,
   type ObjectiveProgressVerdict,
   type ReadingLevel,
   type ScenarioBranchResult,
@@ -42,6 +43,7 @@ import {
   type SessionCurriculumObjective,
 } from "./curriculum-service.js";
 import { getAvatarById } from "./avatar-service.js";
+import { persistTrainingSessionMessage } from "./training-session-service.js";
 import {
   defaultTurnLatencyCircuitBreaker,
   startTurnLatencyWatchdog,
@@ -142,6 +144,15 @@ export interface ConversationHandlerDeps {
   getRemainingObjectiveTitles?: typeof getRemainingObjectiveTitles;
   /** Injectable for tests; defaults to the real ./avatar-service.js. Only called when claims.pinnedAvatarId is set (embed sessions). */
   getAvatarById?: typeof getAvatarById;
+  /**
+   * The server-minted TrainingSession.id this connection was resolved against (see
+   * apps/api/src/routes/conversations.ts's WS preValidation hook) — null for anonymous
+   * apps/widget embed sessions, which have no persisted row. When set, every finalized turn is
+   * persisted fire-and-forget via persistTrainingSessionMessage below.
+   */
+  trainingSessionId?: string | null;
+  /** Injectable for tests; defaults to the real ./training-session-service.js. Called fire-and-forget (`void`), never awaited, from the realtime hot path — see persistTurn below. */
+  persistTrainingSessionMessage?: typeof persistTrainingSessionMessage;
   /**
    * Injectable for tests; defaults to the shared module-level singleton in
    * turn-latency-guard.ts, which must persist across connections/turns —
@@ -300,7 +311,25 @@ export function createConversationHandler(
   const remainingObjectiveTitles = deps.getRemainingObjectiveTitles ?? getRemainingObjectiveTitles;
   const loadAvatarById = deps.getAvatarById ?? getAvatarById;
   const circuitBreaker = deps.turnLatencyCircuitBreaker ?? defaultTurnLatencyCircuitBreaker;
+  const trainingSessionId = deps.trainingSessionId ?? null;
+  const persistMessage = deps.persistTrainingSessionMessage ?? persistTrainingSessionMessage;
   const messages: LLMMessage[] = [];
+
+  /**
+   * Fire-and-forget (`void`-called at every call site, never `await`ed) — per CLAUDE.md's "avoid
+   * blocking the realtime audio path" / .claude/rules/realtime.md, persistence must never add
+   * latency to a turn. persistTrainingSessionMessage itself catches and logs its own failures, so
+   * this never produces an unhandled rejection either. No-ops when trainingSessionId is null
+   * (anonymous embed sessions — see ConversationHandlerDeps.trainingSessionId's doc comment).
+   * Deliberately does NOT track its own sequence counter here — a per-connection counter would
+   * restart at 0 on every WS reconnect into a still-ACTIVE session, colliding with already-
+   * persisted rows; persistTrainingSessionMessage computes the next sequence server-side instead
+   * (see its own doc comment).
+   */
+  function persistTurn(role: MessageRole, content: string): void {
+    if (!trainingSessionId) return;
+    void persistMessage(claims.orgId, trainingSessionId, role, content);
+  }
 
   let llm: LLMProvider | null = null;
   let stt: STTProvider | null = null;
@@ -489,6 +518,7 @@ ${step.branches.map((branch, index) => `${letters[index]}) ${branch.matchCriteri
 
     messages.push({ role: "user", content: text });
     if (messages.length > MAX_HISTORY_MESSAGES) messages.splice(0, messages.length - MAX_HISTORY_MESSAGES);
+    persistTurn("USER", text);
     send({ type: "transcript", role: "user", text, utteranceId, final: true });
 
     currentUtteranceId = utteranceId;
@@ -802,6 +832,7 @@ ${step.branches.map((branch, index) => `${letters[index]}) ${branch.matchCriteri
     }
 
     messages.push({ role: "assistant", content: fullReply });
+    persistTurn("AVATAR", fullReply);
     // Computed once from the already-assembled reply text — no extra model
     // call, no added turn latency. See tutor/emotion.ts. Always set
     // (including "neutral"), unlike `sources` below — the client needs an

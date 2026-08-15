@@ -1,13 +1,15 @@
 import styles from "./VoiceHistoryColumn.module.css";
 import { ClockIcon, PinIcon } from "../sessions/icons";
-import type { MockVoiceSession } from "../../lib/fixtures/mock-voice-sessions";
+import { useVoiceSessions, type VoiceSessionListItemView } from "./VoiceSessionsContext";
 
 interface VoiceHistoryItemProps {
-  session: MockVoiceSession;
+  session: VoiceSessionListItemView;
   active: boolean;
 }
 
 export function VoiceHistoryItem({ session, active }: VoiceHistoryItemProps) {
+  const { togglePinned } = useVoiceSessions();
+
   return (
     <a
       href={`/voice-ai/${session.id}`}
@@ -15,9 +17,18 @@ export function VoiceHistoryItem({ session, active }: VoiceHistoryItemProps) {
       aria-current={active ? "page" : undefined}
     >
       <span className={styles.itemTitleRow}>
-        <span className={styles.itemIcon}>
+        <button
+          type="button"
+          className={styles.itemIcon}
+          aria-label={session.pinned ? "Unpin session" : "Pin session"}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            togglePinned(session.id);
+          }}
+        >
           {session.pinned ? <PinIcon size={12} /> : <ClockIcon size={12} />}
-        </span>
+        </button>
         <span className={`${styles.itemTitle} ${active ? styles.itemTitleBold : ""}`}>{session.title}</span>
       </span>
       <span className={styles.itemSubtitle}>

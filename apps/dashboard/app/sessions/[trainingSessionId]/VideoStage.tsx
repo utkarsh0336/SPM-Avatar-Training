@@ -4,10 +4,10 @@ import styles from "./VideoStage.module.css";
 import { SpeakerIcon, UserIcon } from "../icons";
 import { CaptionBar } from "./CaptionBar";
 import { useConversationSessionContext } from "./ConversationSessionContext";
-import type { MockTrainingSession } from "../../../lib/fixtures/mock-training-sessions";
+import type { TrainingSessionResult } from "@avatrain/shared/training-session";
 
 interface VideoStageProps {
-  session: MockTrainingSession;
+  session: TrainingSessionResult;
 }
 
 // The active avatar provider (packages/avatar-core, resolved by
@@ -18,6 +18,7 @@ interface VideoStageProps {
 export function VideoStage({ session }: VideoStageProps) {
   const { status, captionText, amplitude, avatarContainerRef, usingLiveKit } = useConversationSessionContext();
   const isLive = status === "listening" || status === "thinking" || status === "speaking";
+  const topic = session.topic ?? "";
 
   return (
     <div className={styles.stage}>
@@ -34,8 +35,8 @@ export function VideoStage({ session }: VideoStageProps) {
 
       <div className={styles.headerBadge}>
         <SpeakerIcon size={14} />
-        <span className={styles.headerAvatarName}>My Avatar</span>
-        <span className={styles.headerTopic}>· {session.topic}</span>
+        <span className={styles.headerAvatarName}>{session.personaName}</span>
+        {topic && <span className={styles.headerTopic}>· {topic}</span>}
         {status === "speaking" && (
           <span className={styles.waveform} aria-hidden="true">
             <span className={styles.waveformBar} />
@@ -46,7 +47,7 @@ export function VideoStage({ session }: VideoStageProps) {
         )}
       </div>
 
-      <div className={styles.topicPill}>{session.topic}</div>
+      {topic && <div className={styles.topicPill}>{topic}</div>}
 
       {status === "speaking" && (
         <div className={styles.amplitudeTrack} aria-hidden="true">
@@ -54,7 +55,7 @@ export function VideoStage({ session }: VideoStageProps) {
         </div>
       )}
 
-      <CaptionBar text={captionText} topic={session.topic} />
+      <CaptionBar text={captionText} topic={topic} />
     </div>
   );
 }

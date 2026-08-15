@@ -265,6 +265,59 @@ describe("createConversationHandler", () => {
     expect(avatarTranscript?.emotion).toBe("neutral");
   });
 
+  describe("trainingSessionId persistence hook", () => {
+    // Regression guard for the fire-and-forget contract CLAUDE.md's "avoid blocking the realtime
+    // audio path" requires: persistTrainingSessionMessage is injected with a promise that never
+    // resolves for the lifetime of this test, yet the turn still completes and sends turn.ended —
+    // proof that processTurn never awaits it, directly (not just "the code looks fire-and-forget").
+    it("never blocks the turn even when the injected persist function hangs forever", async () => {
+      const socket = new FakeSocket();
+      const persistTrainingSessionMessage = vi.fn(() => new Promise<void>(() => {})); // never resolves
+      createConversationHandler(socket as never, claims, {
+        createLLM: fakeLLM("success", ["Hello. ", "How can I help? "]),
+        createSTT: fakeSTT("success", "hi there"),
+        createTTS: fakeTTS("success"),
+        trainingSessionId: "ts-1",
+        persistTrainingSessionMessage,
+        ...noRetrieval,
+      });
+      socket.emitMessage(sessionStartBase);
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+
+      expect(persistTrainingSessionMessage).toHaveBeenCalledWith("org-1", "ts-1", "USER", "hi there");
+      expect(persistTrainingSessionMessage).toHaveBeenCalledWith(
+        "org-1",
+        "ts-1",
+        "AVATAR",
+        "Hello. How can I help? ",
+      );
+    });
+
+    it("never calls persistTrainingSessionMessage when trainingSessionId is omitted (anonymous embed sessions)", async () => {
+      const socket = new FakeSocket();
+      const persistTrainingSessionMessage = vi.fn(async () => {});
+      createConversationHandler(socket as never, claims, {
+        createLLM: fakeLLM("success", ["Hi. "]),
+        createSTT: fakeSTT("success"),
+        createTTS: fakeTTS("success"),
+        persistTrainingSessionMessage,
+        ...noRetrieval,
+      });
+      socket.emitMessage(sessionStartBase);
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+
+      expect(persistTrainingSessionMessage).not.toHaveBeenCalled();
+    });
+  });
+
   describe("turn-latency SLA gate", () => {
     it("sends latency.budget_exceeded once when TTS runs past the TTFA budget, and the turn still completes", async () => {
       vi.useFakeTimers();

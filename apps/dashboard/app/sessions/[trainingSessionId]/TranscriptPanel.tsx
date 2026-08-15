@@ -1,10 +1,10 @@
 import sidePanelStyles from "./SidePanel.module.css";
 import styles from "./TranscriptPanel.module.css";
 import { TranscriptBubble } from "./TranscriptBubble";
-import type { MockTranscriptMessage } from "../../../lib/fixtures/mock-training-sessions";
+import type { ConversationMessage } from "./useConversationSession";
 
 interface TranscriptPanelProps {
-  messages: MockTranscriptMessage[];
+  messages: ConversationMessage[];
   pendingTurn: boolean;
 }
 

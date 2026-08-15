@@ -14,11 +14,12 @@ export const metadata = {
 
 // SessionsProvider now lives in the root layout, not here — the onboarding
 // wizard's "Create Avatar & Start Session" needs to call addSession() and
-// navigate straight into the new session, which requires the SAME provider
-// instance /sessions/[trainingSessionId]/page.tsx reads from via getById().
-// A second, locally-scoped provider here would just create an isolated
-// second copy of the in-memory session list that onboarding's session was
-// never added to.
+// navigate straight into the new session. A second, locally-scoped provider
+// here would just create an isolated second copy of SessionListColumn's
+// session list that onboarding's newly-created session was never added to.
+// (The individual session page itself no longer reads through this
+// provider at all — it fetches its own session directly via
+// GET /v1/training-sessions/:id, see [trainingSessionId]/page.tsx.)
 //
 // getMe() here is for branding data only, not an auth gate — this route
 // tree still relies on middleware.ts's cookie-presence redirect the same as

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { AvatarRecommendationTier, RecommendedAvatar } from "@avatrain/shared/curriculum";
 import styles from "./NewSessionModal.module.css";
 import { useSessions } from "./SessionsContext";
-import { getRecommendedAvatars } from "../../lib/api-client";
+import { ApiError, getRecommendedAvatars } from "../../lib/api-client";
 
 // Suffix appended to each Persona <option>'s label — mirrors the existing " (draft)" suffix
 // convention below. NOT_STARTED and NO_CURRICULUM stay unmarked: NOT_STARTED is the unmarked
@@ -40,6 +40,8 @@ export function NewSessionModal({ onClose }: NewSessionModalProps) {
   const [topic, setTopic] = useState<string>(TOPIC_OPTIONS[0] ?? "HR & Leave Policy");
   const [avatars, setAvatars] = useState<RecommendedAvatar[]>([]);
   const [avatarId, setAvatarId] = useState<string>("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Ranked for the calling learner (see getRecommendedAvatars) — the picker below defaults to the
   // top-ranked (most personally relevant) avatar, not just the first one returned. Only fetched to
@@ -64,12 +66,19 @@ export function NewSessionModal({ onClose }: NewSessionModalProps) {
     };
   }, []);
 
-  function handleStart() {
+  async function handleStart() {
     const trimmed = title.trim();
-    if (!trimmed) return;
-    const created = addSession({ title: trimmed, topic, avatarId: avatarId || null });
-    onClose();
-    router.push(`/sessions/${created.id}`);
+    if (!trimmed || pending) return;
+    setPending(true);
+    setError(null);
+    try {
+      const created = await addSession({ title: trimmed, topic, avatarId: avatarId || null });
+      onClose();
+      router.push(`/sessions/${created.id}`);
+    } catch (err) {
+      setError(err instanceof ApiError ? (err.body.message ?? "Could not start the session.") : "Could not reach the server. Please try again.");
+      setPending(false);
+    }
   }
 
   return (
@@ -117,6 +126,12 @@ export function NewSessionModal({ onClose }: NewSessionModalProps) {
           </label>
         )}
 
+        {error && (
+          <p className={styles.error} role="alert">
+            {error}
+          </p>
+        )}
+
         <div className={styles.actions}>
           <button type="button" className={styles.cancelButton} onClick={onClose}>
             Cancel
@@ -125,9 +140,9 @@ export function NewSessionModal({ onClose }: NewSessionModalProps) {
             type="button"
             className={styles.startButton}
             onClick={handleStart}
-            disabled={!title.trim()}
+            disabled={!title.trim() || pending}
           >
-            Start
+            {pending ? "Starting…" : "Start"}
           </button>
         </div>
       </div>

@@ -44,7 +44,7 @@ export function VoiceReviewStep() {
       // (the hub) after finishing the builder meant a second manual "New
       // Video Chat" step just to reach a live avatar, when the whole point
       // of "Create Avatar & Start Session" is that it does both.
-      const created = addSession({
+      const created = await addSession({
         title: state.name.trim() || "My Avatar",
         topic: EXPERTISE_LABELS[state.expertise],
       });

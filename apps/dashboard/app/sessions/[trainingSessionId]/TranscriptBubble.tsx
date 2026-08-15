@@ -1,7 +1,7 @@
 import styles from "./TranscriptPanel.module.css";
-import type { MockTranscriptMessage } from "../../../lib/fixtures/mock-training-sessions";
+import type { ConversationMessage } from "./useConversationSession";
 
-export function TranscriptBubble({ message }: { message: MockTranscriptMessage }) {
+export function TranscriptBubble({ message }: { message: ConversationMessage }) {
   const isUser = message.role === "USER";
 
   return (

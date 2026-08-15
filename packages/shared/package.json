@@ -46,6 +46,10 @@
       "types": "./dist/application/index.d.ts",
       "default": "./dist/application/index.js"
     },
+    "./training-session": {
+      "types": "./dist/training-session/index.d.ts",
+      "default": "./dist/training-session/index.js"
+    },
     "./contracts": {
       "types": "./dist/contracts/index.d.ts",
       "default": "./dist/contracts/index.js"

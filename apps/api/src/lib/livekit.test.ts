@@ -1,20 +1,13 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
-  _resetKnownRoomsForTests,
-  checkSessionNotEnded,
   createLiveKitRoom,
   isLiveKitConfigured,
   mintLiveKitToken,
-  RoomOwnershipMismatchError,
   type CreateAccessToken,
   type CreateRoomServiceClient,
 } from "./livekit.js";
 
 const env = { LIVEKIT_URL: "wss://example.livekit.cloud", LIVEKIT_API_KEY: "key", LIVEKIT_API_SECRET: "secret" };
-
-afterEach(() => {
-  _resetKnownRoomsForTests();
-});
 
 describe("isLiveKitConfigured", () => {
   it("is false when any var is missing", () => {
@@ -31,10 +24,7 @@ describe("isLiveKitConfigured", () => {
 describe("createLiveKitRoom", () => {
   it("creates a room named from the training session id, requesting explicit agent dispatch", async () => {
     const createRoom = vi.fn().mockResolvedValue({});
-    const createRoomServiceClient: CreateRoomServiceClient = vi.fn(() => ({
-      createRoom,
-      listRooms: vi.fn(),
-    }));
+    const createRoomServiceClient: CreateRoomServiceClient = vi.fn(() => ({ createRoom }));
 
     const { roomName } = await createLiveKitRoom("sales-pitch-practice", "org-1", env, createRoomServiceClient);
 
@@ -49,7 +39,7 @@ describe("createLiveKitRoom", () => {
 
   it("converts a plain ws:// LiveKit URL to http:// for the RPC client host", async () => {
     const createRoom = vi.fn().mockResolvedValue({});
-    const createRoomServiceClient: CreateRoomServiceClient = vi.fn(() => ({ createRoom, listRooms: vi.fn() }));
+    const createRoomServiceClient: CreateRoomServiceClient = vi.fn(() => ({ createRoom }));
 
     await createLiveKitRoom("s1", "org-1", { ...env, LIVEKIT_URL: "ws://localhost:7880" }, createRoomServiceClient);
 
@@ -62,99 +52,24 @@ describe("createLiveKitRoom", () => {
     expect(createRoomServiceClient).not.toHaveBeenCalled();
   });
 
-  it("is idempotent for the SAME org: a second call returns the same room without re-calling createRoom", async () => {
+  it("is idempotent: repeated calls for the same trainingSessionId both call createRoom, which LiveKit itself treats idempotently", async () => {
     const createRoom = vi.fn().mockResolvedValue({});
-    const createRoomServiceClient: CreateRoomServiceClient = vi.fn(() => ({ createRoom, listRooms: vi.fn() }));
+    const createRoomServiceClient: CreateRoomServiceClient = vi.fn(() => ({ createRoom }));
 
     const first = await createLiveKitRoom("s1", "org-1", env, createRoomServiceClient);
     const second = await createLiveKitRoom("s1", "org-1", env, createRoomServiceClient);
 
     expect(second).toEqual(first);
-    expect(createRoom).toHaveBeenCalledTimes(1);
+    expect(createRoom).toHaveBeenCalledTimes(2); // no in-memory reservation cache anymore — LiveKit's createRoom is the idempotency boundary
   });
 
-  it("rejects a DIFFERENT org reusing the same trainingSessionId — never silently joins them into the first org's room", async () => {
-    const createRoom = vi.fn().mockResolvedValue({});
-    const createRoomServiceClient: CreateRoomServiceClient = vi.fn(() => ({ createRoom, listRooms: vi.fn() }));
-
-    await createLiveKitRoom("s1", "org-A", env, createRoomServiceClient);
-
-    await expect(createLiveKitRoom("s1", "org-B", env, createRoomServiceClient)).rejects.toBeInstanceOf(
-      RoomOwnershipMismatchError,
-    );
-    expect(createRoom).toHaveBeenCalledTimes(1); // never created a second time for org-B
-  });
-
-  it("rejects a concurrent DIFFERENT-org call racing against an in-flight createRoom network call (TOCTOU regression guard)", async () => {
-    // Regression test for a real, security-reviewer-confirmed race: with the
-    // ownership reservation placed AFTER the network call, two calls for
-    // different orgs on the same trainingSessionId could both pass the
-    // ownership check (both see an empty map) before either reserved it,
-    // both succeeding into the same room. createRoom is given realistic
-    // async latency here specifically to exercise that interleaving window
-    // — a test that awaits org A to completion before starting org B (like
-    // the sequential test above) would pass even with the race present.
-    let resolveCreateRoom!: () => void;
-    const createRoomGate = new Promise<void>((resolve) => (resolveCreateRoom = resolve));
-    const createRoom = vi.fn().mockImplementation(() => createRoomGate.then(() => ({})));
-    const createRoomServiceClient: CreateRoomServiceClient = vi.fn(() => ({ createRoom, listRooms: vi.fn() }));
-
-    const orgAPromise = createLiveKitRoom("shared-slug", "org-A", env, createRoomServiceClient);
-    // Let org A's synchronous reservation run (it happens before the
-    // `await createRoom(...)` inside createLiveKitRoom) — a microtask tick
-    // is enough since the reservation itself has no await before it.
-    await Promise.resolve();
-
-    const orgBPromise = createLiveKitRoom("shared-slug", "org-B", env, createRoomServiceClient);
-
-    resolveCreateRoom();
-    const orgAResult = await orgAPromise;
-    await expect(orgBPromise).rejects.toBeInstanceOf(RoomOwnershipMismatchError);
-
-    expect(orgAResult).toEqual({ roomName: "ts_shared-slug" });
-    expect(createRoom).toHaveBeenCalledTimes(1); // org B's call never reached the vendor SDK at all
-  });
-});
-
-describe("checkSessionNotEnded", () => {
-  it("is true for a trainingSessionId that never had a room", async () => {
-    const createRoomServiceClient: CreateRoomServiceClient = vi.fn();
-    expect(await checkSessionNotEnded("never-started", "org-1", env, createRoomServiceClient)).toBe(true);
-    expect(createRoomServiceClient).not.toHaveBeenCalled();
-  });
-
-  it("is true once a room has been created and LiveKit still lists it", async () => {
-    const createRoomServiceClient: CreateRoomServiceClient = vi.fn(() => ({
-      createRoom: vi.fn().mockResolvedValue({}),
-      listRooms: vi.fn().mockResolvedValue([{ name: "ts_s1" }]),
-    }));
-
-    await createLiveKitRoom("s1", "org-1", env, createRoomServiceClient);
-    expect(await checkSessionNotEnded("s1", "org-1", env, createRoomServiceClient)).toBe(true);
-  });
-
-  it("is false once a room was created but LiveKit no longer lists it (auto-deleted after timeout)", async () => {
-    const createRoomServiceClient: CreateRoomServiceClient = vi.fn(() => ({
-      createRoom: vi.fn().mockResolvedValue({}),
-      listRooms: vi.fn().mockResolvedValue([]),
-    }));
-
-    await createLiveKitRoom("s1", "org-1", env, createRoomServiceClient);
-    expect(await checkSessionNotEnded("s1", "org-1", env, createRoomServiceClient)).toBe(false);
-  });
-
-  it("rejects a DIFFERENT org checking a trainingSessionId owned by another org", async () => {
-    const createRoomServiceClient: CreateRoomServiceClient = vi.fn(() => ({
-      createRoom: vi.fn().mockResolvedValue({}),
-      listRooms: vi.fn().mockResolvedValue([{ name: "ts_s1" }]),
-    }));
-
-    await createLiveKitRoom("s1", "org-A", env, createRoomServiceClient);
-
-    await expect(checkSessionNotEnded("s1", "org-B", env, createRoomServiceClient)).rejects.toBeInstanceOf(
-      RoomOwnershipMismatchError,
-    );
-  });
+  // Cross-org ownership races (two orgs racing to claim the same trainingSessionId) are no longer
+  // possible to even construct: trainingSessionId is now a server-minted, RLS-scoped
+  // TrainingSession.id — a second org cannot address another org's id at all (RLS returns nothing
+  // → 404 in apps/api/src/routes/conversations.ts, before this function is ever reached). The
+  // in-memory reservation/TOCTOU-race regression tests that used to live here were guarding
+  // against the old client-generated-slug identity scheme; that class of bug is unreachable by
+  // construction now, not just re-tested.
 });
 
 describe("mintLiveKitToken", () => {
