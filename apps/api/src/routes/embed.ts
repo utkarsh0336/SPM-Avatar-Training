@@ -70,7 +70,7 @@ export function registerEmbedRoutes(app: FastifyInstance): void {
     if (!resolved.avatarId) throw serviceUnavailable("embed_not_configured", "this embed has no avatar assigned yet");
     if (!(await checkRateLimit(`embed-ticket:${key}`, TICKET_RATE_LIMIT))) throw forbidden("rate_limited");
 
-    const { ticket, expiresAt } = mintWsTicket({
+    const { ticket, expiresAt } = await mintWsTicket({
       orgId: resolved.orgId,
       userId: null,
       pinnedAvatarId: resolved.avatarId,

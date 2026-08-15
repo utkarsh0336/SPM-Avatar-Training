@@ -41,7 +41,7 @@ export function registerConversationRoutes(app: FastifyInstance): void {
     const key = `conversation-ticket:${request.authContext!.userId}`;
     if (!(await checkRateLimit(key, TICKET_RATE_LIMIT))) throw unauthorized("rate_limited");
 
-    const { ticket, expiresAt } = mintWsTicket({
+    const { ticket, expiresAt } = await mintWsTicket({
       orgId: request.authContext!.orgId,
       userId: request.authContext!.userId,
     });
@@ -122,7 +122,7 @@ export function registerConversationRoutes(app: FastifyInstance): void {
       preValidation: async (request: FastifyRequest) => {
         const { trainingSessionId } = trainingSessionIdParamSchema.parse(request.params);
         const query = request.query as { ticket?: string };
-        const claims = query.ticket ? redeemWsTicket(query.ticket) : null;
+        const claims = query.ticket ? await redeemWsTicket(query.ticket) : null;
         if (!claims) throw unauthorized("invalid_ticket");
         request.wsClaims = claims;
 

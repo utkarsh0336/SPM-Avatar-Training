@@ -77,6 +77,7 @@ question asked, attempts so far. Replaying 20 turns of audio history is slow and
 | Conversation history | OpenAI session (Mode A) / agent process (Mode B) | Session |
 | Pedagogical state (objective, attempts) | Postgres, written through `record_progress` | Permanent |
 | Session credentials | Widget memory only | 60s |
+| WS/embed connection tickets | Redis, single-use | 60s |
 | Quotas, concurrency counters | Redis | Rolling window |
 | Transcript | Postgres, redacted at write | `retentionDays` |
 | Audio | Discarded unless `recording.enabled` | Session or retention |
@@ -117,8 +118,9 @@ is how cross-tenant leaks happen in a process that outlives a single tenant's se
   primary that also serves session bootstrap — bootstrap is on the latency path.
 - **pgvector**: HNSW index; partition `KnowledgeChunk` by `org_id` past ~10M rows. Retrieval must
   stay under 100ms p95 or it needs a filler utterance.
-- **Redis**: quotas and counters only. If you find yourself putting session truth in Redis, the
-  design has drifted.
+- **Redis**: quotas, counters, and single-use ephemeral auth tickets (60s TTL WS/embed connection
+  tickets — a short-lived nonce, not session truth). If you find yourself putting session truth in
+  Redis, the design has drifted.
 - **CDN**: `embed.js` is immutable per version (`/v1/embed.<hash>.js`) with a long TTL, fronted by a
   short-TTL `/v1/embed.js` pointer. Never bust cache on the loader itself — customers have it in
   their HTML and you cannot redeploy their pages.
