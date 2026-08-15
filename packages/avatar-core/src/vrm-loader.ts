@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin, type VRM } from "@pixiv/three-vrm";
 import { applyRestPose } from "./vrm-rest-pose.js";
+import { applySkinSeamBias } from "./vrm-skin-seam-bias.js";
 
 export interface VrmSceneHandle {
   readonly vrm: VRM;
@@ -63,6 +64,7 @@ export async function loadVrmScene(options: LoadVrmSceneOptions): Promise<VrmSce
   // Before the bounding-box/camera-framing math below, so the bust-framing
   // reflects the actual rest pose rather than a T-pose's much wider bounds.
   applyRestPose(vrm);
+  applySkinSeamBias(vrm);
 
   const width = options.container.clientWidth || DEFAULT_WIDTH;
   const height = options.container.clientHeight || DEFAULT_HEIGHT;
@@ -81,14 +83,28 @@ export async function loadVrmScene(options: LoadVrmSceneOptions): Promise<VrmSce
   canvas.style.height = "100%";
   canvas.style.objectFit = "cover";
   const renderer: MinimalRenderer =
-    options.createRenderer?.(canvas) ?? new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+    options.createRenderer?.(canvas) ??
+    // logarithmicDepthBuffer: this bust-framed camera sits ~1.5 units from a
+    // model whose depth-critical detail (eyelash/iris/highlight sub-meshes,
+    // and the shirt collar sitting almost flush against the neck mesh) is
+    // all coincident within a few millimeters — a standard depth buffer
+    // spreads its precision across the whole near/far range and starved
+    // that razor-thin band enough to z-fight (the "torn" collar, and eyes
+    // losing their pupil to whichever coincident layer won that pixel's
+    // depth test). See also the camera's tightened far plane below, which
+    // narrows the range this precision gets spread across.
+    new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, logarithmicDepthBuffer: true });
   renderer.setSize(width, height);
   renderer.setPixelRatio?.(typeof window !== "undefined" ? window.devicePixelRatio : 1);
 
   const scene = new THREE.Scene();
   scene.add(vrm.scene);
-  scene.add(new THREE.DirectionalLight(0xffffff, 1.2).translateOnAxis(new THREE.Vector3(1, 1.5, 1), 1));
-  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+  // Ambient was strong enough relative to the key light to flatten shading
+  // across the whole model (the washed-out/"fading" look, and part of why
+  // the iris/pupil read as low-contrast) — shifted more of the total light
+  // into the directional key light so the model actually shades.
+  scene.add(new THREE.DirectionalLight(0xffffff, 1.5).translateOnAxis(new THREE.Vector3(1, 1.5, 1), 1));
+  scene.add(new THREE.AmbientLight(0xffffff, 0.35));
 
   // Bust-frame the camera from the loaded model's own bounding box rather
   // than a fixed head-height guess — replica-resolver.ts's gender/style/
@@ -111,7 +127,12 @@ export async function loadVrmScene(options: LoadVrmSceneOptions): Promise<VrmSce
   }
   const distance = frameHeight / 2 / Math.tan(THREE.MathUtils.degToRad(FOV_DEGREES) / 2);
 
-  const camera = new THREE.PerspectiveCamera(FOV_DEGREES, width / height, 0.1, 20);
+  // far=4 (not the previous 20): this is always a tight bust-frame shot, so
+  // nothing in the scene is ever more than ~2 units from the camera — a far
+  // plane 5x deeper than anything actually rendered just starved depth-buffer
+  // precision across the near range where it mattered. Combined with
+  // logarithmicDepthBuffer above, this is the fix for the eye/collar z-fighting.
+  const camera = new THREE.PerspectiveCamera(FOV_DEGREES, width / height, 0.1, 4);
   camera.position.set(0, frameCenterY, distance);
   camera.lookAt(0, frameCenterY, 0);
 

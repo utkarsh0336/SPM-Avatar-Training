@@ -2,13 +2,15 @@ import type { VRM } from "@pixiv/three-vrm";
 
 // Rotation around each upper arm's local Z axis, in VRM's normalized bone
 // space, bringing a straight-out T-pose arm down to a relaxed at-the-side
-// stance. Signs are mirrored left/right; magnitude tuned so the upper arm
-// ends up close to vertical (a T-pose starts horizontal) without swinging
-// past the torso.
-const UPPER_ARM_REST_ANGLE = Math.PI * (70 / 180);
+// stance. Signs are mirrored left/right. A T-pose arm sits at 0° (horizontal);
+// 90° would be fully vertical. 82° was chosen over a full 90° to leave a
+// small natural gap at the armpit rather than clipping the arm mesh into the
+// torso — 70° left the arms visibly splayed out from the body (the "hands
+// apart" look), well short of vertical.
+const UPPER_ARM_REST_ANGLE = Math.PI * (82 / 180);
 // A slight elbow bend reads as a natural relaxed stance rather than a stiff
 // straight arm.
-const ELBOW_REST_ANGLE = Math.PI * (5 / 180);
+const ELBOW_REST_ANGLE = Math.PI * (8 / 180);
 
 /**
  * Every VRM asset in this repo's replica set (realistic/animated/

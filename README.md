@@ -2,6 +2,8 @@
 
 Multi-tenant SaaS platform embedding a real-time AI avatar trainer into any website. See `CLAUDE.md` for the full architecture/conventions and `.claude/specs/ai-avatar.md` for the AI conversation pipeline's implementation brief.
 
+**New here?** Start with `docs/HOW_IT_WORKS.md` — a plain-English walkthrough of the whole product. For the API, see `docs/API.md`.
+
 ## Running the AI Avatar Tutor pipeline locally
 
 This section covers the free-tier conversational pipeline behind the dashboard's live training session screen (Gemini/Groq LLM, Groq Whisper STT, self-hosted Piper TTS via `echogarden`, a Mock avatar renderer, over a plain WebSocket). It runs at **$0/month** by design — every provider is a free tier or self-hosted, and no code path spends money unless you explicitly opt in.
