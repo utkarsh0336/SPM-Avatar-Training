@@ -98,11 +98,17 @@ describe("POST /v1/conversations/:trainingSessionId/livekit-connect — plan gat
     process.env.LIVEKIT_API_SECRET = originalLiveKitSecret;
   });
 
+  // Unique remoteAddress per call: checkRateLimit's signup:${request.ip} bucket now lives in
+  // real Redis (packages/shared/src/scaling/rate-limiter.ts), shared across every parallel test
+  // file in the run, not reset per-process like the old in-memory Map — same reasoning as
+  // auth.test.ts's seedPasswordUser comment. Without this, this file's own signup() calls would
+  // pool against every other test file's and eventually trip "rate_limited".
   async function signup(orgName: string, email: string, password: string) {
     const response = await app.inject({
       method: "POST",
       url: "/v1/auth/signup",
       payload: { orgName, email, password },
+      remoteAddress: randomUUID(),
     });
     const body = response.json();
     createdOrgIds.push(body.org.id);

@@ -11,9 +11,18 @@ import { generateOpaqueToken } from "@avatrain/shared";
  * URL. Reuses the same opaque-token primitive as session cookies/invites
  * (packages/shared/src/auth/tokens.ts) rather than inventing new crypto.
  *
- * In-memory only, like lib/rate-limit.ts — apps/api is single-process for
- * now; a distributed ticket store is an explicit non-goal until there's a
- * real deploy topology to design against.
+ * In-memory only. Originally justified the same way checkRateLimit's old Map
+ * was ("apps/api is single-process for now") — that premise no longer holds:
+ * infra/fly/api-us.toml and api-eu.toml both set min_machines_running = 2,
+ * and checkRateLimit itself moved to a Redis-backed implementation
+ * (packages/shared/src/scaling/rate-limiter.ts)
+ * for exactly that reason. This module was NOT migrated alongside it — a
+ * ticket minted on one machine is invisible to redeemWsTicket() on another,
+ * so a mint-then-connect pair that lands on two different machines behind
+ * the LB fails with "invalid_ticket" even though the ticket was valid. Known
+ * gap, flagged for a follow-up fix (needs an atomic get-and-delete, e.g. a
+ * Redis Lua script, to preserve the single-use guarantee under concurrent
+ * redemption attempts) — not fixed here.
  */
 export interface WsTicketClaims {
   orgId: string;

@@ -289,8 +289,9 @@ export async function setTrainingSessionPinned(
  * realtime audio path," this function must never be awaited by its caller and must never throw
  * out of that call site, so every failure is caught and logged here instead of propagating.
  * `content` is passed through redact() before insert, per .claude/rules/tenancy.md ("redact PII
- * before insert, never on read") — redact() is still a Phase-0 no-op stub, flagged to
- * security-reviewer, not silently shipped as if PII scrubbing were real. Also bumps
+ * before insert, never on read") — packages/shared/src/redact.ts, regex-based structured-PII
+ * scrubbing (.claude/specs/pii-redaction.md); free-text entities (names, addresses) are an
+ * explicit non-goal there, not silently treated as covered. Also bumps
  * TrainingSession.updatedAt so "recent" list ordering reflects real activity with no separate
  * heartbeat mechanism.
  *

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import {
   acceptInviteSchema,
+  checkRateLimit,
   exchangeGoogleCode,
   googleCallbackSchema,
   inviteSchema,
@@ -10,7 +11,6 @@ import {
 } from "@avatrain/shared";
 import { requireRole } from "../plugins/auth.js";
 import { clearSessionCookieHeader, getSessionToken, serializeSessionCookie } from "../lib/cookies.js";
-import { checkRateLimit } from "../lib/rate-limit.js";
 import { unauthorized } from "../lib/http-errors.js";
 import * as authService from "../services/auth-service.js";
 
@@ -26,7 +26,7 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     // has no deploy config to configure trustProxy's proxy count/CIDR
     // against) — revisit when one lands.
     const key = `signup:${request.ip}`;
-    if (!checkRateLimit(key, { max: 10, windowMs: 60_000 })) {
+    if (!(await checkRateLimit(key, { max: 10, windowMs: 60_000 }))) {
       throw unauthorized("rate_limited");
     }
     const input = signupSchema.parse(request.body);
@@ -38,7 +38,7 @@ export function registerAuthRoutes(app: FastifyInstance): void {
   app.post("/v1/auth/login", async (request, reply) => {
     const input = loginSchema.parse(request.body);
     const key = `login:${input.email}:${request.ip}`;
-    if (!checkRateLimit(key, { max: 10, windowMs: 60_000 })) {
+    if (!(await checkRateLimit(key, { max: 10, windowMs: 60_000 }))) {
       throw unauthorized("rate_limited");
     }
     const result = await authService.login(input);
@@ -52,7 +52,7 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     // apps/dashboard/app/api/auth/google/callback/route.ts), so without
     // trustProxy configured this is one global bucket, not a per-caller one.
     const key = `google_callback:${request.ip}`;
-    if (!checkRateLimit(key, { max: 10, windowMs: 60_000 })) {
+    if (!(await checkRateLimit(key, { max: 10, windowMs: 60_000 }))) {
       throw unauthorized("rate_limited");
     }
     const input = googleCallbackSchema.parse(request.body);

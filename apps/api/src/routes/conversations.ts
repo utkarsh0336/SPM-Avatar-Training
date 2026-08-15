@@ -1,7 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { WebSocket } from "ws";
-import { prisma, trainingSessionIdParamSchema } from "@avatrain/shared";
-import { checkRateLimit } from "../lib/rate-limit.js";
+import { checkRateLimit, prisma, trainingSessionIdParamSchema } from "@avatrain/shared";
 import { conflict, forbidden, notFound, serviceUnavailable, unauthorized } from "../lib/http-errors.js";
 import { isSimliConfigured, mintSimliSession } from "../lib/simli.js";
 import { createLiveKitRoom, isLiveKitConfigured, mintLiveKitToken } from "../lib/livekit.js";
@@ -40,7 +39,7 @@ const LIVEKIT_CONNECT_RATE_LIMIT = { max: 10, windowMs: 5 * 60_000 };
 export function registerConversationRoutes(app: FastifyInstance): void {
   app.post("/v1/conversations/ticket", { preHandler: app.authenticate }, async (request, reply) => {
     const key = `conversation-ticket:${request.authContext!.userId}`;
-    if (!checkRateLimit(key, TICKET_RATE_LIMIT)) throw unauthorized("rate_limited");
+    if (!(await checkRateLimit(key, TICKET_RATE_LIMIT))) throw unauthorized("rate_limited");
 
     const { ticket, expiresAt } = mintWsTicket({
       orgId: request.authContext!.orgId,
@@ -64,7 +63,7 @@ export function registerConversationRoutes(app: FastifyInstance): void {
       if (!isSimliConfigured()) throw serviceUnavailable("simli_not_configured");
 
       const key = `simli-session:${request.authContext!.userId}`;
-      if (!checkRateLimit(key, SIMLI_SESSION_RATE_LIMIT)) throw unauthorized("rate_limited");
+      if (!(await checkRateLimit(key, SIMLI_SESSION_RATE_LIMIT))) throw unauthorized("rate_limited");
 
       const { orgId, userId } = request.authContext!;
       const faceId = await getCallerSimliFaceId(orgId, userId);
@@ -89,7 +88,7 @@ export function registerConversationRoutes(app: FastifyInstance): void {
       const { orgId, userId } = request.authContext!;
 
       const key = `livekit-connect:${userId}`;
-      if (!checkRateLimit(key, LIVEKIT_CONNECT_RATE_LIMIT)) throw unauthorized("rate_limited");
+      if (!(await checkRateLimit(key, LIVEKIT_CONNECT_RATE_LIMIT))) throw unauthorized("rate_limited");
 
       // Fresh read, never client-supplied — same "organizations is RLS-exempt,
       // direct prisma.organization.findUniqueOrThrow" posture org-service.ts

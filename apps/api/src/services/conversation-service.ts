@@ -177,10 +177,9 @@ export interface ConversationHandlerDeps {
   recordSatisfactionRating?: typeof recordSatisfactionRating;
   /**
    * Injectable for tests; defaults to the shared module-level singleton in
-   * turn-latency-guard.ts, which must persist across connections/turns —
-   * same requirement as apps/api/src/lib/rate-limit.ts's own module-level
-   * Map. Tests should inject a fresh instance (via
-   * createTurnLatencyCircuitBreaker()) to stay hermetic.
+   * turn-latency-guard.ts, which must persist across connections/turns for
+   * the same reason any per-process accumulator does. Tests should inject a
+   * fresh instance (via createTurnLatencyCircuitBreaker()) to stay hermetic.
    */
   turnLatencyCircuitBreaker?: TurnLatencyCircuitBreaker;
 }

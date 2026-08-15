@@ -31,6 +31,7 @@ const RESTRICTED_IMPORTS = {
     "packages/shared/src/scaling/concurrency-counter.ts",
     "packages/shared/src/scaling/concurrency-counter.test.ts",
     "packages/shared/src/scaling/redis-ping.ts",
+    "packages/shared/src/scaling/rate-limiter.ts",
   ],
   "livekit-server-sdk": ["apps/api/src/lib/livekit.ts", "apps/api/src/lib/livekit.test.ts"],
   "@sentry/node": ["packages/shared/src/observability/sentry.ts"],

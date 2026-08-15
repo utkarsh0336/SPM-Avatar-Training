@@ -1,8 +1,8 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
+import { checkRateLimit } from "@avatrain/shared";
 import type { EmbedConfigResponse } from "@avatrain/shared/contracts";
 import { serviceUnavailable, forbidden } from "../lib/http-errors.js";
-import { checkRateLimit } from "../lib/rate-limit.js";
 import { mintWsTicket } from "../lib/ws-tickets.js";
 import * as applicationService from "../services/application-service.js";
 import * as avatarService from "../services/avatar-service.js";
@@ -68,7 +68,7 @@ export function registerEmbedRoutes(app: FastifyInstance): void {
     if (!resolved) return;
 
     if (!resolved.avatarId) throw serviceUnavailable("embed_not_configured", "this embed has no avatar assigned yet");
-    if (!checkRateLimit(`embed-ticket:${key}`, TICKET_RATE_LIMIT)) throw forbidden("rate_limited");
+    if (!(await checkRateLimit(`embed-ticket:${key}`, TICKET_RATE_LIMIT))) throw forbidden("rate_limited");
 
     const { ticket, expiresAt } = mintWsTicket({
       orgId: resolved.orgId,
