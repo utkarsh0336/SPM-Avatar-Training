@@ -1,4 +1,8 @@
-import { generateOpaqueToken } from "@avatrain/shared";
+import {
+  createRedisSingleUseTicketStore,
+  generateOpaqueToken,
+  type SingleUseTicketStore,
+} from "@avatrain/shared";
 
 /**
  * Ticket-based auth for the WS upgrade route. Next.js Route Handlers
@@ -11,18 +15,12 @@ import { generateOpaqueToken } from "@avatrain/shared";
  * URL. Reuses the same opaque-token primitive as session cookies/invites
  * (packages/shared/src/auth/tokens.ts) rather than inventing new crypto.
  *
- * In-memory only. Originally justified the same way checkRateLimit's old Map
- * was ("apps/api is single-process for now") — that premise no longer holds:
- * infra/fly/api-us.toml and api-eu.toml both set min_machines_running = 2,
- * and checkRateLimit itself moved to a Redis-backed implementation
- * (packages/shared/src/scaling/rate-limiter.ts)
- * for exactly that reason. This module was NOT migrated alongside it — a
- * ticket minted on one machine is invisible to redeemWsTicket() on another,
- * so a mint-then-connect pair that lands on two different machines behind
- * the LB fails with "invalid_ticket" even though the ticket was valid. Known
- * gap, flagged for a follow-up fix (needs an atomic get-and-delete, e.g. a
- * Redis Lua script, to preserve the single-use guarantee under concurrent
- * redemption attempts) — not fixed here.
+ * Redis-backed (packages/shared/src/scaling/ws-ticket-store.ts), single-use
+ * via an atomic get-and-delete — see
+ * .claude/specs/distributed-ws-ticket-store.md. Previously an in-process
+ * Map, which broke once apps/api started running with
+ * min_machines_running >= 2 per region (infra/fly/api-*.toml): a ticket
+ * minted on one machine was invisible to redeemWsTicket() on another.
  */
 export interface WsTicketClaims {
   orgId: string;
@@ -38,33 +36,71 @@ export interface WsTicketClaims {
   pinnedAvatarId?: string;
 }
 
-interface StoredTicket extends WsTicketClaims {
+interface StoredTicketPayload extends WsTicketClaims {
   expiresAt: number;
 }
 
 const TICKET_TTL_MS = 60_000;
-const tickets = new Map<string, StoredTicket>();
 
-function sweep(now: number): void {
-  for (const [key, value] of tickets) {
-    if (value.expiresAt < now) tickets.delete(key);
-  }
+function ticketKey(ticket: string): string {
+  return `ws-ticket:${ticket}`;
 }
 
-export function mintWsTicket(claims: WsTicketClaims): { ticket: string; expiresAt: number } {
-  const now = Date.now();
-  sweep(now);
+// Module-level singleton, same reasoning as rate-limiter.ts's sharedLimiter: a fresh ioredis
+// connection per call would leak one per request with nothing ever closing it.
+let sharedStore: SingleUseTicketStore | null = null;
+function getStore(): SingleUseTicketStore {
+  if (!sharedStore) sharedStore = createRedisSingleUseTicketStore();
+  return sharedStore;
+}
+
+export interface WsTicketDeps {
+  /** Injectable for tests. Defaults to the shared module-level store. */
+  store?: SingleUseTicketStore;
+  /** Injectable clock for tests. */
+  now?: () => number;
+}
+
+export async function mintWsTicket(
+  claims: WsTicketClaims,
+  deps: WsTicketDeps = {},
+): Promise<{ ticket: string; expiresAt: number }> {
+  const store = deps.store ?? getStore();
+  const now = deps.now ?? Date.now;
   const ticket = generateOpaqueToken();
-  const expiresAt = now + TICKET_TTL_MS;
-  tickets.set(ticket, { ...claims, expiresAt });
+  const expiresAt = now() + TICKET_TTL_MS;
+  const payload: StoredTicketPayload = { ...claims, expiresAt };
+  await store.put(ticketKey(ticket), JSON.stringify(payload), TICKET_TTL_MS);
   return { ticket, expiresAt };
 }
 
-/** One-time use: redeeming a ticket removes it, whether or not it was valid. */
-export function redeemWsTicket(ticket: string): WsTicketClaims | null {
-  const stored = tickets.get(ticket);
-  tickets.delete(ticket);
-  if (!stored) return null;
-  if (stored.expiresAt < Date.now()) return null;
+/**
+ * One-time use: takeOnce() removes the ticket from the store whether or not
+ * it was valid, matching the old Map-based implementation's "consumed even
+ * though expired" semantics. `expiresAt` is re-checked here in JS rather
+ * than relying solely on the store's own TTL — Redis key eviction isn't
+ * instantaneous at the millisecond the TTL elapses, so this is the
+ * authoritative check, not a redundant one.
+ *
+ * Fails closed on a store error: the opposite of checkRateLimit's fail-open
+ * posture, because this is an auth boundary, not a quota — an unreadable
+ * ticket store must never be treated as "ticket valid." See
+ * .claude/specs/distributed-ws-ticket-store.md's Implementation Rules.
+ */
+export async function redeemWsTicket(ticket: string, deps: WsTicketDeps = {}): Promise<WsTicketClaims | null> {
+  const store = deps.store ?? getStore();
+  const now = deps.now ?? Date.now;
+
+  let raw: string | null;
+  try {
+    raw = await store.takeOnce(ticketKey(ticket));
+  } catch (err) {
+    console.error("[ws-tickets] Redis error during redemption, failing closed:", err);
+    return null;
+  }
+  if (!raw) return null;
+
+  const stored = JSON.parse(raw) as StoredTicketPayload;
+  if (stored.expiresAt < now()) return null;
   return { orgId: stored.orgId, userId: stored.userId, pinnedAvatarId: stored.pinnedAvatarId };
 }

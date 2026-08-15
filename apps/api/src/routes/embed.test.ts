@@ -188,9 +188,9 @@ describe("POST /v1/embed/ticket", () => {
     expect(response.statusCode).toBe(201);
     const { ticket } = response.json();
 
-    const claims = redeemWsTicket(ticket);
+    const claims = await redeemWsTicket(ticket);
     expect(claims).toEqual({ orgId, userId: null, pinnedAvatarId: avatarId });
-    expect(redeemWsTicket(ticket)).toBeNull(); // single-use
+    expect(await redeemWsTicket(ticket)).toBeNull(); // single-use
   });
 
   it("403s when the request's Origin isn't on the allowlist", async () => {
