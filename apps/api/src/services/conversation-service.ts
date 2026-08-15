@@ -44,6 +44,7 @@ import {
 } from "./curriculum-service.js";
 import { getAvatarById } from "./avatar-service.js";
 import { persistTrainingSessionMessage } from "./training-session-service.js";
+import { recordKnowledgeAccess } from "./analytics-service.js";
 import {
   defaultTurnLatencyCircuitBreaker,
   startTurnLatencyWatchdog,
@@ -153,6 +154,13 @@ export interface ConversationHandlerDeps {
   trainingSessionId?: string | null;
   /** Injectable for tests; defaults to the real ./training-session-service.js. Called fire-and-forget (`void`), never awaited, from the realtime hot path — see persistTurn below. */
   persistTrainingSessionMessage?: typeof persistTrainingSessionMessage;
+  /**
+   * Injectable for tests; defaults to the real ./analytics-service.js. Called fire-and-forget
+   * (`void`), never awaited, right after retrieval — see recordAccessedKnowledge below. Unlike
+   * persistTrainingSessionMessage, fires regardless of trainingSessionId — see
+   * .claude/specs/dashboard-analytics.md.
+   */
+  recordKnowledgeAccess?: typeof recordKnowledgeAccess;
   /**
    * Injectable for tests; defaults to the shared module-level singleton in
    * turn-latency-guard.ts, which must persist across connections/turns —
@@ -313,6 +321,7 @@ export function createConversationHandler(
   const circuitBreaker = deps.turnLatencyCircuitBreaker ?? defaultTurnLatencyCircuitBreaker;
   const trainingSessionId = deps.trainingSessionId ?? null;
   const persistMessage = deps.persistTrainingSessionMessage ?? persistTrainingSessionMessage;
+  const recordAccess = deps.recordKnowledgeAccess ?? recordKnowledgeAccess;
   const messages: LLMMessage[] = [];
 
   /**
@@ -329,6 +338,20 @@ export function createConversationHandler(
   function persistTurn(role: MessageRole, content: string): void {
     if (!trainingSessionId) return;
     void persistMessage(claims.orgId, trainingSessionId, role, content);
+  }
+
+  /**
+   * Fire-and-forget, same posture as persistTurn above and for the same reason
+   * (.claude/rules/realtime.md: never block the audio path). Deliberately does NOT skip when
+   * trainingSessionId is null — an anonymous apps/widget embed session's retrieval is exactly the
+   * real usage .claude/specs/dashboard-analytics.md's KnowledgeAccessEvent exists to capture.
+   * Takes `sources` (toKnowledgeSources' output), already deduped to one entry per documentId —
+   * five chunks from the same document is one "access", not five.
+   */
+  function recordAccessedKnowledge(sources: KnowledgeSource[]): void {
+    for (const source of sources) {
+      void recordAccess(claims.orgId, source.documentId, trainingSessionId);
+    }
   }
 
   let llm: LLMProvider | null = null;
@@ -559,6 +582,7 @@ ${step.branches.map((branch, index) => `${letters[index]}) ${branch.matchCriteri
     tracker.markRetrievalDone();
     const turnSystemPrompt = appendKnowledgeContext(systemPrompt, retrievedChunks);
     const sources: KnowledgeSource[] = toKnowledgeSources(retrievedChunks);
+    recordAccessedKnowledge(sources);
 
     const chunker = new SentenceChunker();
     const sentencePromises: Promise<SynthesizedSentence | null>[] = [];

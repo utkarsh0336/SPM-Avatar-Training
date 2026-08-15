@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { usePathname } from "next/navigation";
-import { logout, type AuthOrg } from "../../lib/api-client";
+import { logout, type AuthOrg, type AuthRole } from "../../lib/api-client";
 import { useTranslation } from "../../lib/locale/LocaleProvider";
 import { LocaleSwitcher } from "../../lib/locale/LocaleSwitcher";
 import styles from "./Sidebar.module.css";
@@ -10,6 +10,7 @@ import {
   BellIcon,
   BookmarkIcon,
   BookOpenIcon,
+  ChartIcon,
   ChevronRightIcon,
   CloseIcon,
   GearIcon,
@@ -33,24 +34,32 @@ export interface SidebarProps {
   // product's own name/default look rather than crashing. See
   // .claude/specs/tenant-branding.md.
   org?: AuthOrg | null;
+  // Same undefined-while-resolving/null-on-failure reasoning as org above. Gates the Analytics nav
+  // item (OWNER-only, matching /analytics' own page-level gate) — see
+  // .claude/specs/dashboard-analytics.md.
+  role?: AuthRole | null;
 }
 
-export function Sidebar({ org }: SidebarProps) {
+export function Sidebar({ org, role }: SidebarProps) {
   const pathname = usePathname();
   const { t } = useTranslation();
   const [personaDismissed, setPersonaDismissed] = useState(false);
   // /sessions, /voice-ai, and / (dashboard) are separate top-level route
   // trees sharing this one sidebar (see this file's own doc comment above) —
   // the active nav item reflects whichever hub the current route belongs to.
-  const activeHub: "dashboard" | "new-chat" | "voice-ai" | "knowledge" | "avatars" = pathname?.startsWith("/voice-ai")
+  const activeHub: "dashboard" | "new-chat" | "voice-ai" | "knowledge" | "avatars" | "analytics" = pathname?.startsWith(
+    "/voice-ai",
+  )
     ? "voice-ai"
     : pathname?.startsWith("/knowledge")
       ? "knowledge"
       : pathname?.startsWith("/avatars")
         ? "avatars"
-        : pathname?.startsWith("/sessions")
-          ? "new-chat"
-          : "dashboard";
+        : pathname?.startsWith("/analytics")
+          ? "analytics"
+          : pathname?.startsWith("/sessions")
+            ? "new-chat"
+            : "dashboard";
 
   // Same logout call + redirect as (dashboard)/LogoutButton.tsx — this
   // sidebar persists across /sessions and /sessions/[trainingSessionId], so
@@ -125,6 +134,13 @@ export function Sidebar({ org }: SidebarProps) {
             <span className={styles.navText}>{t("sessionsSidebar.navDashboard")}</span>
             {activeHub === "dashboard" && <ChevronRightIcon size={14} className={styles.navChevron} />}
           </a>
+          {role === "OWNER" && (
+            <a href="/analytics" className={activeHub === "analytics" ? styles.navItemActive : styles.navItem}>
+              <ChartIcon size={16} className={styles.navIcon} />
+              <span className={styles.navText}>{t("sessionsSidebar.navAnalytics")}</span>
+              {activeHub === "analytics" && <ChevronRightIcon size={14} className={styles.navChevron} />}
+            </a>
+          )}
         </div>
 
         <div className={styles.navGroup}>

@@ -19,6 +19,7 @@ export const hi: Dictionary = {
     navAvatars: "अवतार",
     groupMain: "मुख्य",
     navDashboard: "डैशबोर्ड",
+    navAnalytics: "एनालिटिक्स",
     groupAccount: "खाता",
     navNotifications: "सूचनाएं",
     navHelpCenter: "सहायता केंद्र",

@@ -22,6 +22,7 @@ export const en: {
     | "navAvatars"
     | "groupMain"
     | "navDashboard"
+    | "navAnalytics"
     | "groupAccount"
     | "navNotifications"
     | "navHelpCenter"
@@ -101,6 +102,7 @@ export const en: {
     navAvatars: "Avatars",
     groupMain: "MAIN",
     navDashboard: "Dashboard",
+    navAnalytics: "Analytics",
     groupAccount: "ACCOUNT",
     navNotifications: "Notifications",
     navHelpCenter: "Help Center",
