@@ -235,10 +235,12 @@ export function useConversationSession({
             gender: persona.gender,
             outfit: persona.outfit,
             topic,
-            // ControlBar's Language control is pure UI state, not wired to
-            // this session (see ControlBar.tsx's doc comment) — English is
-            // the only language actually implemented end-to-end so far (see
-            // Voice AI's useVoiceConversationSession.ts).
+            // Inert default: whenever `avatarId` below resolves a real Avatar
+            // record, conversation-service.ts's session.start handler
+            // overrides this from that avatar's preferredLanguage server-side
+            // (mirroring readingLevel's resolution) — this literal only
+            // matters for the no-avatar-configured fallback path. See
+            // .claude/specs/multi-language-support.md.
             language: "English",
             // Now actually sent (was reserved-but-unused) — this is what
             // activates conversation-service.ts's curriculum/checkpoint tool

@@ -113,19 +113,24 @@ enum AvatarRegion {
 
 /// Additive avatar-configuration attribute — see SOW §3.1 "... language-
 /// specific avatars". Deliberately its own enum rather than reusing
-/// tutor/avatar-config.ts's languageSchema ("English"/"Hindi", used only in
-/// the ephemeral WS session.start message) — SCREAMING_CASE values match
+/// tutor/avatar-config.ts's languageSchema ("English"/"Hindi"/"Spanish", used
+/// in the ephemeral WS session.start message) — SCREAMING_CASE values match
 /// every other avatar enum here, keeping avatar-service.ts's/onboarding-
 /// service.ts's generic patch passthrough free of a value-casing mapping.
+/// Trainer-set, audience-wide; resolved server-side into the session's
+/// Language via tutor/avatar-config.ts's resolveSessionLanguage — see
+/// .claude/specs/multi-language-support.md.
 enum AvatarLanguage {
   ENGLISH
   HINDI
+  SPANISH
 }
 
-/// Additive avatar-configuration attribute. Unlike AgeGroup/AvatarRegion/AvatarLanguage (metadata
-/// only), this one is actually consumed — see tutor/system-prompt.ts's buildSystemPrompt and its
+/// Additive avatar-configuration attribute. Unlike AgeGroup/AvatarRegion (metadata only), this one
+/// is actually consumed — see tutor/system-prompt.ts's buildSystemPrompt and its
 /// READING_LEVEL_INSTRUCTION map. Trainer-set, audience-wide; not a per-learner preference — see
-/// .claude/specs/adaptive-learning-personalization.md's Scope decisions.
+/// .claude/specs/adaptive-learning-personalization.md's Scope decisions. AvatarLanguage above is
+/// also consumed (see its own doc comment), not metadata-only either.
 enum ReadingLevel {
   SIMPLE
   STANDARD
@@ -353,13 +358,15 @@ model Avatar {
   outfit            Outfit?
   expertise         Expertise?
   voice             VoiceTone?
-  // Additive — see AgeGroup/AvatarRegion/AvatarLanguage doc comments above.
-  // Metadata only, never completion-required (assertAvatarComplete doesn't
-  // reference these) and never fed into replica-resolver.ts.
+  // Additive — see AgeGroup/AvatarRegion doc comments above. Metadata only,
+  // never completion-required (assertAvatarComplete doesn't reference these)
+  // and never fed into replica-resolver.ts.
   ageGroup          AgeGroup?       @map("age_group")
   region            AvatarRegion?
+  // Additive, like ageGroup/region, but actually consumed — resolved server-side into the
+  // session's Language, see AvatarLanguage's own doc comment above.
   preferredLanguage AvatarLanguage? @map("preferred_language")
-  // Additive, like the three above, but actually consumed by buildSystemPrompt — see the
+  // Additive, like ageGroup/region, but actually consumed by buildSystemPrompt — see the
   // ReadingLevel enum's doc comment above.
   readingLevel      ReadingLevel?   @map("reading_level")
 

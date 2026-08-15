@@ -1,20 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import styles from "./ControlBar.module.css";
-import {
-  CameraIcon,
-  CameraOffIcon,
-  EndCallIcon,
-  ExpandIcon,
-  GlobeIcon,
-  MicIcon,
-  MicOffIcon,
-  PanelIcon,
-} from "../icons";
+import { CameraIcon, CameraOffIcon, EndCallIcon, ExpandIcon, MicIcon, MicOffIcon, PanelIcon } from "../icons";
 import { useTrainingSessionUi } from "./TrainingSessionContext";
-
-const LANGUAGE_OPTIONS = ["English", "Spanish", "French", "German", "Hindi"];
 
 interface ControlBarProps {
   fullscreen: boolean;
@@ -24,12 +12,14 @@ interface ControlBarProps {
 
 // Session Controls — exact behaviors defined in
 // .claude/specs/video-chat-session.md UI Changes / "Session Controls — exact
-// behavior". Mute/Camera/Language/Hide-Panel are pure UI-toggle state here
+// behavior". Mute/Camera/Hide-Panel are pure UI-toggle state here
 // (TrainingSessionContext); Fullscreen is native browser state passed in as a
 // prop; End Session opens the confirmation dialog rather than ending directly.
+// No Language control here — language is trainer-set/avatar-level (see
+// AvatarEditor.tsx's Preferred Language picker), not a per-session toggle,
+// same as readingLevel. See .claude/specs/multi-language-support.md.
 export function ControlBar({ fullscreen, onToggleFullscreen, onEndSession }: ControlBarProps) {
   const { state, update } = useTrainingSessionUi();
-  const [languageOpen, setLanguageOpen] = useState(false);
 
   return (
     <div className={styles.bar}>
@@ -52,37 +42,6 @@ export function ControlBar({ fullscreen, onToggleFullscreen, onEndSession }: Con
         {state.cameraOff ? <CameraOffIcon size={18} /> : <CameraIcon size={18} />}
         Camera
       </button>
-
-      <div style={{ position: "relative" }}>
-        {languageOpen && (
-          <div className={styles.languagePopover}>
-            {LANGUAGE_OPTIONS.map((option) => (
-              <button
-                key={option}
-                type="button"
-                className={`${styles.languageOption} ${
-                  state.language === option ? styles.languageOptionSelected : ""
-                }`}
-                onClick={() => {
-                  update({ language: option });
-                  setLanguageOpen(false);
-                }}
-              >
-                {option}
-              </button>
-            ))}
-          </div>
-        )}
-        <button
-          type="button"
-          className={styles.control}
-          aria-expanded={languageOpen}
-          onClick={() => setLanguageOpen((open) => !open)}
-        >
-          <GlobeIcon size={18} />
-          Language
-        </button>
-      </div>
 
       <button
         type="button"

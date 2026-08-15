@@ -175,6 +175,18 @@ describe("onboarding routes", () => {
         externalAvatarId: "rpm-123",
       });
     });
+
+    it("accepts preferredLanguage: SPANISH", async () => {
+      const { token } = await seedOrgWithSessionToken("Onboarding Spanish Language Org");
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/v1/onboarding",
+        cookies: { avatrain_session: token },
+        payload: { preferredLanguage: "SPANISH" },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ preferredLanguage: "SPANISH" });
+    });
   });
 
   describe("POST /v1/onboarding/complete", () => {

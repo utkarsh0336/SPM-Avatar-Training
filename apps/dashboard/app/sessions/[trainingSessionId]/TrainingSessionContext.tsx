@@ -10,14 +10,12 @@ export interface TrainingSessionUiState {
   muted: boolean;
   cameraOff: boolean;
   panelVisible: boolean;
-  language: string;
 }
 
 const INITIAL_STATE: TrainingSessionUiState = {
   muted: false,
   cameraOff: false,
   panelVisible: true,
-  language: "English",
 };
 
 interface TrainingSessionContextValue {

@@ -79,7 +79,7 @@ const AVATAR_REGION_OPTIONS: readonly AvatarRegion[] = [
   "MIDDLE_EAST",
   "APAC",
 ];
-const AVATAR_LANGUAGE_OPTIONS: readonly AvatarLanguage[] = ["ENGLISH", "HINDI"];
+const AVATAR_LANGUAGE_OPTIONS: readonly AvatarLanguage[] = ["ENGLISH", "HINDI", "SPANISH"];
 const READING_LEVEL_OPTIONS: readonly ReadingLevel[] = ["SIMPLE", "STANDARD", "ADVANCED"];
 
 interface EditorFormState {

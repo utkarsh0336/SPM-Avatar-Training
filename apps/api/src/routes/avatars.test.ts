@@ -421,6 +421,29 @@ describe("PATCH /v1/avatars/:avatarId", () => {
     expect(getResponse.json().avatar.readingLevel).toBe("SIMPLE");
   });
 
+  it("round-trips preferredLanguage=SPANISH through PATCH and GET", async () => {
+    const { token, orgId, userId } = await seedOrgWithSessionToken("Avatars Spanish Language Org");
+    const avatar = await withAuthContext({ orgId, userId }, (tx) =>
+      tx.avatar.create({ data: { orgId, createdById: userId, name: "Draft", status: "DRAFT" } }),
+    );
+
+    const patchResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/avatars/${avatar.id}`,
+      cookies: { avatrain_session: token },
+      payload: { preferredLanguage: "SPANISH" },
+    });
+    expect(patchResponse.statusCode).toBe(200);
+    expect(patchResponse.json().avatar.preferredLanguage).toBe("SPANISH");
+
+    const getResponse = await app.inject({
+      method: "GET",
+      url: `/v1/avatars/${avatar.id}`,
+      cookies: { avatrain_session: token },
+    });
+    expect(getResponse.json().avatar.preferredLanguage).toBe("SPANISH");
+  });
+
   it("two-org isolation: 404s (not a cross-tenant write) for another org's avatar", async () => {
     const { token } = await seedOrgWithSessionToken("Avatars Patch Isolation Org");
     const otherOrg = await seedOrgWithSessionToken("Avatars Patch Isolation Other Org");

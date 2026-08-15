@@ -36,17 +36,20 @@ export const ageGroupSchema = z.enum(["YOUNG_ADULT", "MIDDLE_AGED", "SENIOR"]);
 export const avatarRegionSchema = z.enum(["GLOBAL", "INDIA", "NORTH_AMERICA", "EUROPE", "MIDDLE_EAST", "APAC"]);
 /**
  * SOW §3.1 "... language-specific avatars" — an Avatar's own metadata field,
- * deliberately distinct from `languageSchema` below (English/Hindi, used
- * only in the ephemeral WS session.start message). SCREAMING_CASE matches
+ * deliberately distinct from `languageSchema` below (English/Hindi/Spanish, used
+ * in the ephemeral WS session.start message). SCREAMING_CASE matches
  * every other avatar enum in this file, so avatar-service.ts's/onboarding-
  * service.ts's generic patch passthrough needs no value-casing mapping.
+ * Trainer-set, audience-wide; resolved server-side into the session's Language
+ * via resolveSessionLanguage() below — see .claude/specs/multi-language-support.md.
  */
-export const avatarLanguageSchema = z.enum(["ENGLISH", "HINDI"]);
+export const avatarLanguageSchema = z.enum(["ENGLISH", "HINDI", "SPANISH"]);
 /**
- * Unlike ageGroup/region/preferredLanguage above (metadata only), this one is actually consumed —
+ * Unlike ageGroup/region above (metadata only), this one is actually consumed —
  * see system-prompt.ts's buildSystemPrompt and READING_LEVEL_INSTRUCTION. Trainer-set,
  * audience-wide; not a per-learner preference — see
  * .claude/specs/adaptive-learning-personalization.md's Scope decisions.
+ * (avatarLanguageSchema above is also consumed, not metadata-only either — see its own doc comment.)
  */
 export const readingLevelSchema = z.enum(["SIMPLE", "STANDARD", "ADVANCED"]);
 /**
@@ -121,6 +124,17 @@ export type AvatarLanguage = z.infer<typeof avatarLanguageSchema>;
 export type ReadingLevel = z.infer<typeof readingLevelSchema>;
 export type Language = z.infer<typeof languageSchema>;
 export type HairStyleValue = z.infer<typeof hairStyleSchema>;
+
+const AVATAR_LANGUAGE_TO_LANGUAGE: Record<AvatarLanguage, Language> = {
+  ENGLISH: "English",
+  HINDI: "Hindi",
+  SPANISH: "Spanish",
+};
+
+/** Maps the persisted, trainer-set Avatar.preferredLanguage to the Language value the conversation pipeline (LLM/STT/TTS) actually consumes. */
+export function resolveSessionLanguage(avatarLanguage: AvatarLanguage): Language {
+  return AVATAR_LANGUAGE_TO_LANGUAGE[avatarLanguage];
+}
 
 /**
  * The subset of OnboardingState the session actually needs. skinTone,
