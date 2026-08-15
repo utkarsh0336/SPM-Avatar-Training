@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getMe } from "../../../lib/server-api";
 import { UsageAnalyticsSummary } from "./UsageAnalyticsSummary";
+import { TrainingAnalyticsSummary } from "./TrainingAnalyticsSummary";
 import styles from "./page.module.css";
 
 export const metadata = {
@@ -25,10 +26,12 @@ export default async function AnalyticsPage() {
         <p className={styles.subtitle}>
           Active users, conversations, and session duration reflect dashboard rehearsal activity in{" "}
           {me.org.name} — trainers testing their own avatars, not learners on your embedded widget. Knowledge
-          area access reflects real usage across both.
+          area access reflects real usage across both. Participant counts, completion rates, and knowledge
+          gaps below reflect the same dashboard rehearsal activity, not real end-learners.
         </p>
       </div>
       <UsageAnalyticsSummary />
+      <TrainingAnalyticsSummary />
     </div>
   );
 }

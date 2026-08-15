@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it } from "vitest";
 import { prisma, setAuthContext, withAuthContext } from "@avatrain/shared";
-import { getUsageAnalytics, recordKnowledgeAccess } from "./analytics-service.js";
+import { getTrainingAnalytics, getUsageAnalytics, recordKnowledgeAccess } from "./analytics-service.js";
+import { createCurriculum, replaceObjectives } from "./curriculum-service.js";
 
 const createdOrgIds: string[] = [];
 const createdUserIds: string[] = [];
@@ -13,6 +14,9 @@ async function cleanup(): Promise<void> {
       await tx.knowledgeDocument.deleteMany({ where: { orgId } });
       await tx.message.deleteMany({ where: { orgId } });
       await tx.trainingSession.deleteMany({ where: { orgId } });
+      // Objective/ObjectiveProgress cascade via curricula's FK ON DELETE CASCADE.
+      await tx.curriculum.deleteMany({ where: { orgId } });
+      await tx.avatar.deleteMany({ where: { orgId } });
       await tx.membership.deleteMany({ where: { orgId } });
     });
   }
@@ -62,6 +66,13 @@ async function seedTrainingSession(
       },
     }),
   );
+}
+
+async function seedAvatar(orgId: string, userId: string): Promise<string> {
+  const avatar = await withAuthContext({ orgId, userId }, (tx) =>
+    tx.avatar.create({ data: { orgId, createdById: userId, name: "Test Avatar" } }),
+  );
+  return avatar.id;
 }
 
 async function seedKnowledgeDocument(orgId: string, userId: string, title: string, category: string | null = null) {
@@ -196,6 +207,175 @@ describe("analytics-service", () => {
       expect(result.topKnowledgeAreas).toEqual([
         { documentId: document.id, documentTitle: "Embed Doc", category: null, accessCount: 1 },
       ]);
+    });
+  });
+
+  describe("getTrainingAnalytics", () => {
+    it("returns zeros and nulls, never NaN, for an org with no activity", async () => {
+      const { orgId } = await seedOrgAndUser("Training Analytics Empty Org");
+
+      const result = await getTrainingAnalytics(orgId);
+      expect(result).toMatchObject({
+        participantCount: 0,
+        curriculumsWithActivityCount: 0,
+        avgCompletionRate: null,
+        avgTimeToCompetencySeconds: null,
+        knowledgeGaps: [],
+      });
+    });
+
+    it("averages completion rate only across curricula with activity, not diluted by an untouched curriculum", async () => {
+      const { orgId, userId } = await seedOrgAndUser("Training Analytics Avg Org");
+      const learnerA = await seedOrgAndUser("Training Analytics Avg Learner A Org");
+      const learnerB = await seedOrgAndUser("Training Analytics Avg Learner B Org");
+      const avatarId1 = await seedAvatar(orgId, userId);
+      const avatarId2 = await seedAvatar(orgId, userId);
+      const avatarId3 = await seedAvatar(orgId, userId);
+
+      const curriculum1 = await createCurriculum(orgId, userId, { avatarId: avatarId1, title: "Complete" });
+      const [obj1] = await replaceObjectives(orgId, curriculum1.id, [
+        { title: "Obj 1", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+      ]);
+      await withAuthContext({ orgId }, (tx) =>
+        tx.objectiveProgress.create({
+          data: { orgId, objectiveId: obj1!.id, learnerId: learnerA.userId, verdict: "PASS", attempts: 1, feedback: "Good" },
+        }),
+      );
+
+      const curriculum2 = await createCurriculum(orgId, userId, { avatarId: avatarId2, title: "Incomplete" });
+      const [obj2] = await replaceObjectives(orgId, curriculum2.id, [
+        { title: "Obj 1", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+      ]);
+      await withAuthContext({ orgId }, (tx) =>
+        tx.objectiveProgress.create({
+          data: { orgId, objectiveId: obj2!.id, learnerId: learnerB.userId, verdict: "RETRY", attempts: 1, feedback: "Try again" },
+        }),
+      );
+
+      // Untouched curriculum: has an objective, but zero ObjectiveProgress rows.
+      await createCurriculum(orgId, userId, { avatarId: avatarId3, title: "Untouched" });
+
+      const result = await getTrainingAnalytics(orgId);
+      expect(result.curriculumsWithActivityCount).toBe(2);
+      expect(result.avgCompletionRate).toBeCloseTo(0.5, 5);
+    });
+
+    it("does not count a learner as completed when an untouched objective exists in the same curriculum", async () => {
+      const { orgId, userId } = await seedOrgAndUser("Training Analytics Untouched Objective Org");
+      const learner = await seedOrgAndUser("Training Analytics Untouched Objective Learner Org");
+      const avatarId = await seedAvatar(orgId, userId);
+      const curriculum = await createCurriculum(orgId, userId, { avatarId, title: "X" });
+      const [objectiveA] = await replaceObjectives(orgId, curriculum.id, [
+        { title: "Obj A", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+        { title: "Obj B", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+      ]);
+      // Only objective A ever gets a progress row — objective B has zero attempts from anyone.
+      await withAuthContext({ orgId }, (tx) =>
+        tx.objectiveProgress.create({
+          data: { orgId, objectiveId: objectiveA!.id, learnerId: learner.userId, verdict: "PASS", attempts: 1, feedback: "Good" },
+        }),
+      );
+
+      const result = await getTrainingAnalytics(orgId);
+      expect(result.avgCompletionRate).toBe(0);
+    });
+
+    it("excludes an objective from knowledgeGaps when fewer than MIN_ATTEMPTS learners have attempted it", async () => {
+      const { orgId, userId } = await seedOrgAndUser("Training Analytics Min Attempts Org");
+      const learner = await seedOrgAndUser("Training Analytics Min Attempts Learner Org");
+      const avatarId = await seedAvatar(orgId, userId);
+      const curriculum = await createCurriculum(orgId, userId, { avatarId, title: "X" });
+      const [objective] = await replaceObjectives(orgId, curriculum.id, [
+        { title: "Obj 1", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+      ]);
+      await withAuthContext({ orgId }, (tx) =>
+        tx.objectiveProgress.create({
+          data: { orgId, objectiveId: objective!.id, learnerId: learner.userId, verdict: "RETRY", attempts: 1, feedback: "Try again" },
+        }),
+      );
+
+      const result = await getTrainingAnalytics(orgId);
+      expect(result.knowledgeGaps).toEqual([]);
+    });
+
+    it("ranks knowledgeGaps by passRate ascending and caps at 10", async () => {
+      const { orgId, userId } = await seedOrgAndUser("Training Analytics Gaps Org");
+      const learnerA = await seedOrgAndUser("Training Analytics Gaps Learner A Org");
+      const learnerB = await seedOrgAndUser("Training Analytics Gaps Learner B Org");
+      const avatarId = await seedAvatar(orgId, userId);
+      const curriculum = await createCurriculum(orgId, userId, { avatarId, title: "X" });
+      const objectiveInputs = Array.from({ length: 11 }, (_, i) => ({
+        title: i === 10 ? "Perfect" : `Weak ${i}`,
+        teachingContent: "T",
+        checkQuestion: "Q",
+        gradingCriteria: "G",
+      }));
+      const objectives = await replaceObjectives(orgId, curriculum.id, objectiveInputs);
+
+      await withAuthContext({ orgId }, (tx) =>
+        tx.objectiveProgress.createMany({
+          data: objectives.flatMap((objective) => {
+            const verdict = objective.title === "Perfect" ? "PASS" : "RETRY";
+            return [
+              { orgId, objectiveId: objective.id, learnerId: learnerA.userId, verdict, attempts: 1, feedback: "F" },
+              { orgId, objectiveId: objective.id, learnerId: learnerB.userId, verdict, attempts: 1, feedback: "F" },
+            ];
+          }),
+        }),
+      );
+
+      const result = await getTrainingAnalytics(orgId);
+      expect(result.knowledgeGaps).toHaveLength(10);
+      expect(result.knowledgeGaps.every((gap) => gap.passRate === 0)).toBe(true);
+      expect(result.knowledgeGaps.some((gap) => gap.objectiveTitle === "Perfect")).toBe(false);
+    });
+
+    it("dedupes participantCount for a learner active across two curricula", async () => {
+      const { orgId, userId } = await seedOrgAndUser("Training Analytics Participant Org");
+      const learner = await seedOrgAndUser("Training Analytics Participant Learner Org");
+      const avatarId1 = await seedAvatar(orgId, userId);
+      const avatarId2 = await seedAvatar(orgId, userId);
+      const curriculum1 = await createCurriculum(orgId, userId, { avatarId: avatarId1, title: "A" });
+      const curriculum2 = await createCurriculum(orgId, userId, { avatarId: avatarId2, title: "B" });
+      const [obj1] = await replaceObjectives(orgId, curriculum1.id, [
+        { title: "Obj 1", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+      ]);
+      const [obj2] = await replaceObjectives(orgId, curriculum2.id, [
+        { title: "Obj 1", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+      ]);
+      await withAuthContext({ orgId }, (tx) =>
+        tx.objectiveProgress.createMany({
+          data: [
+            { orgId, objectiveId: obj1!.id, learnerId: learner.userId, verdict: "PASS", attempts: 1, feedback: "Good" },
+            { orgId, objectiveId: obj2!.id, learnerId: learner.userId, verdict: "PASS", attempts: 1, feedback: "Good" },
+          ],
+        }),
+      );
+
+      const result = await getTrainingAnalytics(orgId);
+      expect(result.participantCount).toBe(1);
+    });
+
+    it("keeps another org's ObjectiveProgress rows out of participantCount, curriculumsWithActivityCount, and knowledgeGaps", async () => {
+      const orgA = await seedOrgAndUser("Training Analytics Isolation Org A");
+      const orgB = await seedOrgAndUser("Training Analytics Isolation Org B");
+      const learnerB = await seedOrgAndUser("Training Analytics Isolation Learner B Org");
+      const avatarB = await seedAvatar(orgB.orgId, orgB.userId);
+      const curriculumB = await createCurriculum(orgB.orgId, orgB.userId, { avatarId: avatarB, title: "X" });
+      const [objectiveB] = await replaceObjectives(orgB.orgId, curriculumB.id, [
+        { title: "Obj 1", teachingContent: "T", checkQuestion: "Q", gradingCriteria: "G" },
+      ]);
+      await withAuthContext({ orgId: orgB.orgId }, (tx) =>
+        tx.objectiveProgress.createMany({
+          data: [
+            { orgId: orgB.orgId, objectiveId: objectiveB!.id, learnerId: learnerB.userId, verdict: "PASS", attempts: 1, feedback: "Good" },
+            { orgId: orgB.orgId, objectiveId: objectiveB!.id, learnerId: orgB.userId, verdict: "RETRY", attempts: 1, feedback: "Try again" },
+          ],
+        }),
+      );
+
+      const result = await getTrainingAnalytics(orgA.orgId);
+      expect(result).toMatchObject({ participantCount: 0, curriculumsWithActivityCount: 0, knowledgeGaps: [] });
     });
   });
 });
