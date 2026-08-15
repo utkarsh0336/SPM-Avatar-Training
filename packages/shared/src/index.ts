@@ -28,3 +28,4 @@ export * from "./application/index.js";
 export * from "./training-session/index.js";
 export * from "./livekit/index.js";
 export * from "./analytics/index.js";
+export * from "./scaling/index.js";

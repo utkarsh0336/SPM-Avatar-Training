@@ -1,0 +1,24 @@
+# apps/agent — EU region worker pool. Mirrors agent-us.toml except
+# region/app name and DATA_REGION — see that file's header comment.
+#
+# Deploy: fly deploy . --config infra/fly/agent-eu.toml --dockerfile apps/agent/Dockerfile --region fra
+# Baseline machine count (fly-autoscaler adjusts from here):
+#   fly scale count 2 --region fra -a avatrain-agent-eu
+#
+# Needs DATABASE_URL/APP_DATABASE_URL secrets too — see agent-us.toml's
+# comment and infra/README.md's "Local validation" section for why.
+
+app = "avatrain-agent-eu"
+primary_region = "fra"
+
+[env]
+  DATA_REGION = "EU"
+  METRICS_PORT = "9091"
+
+[metrics]
+  port = 9091
+  path = "/metrics"
+
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "1gb"

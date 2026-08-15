@@ -1,0 +1,13 @@
+**/node_modules
+**/dist
+**/.turbo
+**/coverage
+.git
+.github
+.claude
+docs
+venv
+*.md
+.env
+.env.example
+infra

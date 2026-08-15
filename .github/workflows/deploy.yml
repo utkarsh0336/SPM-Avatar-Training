@@ -1,0 +1,46 @@
+name: Deploy
+
+# Manual-only, deliberately not triggered on push to main — infra changes
+# are high blast-radius (see .claude/specs/auto-scaling.md's Overview) and
+# must not auto-apply on every merge. CI (ci.yml)'s `pnpm verify` gate is
+# unaffected by this file and still runs on every push/PR as before.
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Which Fly app(s) to deploy"
+        required: true
+        type: choice
+        options:
+          - api-us
+          - api-eu
+          - agent-us
+          - agent-eu
+          - all
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production # requires a manual approval gate configured on this GitHub Environment
+    strategy:
+      matrix:
+        target: [api-us, api-eu, agent-us, agent-eu]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy ${{ matrix.target }}
+        if: github.event.inputs.target == matrix.target || github.event.inputs.target == 'all'
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          app="${{ matrix.target }}"
+          case "$app" in
+            api-*)   dockerfile="apps/api/Dockerfile" ;;
+            agent-*) dockerfile="apps/agent/Dockerfile" ;;
+          esac
+          flyctl deploy . \
+            --config "infra/fly/${app}.toml" \
+            --dockerfile "$dockerfile" \
+            --remote-only

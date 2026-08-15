@@ -1,0 +1,43 @@
+# Config for github.com/superfly/fly-autoscaler, run as its own small
+# long-lived process (e.g. a separate Fly Machine, or any host that can
+# reach the Fly API) polling this app's fleet-wide metrics and adjusting
+# machine count. Schema verified against
+# https://github.com/superfly/fly-autoscaler/blob/main/etc/fly-autoscaler.yml
+# — do not hand-modify field names without re-checking that file; fly-autoscaler
+# is a real external tool, not something this codebase controls the API of.
+#
+# api-token is intentionally omitted here — set via the FAS_API_TOKEN env
+# var at runtime (a Fly deploy-scoped token), never committed.
+#
+# Run: fly-autoscaler eval --config infra/fly/autoscaler-agent-us.yml
+
+app-name: "avatrain-agent-us"
+process-group: "app"
+interval: "15s"
+
+# Every machine in the fleet reports the SAME fleet-wide
+# avatrain_sessions_concurrent value (see apps/agent/src/metrics-server.ts's
+# doc comment) — max() picks that shared value once rather than summing it
+# once per machine. avatrain_worker_capacity is a static per-process config
+# value (config.WORKER_CAPACITY), so avg() across machines is equivalent to
+# reading any one of them.
+metric-collectors:
+  - type: "prometheus"
+    metric-name: "sessions_concurrent"
+    address: "https://api.fly.io/prometheus/REPLACE_WITH_ORG_SLUG"
+    query: "max(avatrain_sessions_concurrent{app=\"avatrain-agent-us\"})"
+
+  - type: "prometheus"
+    metric-name: "worker_capacity"
+    address: "https://api.fly.io/prometheus/REPLACE_WITH_ORG_SLUG"
+    query: "avg(avatrain_worker_capacity{app=\"avatrain-agent-us\"})"
+
+# ceil(sessions_concurrent / worker_capacity) is the machine count needed at
+# 100% packing; dividing by 0.7 targets 70% utilization instead — the ~30%
+# headroom docs/ARCHITECTURE.md §4 calls for ("a queued learner staring at a
+# spinner has already churned"). Tune these bounds against real load-test
+# numbers before production use — 1..20 here is a placeholder, not a
+# validated ceiling.
+started-machine-count: "ceil((sessions_concurrent / worker_capacity) / 0.7)"
+min_started_machine_count: 1
+max_started_machine_count: 20

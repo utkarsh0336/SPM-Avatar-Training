@@ -22,6 +22,7 @@ describe("loadAgentConfig", () => {
     expect(config.AGENT_IDLE_TIMEOUT_MS).toBe(5 * 60_000);
     expect(config.AGENT_MAX_SESSION_MS).toBe(30 * 60_000);
     expect(config.LAST_HUMAN_GRACE_MS).toBe(15_000);
+    expect(config.WORKER_CAPACITY).toBe(1);
   });
 
   it("coerces numeric env overrides from strings", () => {

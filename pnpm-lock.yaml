@@ -277,6 +277,9 @@ importers:
       google-auth-library:
         specifier: ^11.0.0
         version: 11.0.0
+      ioredis:
+        specifier: ^5.4.1
+        version: 5.11.1
       msedge-tts:
         specifier: ^2.0.7
         version: 2.0.7

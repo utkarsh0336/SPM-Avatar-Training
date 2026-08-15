@@ -1,0 +1,35 @@
+# apps/api — EU region. Mirrors api-us.toml exactly except region/app name
+# and DATA_REGION — see that file's header comment for why this is a
+# separate app rather than a `regions` list, and infra/README.md for the
+# full multi-region rationale.
+#
+# Deploy: fly deploy . --config infra/fly/api-eu.toml --dockerfile apps/api/Dockerfile --region fra
+
+app = "avatrain-api-eu"
+primary_region = "fra"
+
+[env]
+  PORT = "4000"
+  DATA_REGION = "EU"
+
+[http_service]
+  internal_port = 4000
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 2
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+[[http_service.checks]]
+  grace_period = "10s"
+  interval = "15s"
+  method = "GET"
+  timeout = "5s"
+  path = "/readyz"
+
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "512mb"
