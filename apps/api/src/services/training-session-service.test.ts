@@ -94,6 +94,18 @@ describe("training-session-service", () => {
       expect(updated.updatedAt.getTime()).toBeGreaterThanOrEqual(session.updatedAt.getTime());
     });
 
+    it("redacts PII in content before persisting", async () => {
+      const { orgId, userId } = await seedOrgAndUser("Redact Message Org");
+      const session = await seedTrainingSession(orgId, userId);
+
+      await persistTrainingSessionMessage(orgId, session.id, "USER", "reach me at a@b.com");
+
+      const messages = await withAuthContext({ orgId, userId }, (tx) =>
+        tx.message.findMany({ where: { orgId, trainingSessionId: session.id } }),
+      );
+      expect(messages[0]?.content).toBe("reach me at [REDACTED_EMAIL]");
+    });
+
     it("never throws — a persistence failure (unknown trainingSessionId) is caught and swallowed", async () => {
       const { orgId } = await seedOrgAndUser("Persist Message Failure Org");
       await expect(

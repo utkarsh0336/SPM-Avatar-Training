@@ -835,9 +835,9 @@ model TrainingSession {
 /// rows are inserted only from conversation-service.ts's trusted realtime pipeline
 /// (persistTrainingSessionMessage), matching this rule file's "record_progress/grade_answer are
 /// serverOnly, server re-checks entitlement rather than trusting model arguments" posture.
-/// content is passed through redact() (packages/shared/src/redact.ts) before insert — that
-/// function is still a no-op stub, flagged to security-reviewer, not silently shipped as if PII
-/// scrubbing were real.
+/// content is passed through redact() (packages/shared/src/redact.ts) before insert — regex-based
+/// structured-PII scrubbing (.claude/specs/pii-redaction.md); free-text entities (names,
+/// addresses) are an explicit non-goal there, not silently treated as covered.
 model Message {
   id                String @id @default(uuid()) @db.Uuid
   orgId             String @map("org_id") @db.Uuid

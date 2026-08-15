@@ -527,6 +527,15 @@ describe("analytics-service", () => {
       expect(rows[0]).toMatchObject({ trainingSessionId: session.id, rating: 4, comment: null });
     });
 
+    it("redacts PII in comment before persisting", async () => {
+      const { orgId } = await seedOrgAndUser("Redact Satisfaction Comment Org");
+
+      await recordSatisfactionRating(orgId, null, 3, "call me at (415) 555-2671");
+
+      const rows = await withAuthContext({ orgId }, (tx) => tx.satisfactionRating.findMany({ where: { orgId } }));
+      expect(rows[0]).toMatchObject({ comment: "call me at [REDACTED_PHONE]" });
+    });
+
     it("stores a null comment as null, not an empty string", async () => {
       const { orgId } = await seedOrgAndUser("Record Satisfaction Rating No Comment Org");
 
