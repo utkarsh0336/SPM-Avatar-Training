@@ -50,11 +50,17 @@ afterAll(cleanup);
 
 const app = buildApp();
 
+// Unique remoteAddress per call: checkRateLimit's signup:${request.ip} bucket now lives in real
+// Redis (packages/shared/src/scaling/rate-limiter.ts), shared across every parallel test file in
+// the run, not reset per-process like the old in-memory Map. This file alone makes exactly
+// max:10 real signup() calls today — already at the limit's edge even in isolation — so this
+// isn't optional hardening, it's what keeps this file's own tests from tripping "rate_limited".
 async function signup(orgName: string, email: string, password: string) {
   const response = await app.inject({
     method: "POST",
     url: "/v1/auth/signup",
     payload: { orgName, email, password },
+    remoteAddress: randomUUID(),
   });
   if (response.statusCode === 201) {
     const body = response.json();
@@ -136,12 +142,15 @@ async function seedPendingInvitee(orgName: string, email: string): Promise<{ org
   return { orgId };
 }
 
+// Unique remoteAddress per call — same google_callback:${request.ip} rate-limit-bucket reasoning
+// as signup() above.
 async function googleLogin(profile: GoogleProfileInput) {
   exchangeGoogleCode.mockResolvedValueOnce(profile);
   const response = await app.inject({
     method: "POST",
     url: "/v1/auth/google/callback",
     payload: { code: "test-code", codeVerifier: "test-verifier" },
+    remoteAddress: randomUUID(),
   });
   if (response.statusCode === 200) {
     const body = response.json();
@@ -562,6 +571,7 @@ describe("auth routes", () => {
         method: "POST",
         url: "/v1/auth/google/callback",
         payload: { code: "bad-code", codeVerifier: "verifier" },
+        remoteAddress: randomUUID(),
       });
 
       expect(response.statusCode).toBe(401);

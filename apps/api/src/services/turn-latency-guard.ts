@@ -20,12 +20,18 @@ export interface TurnLatencyCircuitBreaker {
 }
 
 /**
- * Per-process, in-memory — NOT Redis-backed. Mirrors the accepted precedent
- * in apps/api/src/lib/rate-limit.ts, which documents exactly this trade-off:
- * "Redis-backed distributed limiting is an explicit spec non-goal — this
- * per-process approximation is acceptable as-is." A rolling per-org streak
- * of consecutive over-budget turns; trips at `consecutiveMissesToTrip`,
- * resets the moment a turn for that org comes in under budget.
+ * Per-process, in-memory — NOT Redis-backed, deliberately, unlike
+ * checkRateLimit (packages/shared/src/scaling/rate-limiter.ts, moved off an
+ * equivalent in-process Map once apps/api started running with
+ * min_machines_running >= 2 per region). That move doesn't apply here: this
+ * is called directly on the WS realtime hot path (per turn), and
+ * .claude/rules/realtime.md rules out adding network calls to that path.
+ * A per-process streak is an acceptable approximation for a circuit
+ * breaker's purpose — worst case, a struggling org trips one machine's
+ * breaker a turn or two later than a global count would. A rolling per-org
+ * streak of consecutive over-budget turns; trips at
+ * `consecutiveMissesToTrip`, resets the moment a turn for that org comes in
+ * under budget.
  */
 export function createTurnLatencyCircuitBreaker(opts?: {
   consecutiveMissesToTrip?: number;
