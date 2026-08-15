@@ -412,6 +412,101 @@ describe("createConversationHandler", () => {
     });
   });
 
+  describe("recordTurnMetric hook", () => {
+    const chunk = { documentId: "8c9a6c1a-6d1a-4c2e-9c1a-6d1a4c2e9c1a", documentTitle: "Leave Policy", content: "20 days.", similarity: 0.9 };
+
+    // Same fire-and-forget regression guard as recordKnowledgeAccess's own test above —
+    // recordTurnMetric is injected with a promise that never resolves, yet the turn still
+    // completes, proving the turn-completion-path write is never awaited.
+    it("never blocks the turn even when the injected recordTurnMetric hangs forever", async () => {
+      const socket = new FakeSocket();
+      const recordTurnMetric = vi.fn(() => new Promise<void>(() => {})); // never resolves
+      createConversationHandler(socket as never, claims, {
+        createLLM: fakeLLM("success", ["Hello. "]),
+        createSTT: fakeSTT("success"),
+        createTTS: fakeTTS("success"),
+        trainingSessionId: "ts-1",
+        recordTurnMetric,
+        ...noRetrieval,
+      });
+      socket.emitMessage(sessionStartBase);
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+
+      expect(recordTurnMetric).toHaveBeenCalledWith(
+        "org-1",
+        "ts-1",
+        expect.objectContaining({ totalMs: expect.any(Number), grounded: false }),
+      );
+    });
+
+    // Deliberately the opposite of persistTrainingSessionMessage's no-op-when-null contract — an
+    // anonymous apps/widget embed session's turn is exactly the real usage
+    // .claude/specs/ai-performance-analytics.md's TurnMetric exists to capture.
+    it("still fires when trainingSessionId is omitted (anonymous embed sessions) — does not no-op", async () => {
+      const socket = new FakeSocket();
+      const recordTurnMetric = vi.fn(async () => {});
+      createConversationHandler(socket as never, claims, {
+        createLLM: fakeLLM("success", ["Hi. "]),
+        createSTT: fakeSTT("success"),
+        createTTS: fakeTTS("success"),
+        recordTurnMetric,
+        ...noRetrieval,
+      });
+      socket.emitMessage(sessionStartBase);
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+
+      expect(recordTurnMetric).toHaveBeenCalledWith("org-1", null, expect.objectContaining({ grounded: false }));
+    });
+
+    it("marks grounded: true when retrieval returned at least one chunk", async () => {
+      const socket = new FakeSocket();
+      const recordTurnMetric = vi.fn(async () => {});
+      createConversationHandler(socket as never, claims, {
+        createLLM: fakeLLM("success", ["Hi. "]),
+        createSTT: fakeSTT("success"),
+        createTTS: fakeTTS("success"),
+        recordTurnMetric,
+        retrieveContext: fakeRetrieveContext([chunk]),
+      });
+      socket.emitMessage(sessionStartBase);
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+
+      expect(recordTurnMetric).toHaveBeenCalledWith("org-1", null, expect.objectContaining({ grounded: true }));
+    });
+
+    it("marks grounded: false when retrieval found nothing (ungrounded Priority-3 fallback)", async () => {
+      const socket = new FakeSocket();
+      const recordTurnMetric = vi.fn(async () => {});
+      createConversationHandler(socket as never, claims, {
+        createLLM: fakeLLM("success", ["Hi. "]),
+        createSTT: fakeSTT("success"),
+        createTTS: fakeTTS("success"),
+        recordTurnMetric,
+        ...noRetrieval,
+      });
+      socket.emitMessage(sessionStartBase);
+      socket.emitMessage({ type: "audio.chunk", utteranceId: "u1", audioBase64: "AAAA", mimeType: "audio/wav" });
+
+      await vi.waitFor(() => {
+        expect(findMessages(socket, "turn.ended")).toHaveLength(1);
+      });
+
+      expect(recordTurnMetric).toHaveBeenCalledWith("org-1", null, expect.objectContaining({ grounded: false }));
+    });
+  });
+
   describe("turn-latency SLA gate", () => {
     it("sends latency.budget_exceeded once when TTS runs past the TTFA budget, and the turn still completes", async () => {
       vi.useFakeTimers();

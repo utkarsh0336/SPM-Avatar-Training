@@ -68,3 +68,40 @@ export const trainingAnalyticsResponseSchema = z.object({
   knowledgeGaps: z.array(knowledgeGapSchema),
 });
 export type TrainingAnalyticsResponse = z.infer<typeof trainingAnalyticsResponseSchema>;
+
+// GET /v1/analytics/performance — see .claude/specs/ai-performance-analytics.md. Unlike
+// usageAnalyticsResponseSchema/trainingAnalyticsResponseSchema, every field here is real,
+// org-wide production data: the turn pipeline these fields come from runs identically for the
+// dashboard's own rehearsal surfaces and for real end-learners on the public apps/widget embed.
+export const avgLatencyMsSchema = z.object({
+  stt: z.number().nullable(),
+  retrieval: z.number().nullable(),
+  llmFirstToken: z.number().nullable(),
+  ttsFirstChunk: z.number().nullable(),
+  total: z.number().nullable(),
+});
+export type AvgLatencyMs = z.infer<typeof avgLatencyMsSchema>;
+
+// One row per day, oldest first, always exactly TREND_DAYS entries (see
+// getPerformanceAnalytics's module constant in analytics-service.ts) — a day with zero
+// KnowledgeAccessEvent rows is included with accessCount: 0, not omitted.
+export const knowledgeUtilizationTrendPointSchema = z.object({
+  date: z.string(), // YYYY-MM-DD
+  accessCount: z.number().int().nonnegative(),
+});
+export type KnowledgeUtilizationTrendPoint = z.infer<typeof knowledgeUtilizationTrendPointSchema>;
+
+// groundedReplyRate measures whether a reply was grounded in retrieved knowledge-base content
+// (sources.length > 0 in conversation-service.ts) versus the ungrounded Priority-3 fallback —
+// it is NOT a factual-accuracy judgment. Never label it "accuracy" in code or UI copy. There is
+// no user-satisfaction field: no capture mechanism for it exists yet, and this spec does not add
+// one — see ai-performance-analytics.md's Overview.
+export const performanceAnalyticsResponseSchema = z.object({
+  windowDays: z.union([z.literal(7), z.literal(30), z.literal(90)]),
+  generatedAt: z.string(),
+  turnCount: z.number().int().nonnegative(),
+  avgLatencyMs: avgLatencyMsSchema,
+  groundedReplyRate: z.number().min(0).max(1).nullable(),
+  knowledgeUtilizationTrend: z.array(knowledgeUtilizationTrendPointSchema),
+});
+export type PerformanceAnalyticsResponse = z.infer<typeof performanceAnalyticsResponseSchema>;

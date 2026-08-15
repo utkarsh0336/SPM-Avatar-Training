@@ -89,8 +89,10 @@ import {
   type TrainingSessionResult,
 } from "@avatrain/shared/training-session";
 import {
+  performanceAnalyticsResponseSchema,
   trainingAnalyticsResponseSchema,
   usageAnalyticsResponseSchema,
+  type PerformanceAnalyticsResponse,
   type TrainingAnalyticsResponse,
   type UsageAnalyticsResponse,
 } from "@avatrain/shared/analytics";
@@ -709,6 +711,15 @@ export async function getUsageAnalytics(days?: 7 | 30 | 90): Promise<UsageAnalyt
 export async function getTrainingAnalytics(): Promise<TrainingAnalyticsResponse> {
   const result = await apiFetch<unknown>("/analytics/training", { method: "GET" });
   return trainingAnalyticsResponseSchema.parse(result);
+}
+
+/**
+ * GET /v1/analytics/performance — OWNER-only. See .claude/specs/ai-performance-analytics.md.
+ * Windowed like getUsageAnalytics (TurnMetric volume is unbounded), unlike getTrainingAnalytics.
+ */
+export async function getPerformanceAnalytics(days?: 7 | 30 | 90): Promise<PerformanceAnalyticsResponse> {
+  const result = await apiFetch<unknown>(`/analytics/performance${days ? `?days=${days}` : ""}`, { method: "GET" });
+  return performanceAnalyticsResponseSchema.parse(result);
 }
 
 /**
