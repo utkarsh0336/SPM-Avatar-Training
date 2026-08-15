@@ -30,6 +30,11 @@ primary_region = "fra"
   timeout = "5s"
   path = "/readyz"
 
+# See api-us.toml's comment — same [metrics] shape.
+[metrics]
+  port = 4000
+  path = "/metrics"
+
 [[vm]]
   size = "shared-cpu-2x"
   memory = "512mb"

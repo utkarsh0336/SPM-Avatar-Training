@@ -45,6 +45,13 @@ Production deployment (Fly.io, containerized `apps/api`/`apps/agent`, region-pin
 `Organization.dataRegion`, custom-metric autoscaling for the agent worker pool) is documented in
 `infra/README.md` — see `docs/adr/0006-autoscaling-strategy.md` for why Fly.io over Kubernetes.
 
+## Reliability
+
+Status page: `GET /status` (or `/v1/status` for JSON), served by `apps/api`. Structured logging,
+error tracking/alerting (Sentry), synthetic uptime checks, and Postgres backup verification are
+documented in `infra/README.md`'s "Reliability, alerting, and backups" section and
+`docs/adr/0007-reliability-alerting-strategy.md`. Incident/on-call procedures: `docs/runbooks/`.
+
 ## Commands
 
 ```bash

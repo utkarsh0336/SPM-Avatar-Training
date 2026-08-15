@@ -29,3 +29,5 @@ export * from "./training-session/index.js";
 export * from "./livekit/index.js";
 export * from "./analytics/index.js";
 export * from "./scaling/index.js";
+export * from "./observability/index.js";
+export * from "./status/index.js";

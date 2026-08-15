@@ -29,6 +29,24 @@ export interface MetricsServer {
   close(): Promise<void>;
 }
 
+// Process-local counters, same posture as apps/api's getApiErrorCount() —
+// reset on restart, not a durable audit trail (Sentry is). Incremented from
+// livekit-worker.ts's existing avatar-relay/job-handler onError callbacks
+// (errorCount) and its two genuinely-abnormal exit paths, invalid room
+// metadata and cost-gate timeout (sessionFailureCount) — never from the
+// three TeardownReason values, which are healthy/expected session endings,
+// not failures.
+let errorCount = 0;
+let sessionFailureCount = 0;
+
+export function incrementAgentErrorCount(): void {
+  errorCount++;
+}
+
+export function incrementAgentSessionFailureCount(): void {
+  sessionFailureCount++;
+}
+
 function renderMetrics(sessionsConcurrent: number, workerCapacity: number): string {
   return (
     `# HELP avatrain_sessions_concurrent Active Mode B sessions across the whole worker fleet.\n` +
@@ -36,7 +54,13 @@ function renderMetrics(sessionsConcurrent: number, workerCapacity: number): stri
     `avatrain_sessions_concurrent ${sessionsConcurrent}\n` +
     `# HELP avatrain_worker_capacity Max concurrent sessions this worker process can hold.\n` +
     `# TYPE avatrain_worker_capacity gauge\n` +
-    `avatrain_worker_capacity ${workerCapacity}\n`
+    `avatrain_worker_capacity ${workerCapacity}\n` +
+    `# HELP avatrain_agent_error_count_total Count of avatar-relay/job-handler errors since process start.\n` +
+    `# TYPE avatrain_agent_error_count_total counter\n` +
+    `avatrain_agent_error_count_total ${errorCount}\n` +
+    `# HELP avatrain_agent_session_failure_count_total Count of sessions that ended abnormally (invalid room metadata, cost-gate timeout) since process start.\n` +
+    `# TYPE avatrain_agent_session_failure_count_total counter\n` +
+    `avatrain_agent_session_failure_count_total ${sessionFailureCount}\n`
   );
 }
 

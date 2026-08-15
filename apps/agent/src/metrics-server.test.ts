@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createMetricsServer, type MetricsServer } from "./metrics-server.js";
+import {
+  createMetricsServer,
+  incrementAgentErrorCount,
+  incrementAgentSessionFailureCount,
+  type MetricsServer,
+} from "./metrics-server.js";
 
 let server: MetricsServer | undefined;
 
@@ -44,5 +49,17 @@ describe("createMetricsServer", () => {
     const response = await fetch(`http://127.0.0.1:9193/other`);
 
     expect(response.status).toBe(404);
+  });
+
+  it("reports error and session-failure counters, incremented via their exported functions", async () => {
+    incrementAgentErrorCount();
+    incrementAgentErrorCount();
+    incrementAgentSessionFailureCount();
+
+    server = createMetricsServer({ port: 9194, workerCapacity: 1, counter: { count: async () => 0 } });
+    const { body } = await fetchMetrics(9194);
+
+    expect(body).toMatch(/avatrain_agent_error_count_total \d+/);
+    expect(body).toMatch(/avatrain_agent_session_failure_count_total \d+/);
   });
 });

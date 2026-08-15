@@ -14,6 +14,7 @@ import { createJobHandler } from "./job-handler.js";
 import { createAvatarRelay } from "./avatar-relay.js";
 import { createTeardownWatcher, type TeardownReason } from "./teardown.js";
 import { emitUsage } from "./metrics.js";
+import { incrementAgentErrorCount, incrementAgentSessionFailureCount } from "./metrics-server.js";
 
 /**
  * Padding on top of AGENT_MAX_SESSION_MS for the concurrency counter's TTL
@@ -76,6 +77,7 @@ export const avatrainLiveKitAgent = defineAgent({
       // org attached to its usage-emit, a billing-attribution gap a
       // security review flagged — hard-stop instead.
       console.error(`[livekit-worker] room "${roomName}" has unparseable/missing metadata — refusing to start`);
+      incrementAgentSessionFailureCount();
       ctx.shutdown("invalid_room_metadata");
       return;
     }
@@ -100,6 +102,7 @@ export const avatrainLiveKitAgent = defineAgent({
     } catch (err) {
       if (err instanceof CostGateTimeoutError) {
         emit("cost_gate_timeout");
+        incrementAgentSessionFailureCount();
         ctx.shutdown("cost_gate_timeout");
         return;
       }
@@ -123,7 +126,10 @@ export const avatrainLiveKitAgent = defineAgent({
       simliApiKey: config.SIMLI_API_KEY,
       simliFaceId: config.SIMLI_FACE_ID,
       ourLocalParticipant: agentParticipant,
-      onError: (message) => console.error("[avatar-relay]", message),
+      onError: (message) => {
+        console.error("[avatar-relay]", message);
+        incrementAgentErrorCount();
+      },
     });
 
     const jobHandler = createJobHandler({
@@ -138,7 +144,10 @@ export const avatrainLiveKitAgent = defineAgent({
       // starts talking over an in-flight reply. See job-handler.ts's
       // onBargeIn doc comment for why this is required, not optional.
       onBargeIn: () => relay.skip(),
-      onError: (message) => console.error("[job-handler]", message),
+      onError: (message) => {
+        console.error("[job-handler]", message);
+        incrementAgentErrorCount();
+      },
     });
 
     const teardown = createTeardownWatcher({

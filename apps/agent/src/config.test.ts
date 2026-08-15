@@ -34,4 +34,15 @@ describe("loadAgentConfig", () => {
     const { SIMLI_FACE_ID: _omit, ...incomplete } = validEnv;
     expect(() => loadAgentConfig(incomplete)).toThrow();
   });
+
+  it("defaults LOG_LEVEL and leaves SENTRY_DSN unset when absent", () => {
+    const config = loadAgentConfig(validEnv);
+    expect(config.LOG_LEVEL).toBe("info");
+    expect(config.SENTRY_DSN).toBeUndefined();
+  });
+
+  it("accepts an optional SENTRY_DSN", () => {
+    const config = loadAgentConfig({ ...validEnv, SENTRY_DSN: "https://key@o0.ingest.sentry.io/1" });
+    expect(config.SENTRY_DSN).toBe("https://key@o0.ingest.sentry.io/1");
+  });
 });

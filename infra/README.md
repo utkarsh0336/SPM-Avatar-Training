@@ -163,3 +163,42 @@ a `PrismaClient` at import time regardless of which named export a caller actual
 something introduced by this spec. Fixing it — e.g. splitting the barrel so DB-touching and DB-free
 exports don't share one side-effecting module — is a separate, real cleanup worth doing but out of
 scope here.
+
+---
+
+## Reliability, alerting, and backups
+
+See `docs/adr/0007-reliability-alerting-strategy.md` for the full rationale;
+`.claude/specs/reliability-uptime-disaster-recovery.md` for scope. Summary of what changed here:
+
+**New secrets, per app:**
+
+| Secret | Apps | Purpose |
+|---|---|---|
+| `SENTRY_DSN` | `avatrain-api-*`, `avatrain-agent-*` | Error tracking + alerting. Optional — both apps run with logging/error-tracking as a no-op if unset (`packages/shared/src/observability/sentry.ts`). |
+| `INTERNAL_OPS_TOKEN` | `avatrain-api-*` | Gates `POST/PATCH /v1/internal/*` (uptime-check ingestion, incident CRUD). Also needed as a **GitHub Actions** repo secret, for `.github/workflows/synthetic-uptime-check.yml`. Optional at the app level too — those routes fail closed (503) rather than the app failing to boot when it's unset, see `apps/api/src/routes/internal.ts`. |
+
+```bash
+fly secrets set SENTRY_DSN=<dsn> -a avatrain-api-us
+fly secrets set INTERNAL_OPS_TOKEN=<32+ char random token> -a avatrain-api-us
+# repeat per app (avatrain-api-eu, avatrain-agent-us, avatrain-agent-eu — agent only needs SENTRY_DSN)
+```
+
+**New `/metrics` on `apps/api`** (`infra/fly/api-{us,eu}.toml`'s new `[metrics]` block) — same
+hand-rolled Prometheus format as `apps/agent`, exposing `avatrain_api_up` and
+`avatrain_api_error_count_total`. Unlike the agent, this is a Fastify route on the app's existing
+port (4000), not a second `http.createServer`.
+
+**Status page**: `GET https://avatrain-api-<region>.fly.dev/status` (human-readable) and
+`GET .../v1/status` (JSON) — self-hosted, see `docs/adr/0007`'s tradeoff on what happens if both
+regions are down simultaneously.
+
+**Synthetic uptime checks**: `.github/workflows/synthetic-uptime-check.yml`, every 5 minutes, from
+GitHub's infra (deliberately outside Fly) — only checks `apps/api`'s two regions, since
+`avatrain-agent-*` has no public `[http_service]` at all. See `scripts/report-uptime-check.mjs`.
+
+**Backup verification**: `.github/workflows/backup-verification.yml`, weekly — restores the latest
+Fly Managed Postgres backup to a scratch instance and sanity-checks it. **The exact `fly mpg`
+backup/restore command surface used there was never confirmed against a live Fly account** — same
+open item as the read-replica gap two sections up. Confirm both against real `fly mpg --help` output
+at the same time, before trusting either. See `docs/runbooks/postgres-restore.md`.

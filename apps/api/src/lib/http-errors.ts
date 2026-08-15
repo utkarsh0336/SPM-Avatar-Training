@@ -1,5 +1,6 @@
 import { ZodError } from "zod";
 import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
+import { Sentry } from "@avatrain/shared";
 
 export interface HttpErrorField {
   path: string;
@@ -37,12 +38,19 @@ export const gone = (code: string, message?: string) => new HttpError(410, code,
 export const serviceUnavailable = (code = "service_unavailable", message?: string) =>
   new HttpError(503, code, message);
 
-export function handleError(
-  error: FastifyError | Error,
-  _request: FastifyRequest,
-  reply: FastifyReply,
-): void {
+// Backs GET /metrics's avatrain_api_error_count_total gauge (apps/api/src/routes/metrics.ts).
+// Process-local, resets on restart — same posture as apps/agent's
+// hand-rolled gauges, not a durable audit trail (that's what Sentry is for).
+let errorCount = 0;
+
+/** Read-only accessor for the metrics route. Not exported for mutation outside handleError(). */
+export function getApiErrorCount(): number {
+  return errorCount;
+}
+
+export function handleError(error: FastifyError | Error, request: FastifyRequest, reply: FastifyReply): void {
   if (error instanceof HttpError) {
+    if (error.statusCode >= 500) errorCount++;
     reply
       .status(error.statusCode)
       .send({ error: error.code, message: error.message, ...(error.fields ? { fields: error.fields } : {}) });
@@ -53,8 +61,12 @@ export function handleError(
     return;
   }
   // Never forward an unexpected error's message to the client (Fastify's
-  // default Error serialization would include it) — log it server-side
-  // instead, since `Fastify({ logger: false })` means nothing else will.
-  console.error(error);
+  // default Error serialization would include it). Logged server-side via
+  // the app's real Pino logger (request.log — see app.ts's Fastify({
+  // loggerInstance }) wiring) and reported to Sentry, since this branch is
+  // by definition a bug, not an expected/handled failure.
+  errorCount++;
+  request.log.error(error);
+  Sentry.captureException(error);
   reply.status(500).send({ error: "internal_error" });
 }

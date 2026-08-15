@@ -36,6 +36,13 @@ primary_region = "iad"
   timeout = "5s"
   path = "/readyz"
 
+# Scraped by Fly's built-in Prometheus collector, same as apps/agent's
+# agent-us.toml — see apps/api/src/routes/metrics.ts (a Fastify route, not a
+# second port, unlike the agent's worker process).
+[metrics]
+  port = 4000
+  path = "/metrics"
+
 [[vm]]
   size = "shared-cpu-2x"
   memory = "512mb"
