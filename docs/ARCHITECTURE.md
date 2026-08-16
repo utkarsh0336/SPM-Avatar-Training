@@ -5,44 +5,41 @@ handling, or scaling. Everything here assumes you already know §4–§6 of `CLA
 
 ---
 
-## 1. Session state machine
+## 1. Session transport and status flow
 
-The widget is a state machine, not a pile of booleans. Implement it as one in
-`packages/realtime-core/src/session-machine.ts`.
+**This is a plain WebSocket, not WebRTC/OpenAI Realtime.** The default (Mode A) path is
+`apps/api`'s `GET /v1/conversations/:trainingSessionId/ws` — auth is a 60s single-use ticket minted
+via `POST /v1/conversations/ticket` and passed as `?ticket=` (browsers can't attach a cookie/header to
+a cross-origin WS handshake). There is no SDP offer/answer and no ICE negotiation on this path; STT,
+LLM, and TTS all run server-side in `apps/api/src/services/conversation-service.ts`, streamed back
+over the same socket as sentence-chunked `tts.chunk` messages. See `.claude/rules/realtime.md` for the
+authoritative transport rules. (Mode B/LiveKit, §4 below, is the one place real WebRTC still applies —
+gated to Enterprise-plan orgs.)
 
-```
-             ┌──────────┐
-             │   idle   │◄──────────────────────────────┐
-             └────┬─────┘                               │
-        open()    │                                     │
-             ┌────▼──────────┐   fail    ┌──────────────┴───┐
-             │ bootstrapping │──────────►│ error(recoverable)│
-             └────┬──────────┘           └──────────────┬───┘
-   creds + config │                          retry ▲    │ fatal
-             ┌────▼──────────┐                     │    ▼
-             │  connecting   │─────────────────────┘  ┌────────┐
-             └────┬──────────┘                        │ ended  │
-        connected │                                   └────────┘
-             ┌────▼──────────┐  speech_started   ┌──────────────┐
-             │   listening   │◄─────────────────►│  learner_    │
-             └────┬──────────┘                   │  speaking    │
-       response   │                              └──────────────┘
-             ┌────▼──────────┐  barge-in ──────────────┐
-             │   speaking    │─────────────────────────┘
-             └────┬──────────┘
-      tool call   │
-             ┌────▼──────────┐
-             │   thinking    │  ← avatar shows a thinking expression + filler line
-             └───────────────┘
+The client side (`packages/realtime-core/src/conversation-session.ts`,
+`connectConversationSession()`) is **not** a state machine with named states/guards — it's a flat
+status union driven by ~13 `setStatus()` call sites scattered through the WS message handlers and VAD
+callbacks:
+
+```ts
+type ConversationSessionStatus = "connecting" | "listening" | "thinking" | "speaking" | "error" | "ended";
 ```
 
-Invariants worth asserting in dev builds:
+Rough flow: `connecting` (WS open) → `listening` (`session.ready`, or VAD detects speech and starts
+recording) → `thinking` (speech ends, audio sent) → `speaking` (`turn.started`/`tts.chunk` streaming
+back) → `listening` again (`turn.ended` once playback drains, or `session.ready`). `error` fires on an
+unexpected WS `close` or a caught exception mid-turn — there is no `error(recoverable)` vs. fatal
+split; every error is the same status, and there is currently **no automatic reconnect** (see §2).
+`ended` is set once, last, by `disconnect()`, guarded by an internal `ended` boolean checked before
+every subsequent `setStatus()` call — so in practice nothing fires after it, even without a formal FSM
+enforcing that.
 
-- `speaking` and `learner_speaking` are never both true. If they are, barge-in handling is broken.
-- Every transition into `thinking` must emit a filler utterance within 250ms or the learner
-  experiences dead air.
-- `ended` is terminal. Reconnects create a new session id; never resurrect an ended one, or billing
-  and progress attribution both go wrong.
+There is no literal `learner_speaking` status. The doc's original invariant — the avatar and the
+learner are never both "speaking" — is enforced differently: `barge-in-controller.ts` stops local
+avatar playback synchronously the instant VAD detects learner speech, and a monotonic
+`currentUtteranceId` guard drops any late-arriving audio from the turn that just got interrupted. The
+"thinking → filler within 250ms" behavior described here previously does not exist in code; there is
+no filler-utterance mechanism today.
 
 ---
 
@@ -50,22 +47,29 @@ Invariants worth asserting in dev builds:
 
 | Failure | Detection | Recovery | Learner sees |
 |---|---|---|---|
-| Ephemeral token expired before SDP | 401 from `/v1/realtime/calls` | Re-mint once, retry | Nothing (sub-second) |
-| ICE fails / no candidates | `iceConnectionState = failed` | Retry with TURN relay forced; then fall back to Mode B | "Reconnecting…" |
-| Mic permission denied | `getUserMedia` rejects | Switch to text input mode | Clear how-to-enable panel |
-| Network drop mid-session | `connectionState = disconnected` | Buffer state, reconnect ≤ 3 attempts with backoff, replay last objective context | "Reconnecting…" then resume |
-| OpenAI 429 / 5xx | Error event on data channel | Backoff, then degrade to text chat with the same tutor logic | "High demand — switching to text" |
-| Avatar provider fails (Mode B) | No video track after 5s | Degrade renderer to `mesh3d`, keep audio | Avatar changes appearance, session continues |
-| WebGL context lost | `webglcontextlost` | Degrade to `voiceOnly` | Waveform replaces avatar |
-| Tool timeout (>4s) | AbortSignal | Tell the model the tool failed; avatar apologises and offers escalation | Natural spoken recovery |
-| Turn TTFA over budget (>1400ms mediated) | `turn-latency-guard.ts` watchdog (`TURN_TTFA_BUDGET_MS`) | `latency.budget_exceeded` sent, turn continues; after 3 consecutive over-budget turns for an org, in-process circuit breaker skips retrieval and forces fallback-first TTS until a turn comes in under budget | Nothing blocking — turn completes as normal |
+| WS ticket invalid/expired/reused | 401 in the `/ws` route's `preValidation` hook, before upgrade completes | **Gap**: no client-side re-mint-and-retry exists today | Generic "Couldn't start the session" message |
+| WS closes unexpectedly mid-session | `close` event fires before `disconnect()` was called | `setStatus("error")` only — **gap**: no reconnect/backoff exists today | Session shows an error state; learner must restart |
+| Mic permission denied / no track | `getUserMedia` rejects, or resolves with no audio track | Caught in `useEmbedSession.ts`'s connect try/catch | Generic "Couldn't start the session. Please try again." — **not** a distinct how-to-enable panel |
+| Server STT unavailable | `stt.failed` message from the server | Latches to client-side Web Speech recognition (`recognizeOnce`) for the rest of the session | Nothing blocking — turn continues |
+| Retrieval slow or failing | `withRetrievalTimeout()` in `conversation-service.ts` | Degrades the turn to ungrounded generation | Nothing blocking |
+| Tool call slow or failing (timeout) | `withToolTimeout()` (`AbortSignal`) in `conversation-service.ts` | Model is told the call failed; continues the turn | Natural spoken recovery |
+| Curriculum / avatar-record lookup fails | try/catch around the lookup in `conversation-service.ts` | Degrades to "no curriculum this session" / "no persona override" | Nothing blocking |
+| Barge-in (learner speaks over the avatar) | VAD detects speech during playback | Client stops local playback synchronously first, then fire-and-forget notifies the server (`barge_in`); server aborts the in-flight LLM/TTS call via a per-turn `AbortController` | Avatar stops within the client-side budget (~300ms); server-side abort is best-effort, not part of that budget |
+| Turn TTFA over budget (>1400ms) | `turn-latency-guard.ts` watchdog (`TURN_TTFA_BUDGET_MS`) | `latency.budget_exceeded` sent, turn continues; after 3 consecutive over-budget turns for an org, in-process circuit breaker skips retrieval and forces fallback-first TTS until a turn comes in under budget | Nothing blocking — turn completes as normal |
+| Avatar/video provider fails (any of `vrm`/`simli`/`mock`) | **Not implemented** — no fallback-after-N-seconds renderer downgrade exists | — | — |
+| WebGL context lost | **Not implemented** — no `webglcontextlost` handling exists | — | — |
+| OpenAI (or other provider) 429/5xx on the server-side LLM/STT/TTS call | Provider-specific — not audited here | Not audited here; do not assume the old client-side "switch to text chat" behavior still applies, since there is no client-side OpenAI connection to fall back from | Unverified |
 
-**Degrade, never drop.** Every failure above has a path that keeps the learner learning. A session
-that ends because a video provider hiccuped is a bug, not an outage.
+**Degrade, never drop** is still the real design intent — it shows up repeatedly as inline comments
+across `conversation-service.ts` — but it is not yet true for every row above. The rows marked **Gap**
+or **Not implemented** are real, current holes, not just missing detection. Treat this table as the
+honest current state, not an aspiration; update a row to ✅ only once you've traced the actual recovery
+path in code, the way the rows above were verified.
 
-Reconnect must restore *pedagogical* context, not the full transcript: current objective, last
-question asked, attempts so far. Replaying 20 turns of audio history is slow and expensive; a
-150-token state summary is enough and costs nothing.
+**Design target, not current behavior** (there is no reconnect logic today — see the table above):
+once reconnect exists, it should restore *pedagogical* context, not the full transcript — current
+objective, last question asked, attempts so far. Replaying 20 turns of audio history is slow and
+expensive; a 150-token state summary is enough and costs nothing.
 
 ---
 
@@ -73,8 +77,8 @@ question asked, attempts so far. Replaying 20 turns of audio history is slow and
 
 | State | Home | Lifetime |
 |---|---|---|
-| WebRTC peer connection | Widget memory | Session |
-| Conversation history | OpenAI session (Mode A) / agent process (Mode B) | Session |
+| WS connection (Mode A) / WebRTC peer connection (Mode B only) | Widget memory | Session |
+| Conversation history | `apps/api`'s `conversation-service.ts`, in-process (Mode A) / agent process (Mode B) | Session |
 | Pedagogical state (objective, attempts) | Postgres, written through `record_progress` | Permanent |
 | Session credentials | Widget memory only | 60s |
 | WS/embed connection tickets | Redis, single-use | 60s |
@@ -114,16 +118,24 @@ is how cross-tenant leaks happen in a process that outlives a single tenant's se
 
 - **`apps/api` is stateless** → horizontal, behind a load balancer. The only sticky thing is
   nothing; keep it that way.
-- **Postgres**: read replicas for analytics queries. Never run dashboard aggregations against the
-  primary that also serves session bootstrap — bootstrap is on the latency path.
-- **pgvector**: HNSW index; partition `KnowledgeChunk` by `org_id` past ~10M rows. Retrieval must
-  stay under 100ms p95 or it needs a filler utterance.
+- **Postgres**: read replicas for analytics queries is the design intent, **not yet built or
+  verified** — Fly Managed Postgres read-replica support hasn't been confirmed against real `fly mpg`
+  output (open item carried from the auto-scaling and reliability work). Today, dashboard aggregation
+  queries and session bootstrap both hit the same primary. Never run dashboard aggregations against
+  the primary that also serves session bootstrap once replicas exist — bootstrap is on the latency
+  path.
+- **pgvector**: HNSW index is real (see the migration that references this section). Partitioning
+  `KnowledgeChunk` by `org_id` past ~10M rows is still just a target, not implemented. Retrieval must
+  stay under 100ms p95 or it needs a filler utterance (no filler-utterance mechanism exists yet — see
+  §1).
 - **Redis**: quotas, counters, and single-use ephemeral auth tickets (60s TTL WS/embed connection
   tickets — a short-lived nonce, not session truth). If you find yourself putting session truth in
   Redis, the design has drifted.
-- **CDN**: `embed.js` is immutable per version (`/v1/embed.<hash>.js`) with a long TTL, fronted by a
-  short-TTL `/v1/embed.js` pointer. Never bust cache on the loader itself — customers have it in
-  their HTML and you cannot redeploy their pages.
+- **CDN**: **not yet built.** `apps/api/src/routes/embed.ts` currently only serves `GET
+  /v1/embed/config` (a JSON config lookup by publishable key) plus WS ticket minting — there is no
+  versioned, immutable loader script route (`/v1/embed.<hash>.js`) or short-TTL pointer today. Keep
+  the intent in mind when building it — never bust cache on the loader itself once it exists, since
+  customers have it in their HTML and you cannot redeploy their pages — but don't assume it's live.
 
 ---
 
@@ -144,7 +156,9 @@ Keep ADRs in `docs/adr/NNNN-title.md`. The ones that already exist implicitly in
 should be written up properly before Phase 2:
 
 - ADR-0001 Two transport modes rather than one universal mediated path
-- ADR-0002 `mesh3d` as the default renderer rather than a photoreal provider
+- ADR-0002 `vrm` as the default renderer rather than a photoreal provider (formerly drafted around a
+  `mesh3d` renderer name — that name doesn't exist in code; the actual default provider is `vrm`, see
+  `packages/avatar-core/src/avatar-provider-factory.ts`)
 - ADR-0003 iframe isolation rather than Shadow-DOM-only embedding
 - ADR-0004 Postgres + pgvector rather than a dedicated vector database
 - ADR-0005 Server-only tools for grading and progress
@@ -172,7 +186,11 @@ Full rationale: `docs/adr/0007-reliability-alerting-strategy.md`. Operational re
   reflecting `UptimeCheck`/`StatusIncident` — both global, RLS-exempt Prisma models (platform state,
   not tenant data, same reasoning as `User`/`OAuthAccount`). Self-hosted rather than a third-party
   vendor; unreachable only if both `apps/api` regions are down simultaneously (see §6 above — they
-  are genuinely independent Fly apps, so a single-region outage doesn't take the page down).
+  are genuinely independent Fly apps, so a single-region outage doesn't take the page down) — **that
+  guarantee currently only holds once `apps/api` is actually deployed to both Fly regions.** As of
+  this writing it never has been, so `synthetic-uptime-check.yml`'s schedule is disabled (see below)
+  and `UptimeCheck` rows aren't being freshly written; re-enable the schedule once a real `fly deploy`
+  lands.
 - **Synthetic checks**: `.github/workflows/synthetic-uptime-check.yml`, running from outside
   Avatrain's own infra. Covers `apps/api`'s two regions only — `apps/agent` has no public HTTP
   surface to check from the outside; its liveness stays covered by the existing internal Prometheus
