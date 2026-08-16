@@ -7,8 +7,15 @@ name: Synthetic Uptime Check
 # reachable — see that script's header comment) and how results reach
 # POST /v1/internal/uptime-checks.
 on:
-  schedule:
-    - cron: "*/5 * * * *"
+  # Schedule intentionally disabled: apps/api has never been `fly deploy`'d to
+  # a real Fly org yet (avatrain-api-us/eu.fly.dev don't resolve), so every
+  # 5-minute run was failing on DNS resolution, not a real outage. Re-enable
+  # the cron trigger once apps/api is actually deployed to those two Fly
+  # apps — see [[auto_scaling_status]]/[[reliability_uptime_dr_status]] specs'
+  # open "fly deploy against a real Fly org" checkbox. Until then, run
+  # manually via workflow_dispatch if you want to sanity-check the script.
+  # schedule:
+  #   - cron: "*/5 * * * *"
   workflow_dispatch:
 
 jobs:
